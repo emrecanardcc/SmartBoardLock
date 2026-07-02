@@ -18,10 +18,10 @@ class TotpService {
     final hashBytes = digest.bytes;
 
     // Little-Endian okuma (C# uyumlu)
-    int num = ((hashBytes[3] << 24) | 
-               (hashBytes[2] << 16) | 
-               (hashBytes[1] << 8) | 
-               hashBytes[0]) & 0x7FFFFFFF;
+    int num = ((hashBytes[0] << 24) | 
+             (hashBytes[1] << 16) | 
+             (hashBytes[2] << 8) | 
+             hashBytes[3]) & 0x7FFFFFFF;
                
     int pin = num % 1000000;
     
