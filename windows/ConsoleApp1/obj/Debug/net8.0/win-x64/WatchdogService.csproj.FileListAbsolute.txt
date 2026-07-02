@@ -1,0 +1,14 @@
+C:\Users\emre\Desktop\Projeler\AkilliTahtaSistemi\ConsoleApp1\bin\Debug\net8.0\win-x64\WatchdogService.exe
+C:\Users\emre\Desktop\Projeler\AkilliTahtaSistemi\ConsoleApp1\bin\Debug\net8.0\win-x64\WatchdogService.deps.json
+C:\Users\emre\Desktop\Projeler\AkilliTahtaSistemi\ConsoleApp1\bin\Debug\net8.0\win-x64\WatchdogService.runtimeconfig.json
+C:\Users\emre\Desktop\Projeler\AkilliTahtaSistemi\ConsoleApp1\bin\Debug\net8.0\win-x64\WatchdogService.dll
+C:\Users\emre\Desktop\Projeler\AkilliTahtaSistemi\ConsoleApp1\bin\Debug\net8.0\win-x64\WatchdogService.pdb
+C:\Users\emre\Desktop\Projeler\AkilliTahtaSistemi\ConsoleApp1\obj\Debug\net8.0\win-x64\WatchdogService.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\emre\Desktop\Projeler\AkilliTahtaSistemi\ConsoleApp1\obj\Debug\net8.0\win-x64\WatchdogService.AssemblyInfoInputs.cache
+C:\Users\emre\Desktop\Projeler\AkilliTahtaSistemi\ConsoleApp1\obj\Debug\net8.0\win-x64\WatchdogService.AssemblyInfo.cs
+C:\Users\emre\Desktop\Projeler\AkilliTahtaSistemi\ConsoleApp1\obj\Debug\net8.0\win-x64\WatchdogService.csproj.CoreCompileInputs.cache
+C:\Users\emre\Desktop\Projeler\AkilliTahtaSistemi\ConsoleApp1\obj\Debug\net8.0\win-x64\WatchdogService.dll
+C:\Users\emre\Desktop\Projeler\AkilliTahtaSistemi\ConsoleApp1\obj\Debug\net8.0\win-x64\refint\WatchdogService.dll
+C:\Users\emre\Desktop\Projeler\AkilliTahtaSistemi\ConsoleApp1\obj\Debug\net8.0\win-x64\WatchdogService.pdb
+C:\Users\emre\Desktop\Projeler\AkilliTahtaSistemi\ConsoleApp1\obj\Debug\net8.0\win-x64\WatchdogService.genruntimeconfig.cache
+C:\Users\emre\Desktop\Projeler\AkilliTahtaSistemi\ConsoleApp1\obj\Debug\net8.0\win-x64\ref\WatchdogService.dll

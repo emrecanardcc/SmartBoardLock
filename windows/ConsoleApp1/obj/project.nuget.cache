@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "43Rx3XpUd7s=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\emre\\Desktop\\Projeler\\AkilliTahtaSistemi\\ConsoleApp1\\WatchdogService.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\emre\\.nuget\\packages\\microsoft.dotnet.ilcompiler\\8.0.28\\microsoft.dotnet.ilcompiler.8.0.28.nupkg.sha512",
+    "C:\\Users\\emre\\.nuget\\packages\\microsoft.net.illink.tasks\\8.0.28\\microsoft.net.illink.tasks.8.0.28.nupkg.sha512",
+    "C:\\Users\\emre\\.nuget\\packages\\runtime.win-x64.microsoft.dotnet.ilcompiler\\8.0.28\\runtime.win-x64.microsoft.dotnet.ilcompiler.8.0.28.nupkg.sha512",
+    "C:\\Users\\emre\\.nuget\\packages\\runtime.win-x64.microsoft.dotnet.ilcompiler\\8.0.28\\runtime.win-x64.microsoft.dotnet.ilcompiler.8.0.28.nupkg.sha512"
+  ],
+  "logs": []
+}
