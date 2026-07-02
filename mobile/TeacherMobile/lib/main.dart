@@ -7,14 +7,18 @@ import 'presentation/screens/auth_gate.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Yapılandırdığımız sabitlerden Supabase'i ayağa kaldırıyoruz
+  print("APP START");
+
   await Supabase.initialize(
     url: AppConstants.supabaseUrl,
     anonKey: AppConstants.supabaseAnonKey,
   );
 
+  print("SUPABASE READY");
+
   runApp(const KioskRemoteApp());
 }
+
 
 class KioskRemoteApp extends StatelessWidget {
   const KioskRemoteApp({super.key});
