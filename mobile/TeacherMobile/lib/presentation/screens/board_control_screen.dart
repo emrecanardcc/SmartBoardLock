@@ -97,16 +97,28 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
                 const SizedBox(height: 60),
 
                 // DİNAMİK BUTON: Duruma göre değişir
+                
+                  // board_control_screen.dart içindeki QR butonunun onPressed kısmı:
+// DİNAMİK BUTON: Duruma göre değişir
                 ElevatedButton.icon(
-                  onPressed: isUnlocked 
-                      ? _lockBoard // Açıksa kilitle
-                      : () async { // Kapalıysa QR okut
-                          final result = await Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const QrScannerScreen()),
-                          );
-                          // QR sonucu burada işlenecek (kilit açma servisi vb.)
-                        },
+                  onPressed: () {
+                    if (isUnlocked) {
+                      // Tahta açıksa doğrudan kilitle
+                      _lockBoard();
+                    } else {
+                      // Tahta kilitliyse QR okutmaya gönder
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => QrScannerScreen(
+                            expectedBoardId: widget.boardId,
+                            expectedOfflineSecret: widget.offlineSecret,
+                            boardName: widget.boardName,
+                          ),
+                        ),
+                      );
+                    }
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: isUnlocked ? Colors.redAccent : Colors.blueAccent,
                     padding: const EdgeInsets.symmetric(vertical: 20),

@@ -5,7 +5,17 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../data/datasources/supabase_datasource.dart';
 
 class QrScannerScreen extends StatefulWidget {
-  const QrScannerScreen({super.key});
+  // YENİ: Artık test verisi yok, bu ekran açılırken hangi tahtayı beklediğimizi bilecek.
+  final String expectedBoardId;
+  final String expectedOfflineSecret;
+  final String boardName;
+
+  const QrScannerScreen({
+    super.key,
+    required this.expectedBoardId,
+    required this.expectedOfflineSecret,
+    required this.boardName,
+  });
 
   @override
   State<QrScannerScreen> createState() => _QrScannerScreenState();
@@ -14,10 +24,6 @@ class QrScannerScreen extends StatefulWidget {
 class _QrScannerScreenState extends State<QrScannerScreen> {
   final SupabaseDatasource _datasource = SupabaseDatasource();
   bool _isProcessing = false;
-
-  // C# tarafındaki test verileriyle tamamen aynı olmalı
-  final String _testBoardId = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
-  final String _testOfflineSecret = "TAHTA_OZEL_GIZLI_TUZ_12345";
 
   void _onDetect(BarcodeCapture capture) async {
     if (_isProcessing) return; // Arka arkaya 100 kere okumasını engeller
@@ -35,14 +41,16 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     try {
       // Veriyi parçala: "ID | ZAMAN | İMZA"
       final parts = scannedData.split('|');
-      if (parts.length != 3) throw Exception("Geçersiz QR formatı");
+      if (parts.length != 3) throw Exception("Hatalı Okutma: Geçersiz QR Formatı");
 
       final scannedBoardId = parts[0];
       final scannedTime = parts[1];
       final scannedSignature = parts[2];
 
-      // 1. ID Kontrolü
-      if (scannedBoardId != _testBoardId) throw Exception("Bu tahta size ait değil!");
+      // 1. SIKI GÜVENLİK: ID KONTROLÜ (Farklı Sınıf Engellemesi)
+      if (scannedBoardId != widget.expectedBoardId) {
+         throw Exception("Geçersiz İşlem: Hedef Kimlik Uyuşmazlığı\n(Seçilen: ${widget.boardName})");
+      }
 
       // 2. Zaman Damgası Kontrolü (Bayat QR kod engellemesi)
       final now = DateTime.now().toUtc();
@@ -50,11 +58,12 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       
       // Güvenlik: 1 dakikadan eski QR kodları reddet
       if (int.parse(currentMinute) - int.parse(scannedTime) > 1) {
-         throw Exception("Süresi dolmuş QR Kod. Lütfen yenilenmesini bekleyin.");
+         throw Exception("Geçersiz İşlem: Süresi Dolmuş QR Kod");
       }
 
       // 3. Kriptografik İmza Kontrolü (Sahte QR engellemesi)
-      final rawData = scannedBoardId + _testOfflineSecret + scannedTime;
+      // Artık test secret yerine, o tahtaya ait gerçek şifreyi (widget.expectedOfflineSecret) kullanıyoruz
+      final rawData = scannedBoardId + widget.expectedOfflineSecret + scannedTime;
       final bytes = utf8.encode(rawData);
       final digest = sha256.convert(bytes);
       final hashBytes = digest.bytes;
@@ -66,18 +75,30 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       }
       expectedSignature = expectedSignature.substring(0, 16);
 
-      if (scannedSignature != expectedSignature) throw Exception("QR Kod imzası geçersiz!");
+      if (scannedSignature != expectedSignature) throw Exception("Güvenlik İhlali: Geçersiz İmza");
 
       // --- HER ŞEY DOĞRUYSA KİLİDİ AÇ ---
-      await _datasource.updateLockStatus(true);
+      // NOT: Datasource metoduna tahtanın ID'sini de gönderdiğinden emin ol.
+      // Eğer updateLockStatus(true, widget.expectedBoardId) gibi bir yapı kullanıyorsan onu güncelle.
+      await _datasource.updateLockStatus(
+  boardId: widget.expectedBoardId,
+  isUnlocked: true,
+);
       
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Tahta başarıyla açıldı! ✅", style: TextStyle(color: Colors.white)), backgroundColor: Colors.green));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Erişim Onaylandı. Kilit Açılıyor...", style: TextStyle(color: Colors.white)), backgroundColor: Colors.green));
       Navigator.pop(context); // Tarayıcıyı kapat ve ana ekrana dön
 
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: ${e.toString().replaceAll('Exception: ', '')}", style: const TextStyle(color: Colors.white)), backgroundColor: Colors.red));
+      // Hatayı daha teknik ve temiz göstermek için .replaceAll kullanıyoruz
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', ''), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), 
+          backgroundColor: Colors.redAccent,
+          duration: const Duration(seconds: 3),
+        )
+      );
       
       // 2 saniye sonra tekrar okumaya izin ver
       Future.delayed(const Duration(seconds: 2), () {
@@ -89,7 +110,11 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Tahtayı Aç'), backgroundColor: Colors.black),
+      appBar: AppBar(
+        title: Text('${widget.boardName} Kilidini Aç'), 
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
       body: Stack(
         children: [
           MobileScanner(
@@ -97,7 +122,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
             overlayBuilder: (context, constraints) {
               return Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: _isProcessing ? Colors.green : Colors.orange, width: 4),
+                  border: Border.all(color: _isProcessing ? Colors.green : Colors.blueAccent, width: 4),
                   borderRadius: BorderRadius.circular(16)
                 ),
                 margin: EdgeInsets.symmetric(
@@ -114,7 +139,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                 children: [
                   CircularProgressIndicator(color: Colors.green),
                   SizedBox(height: 16),
-                  Text("Doğrulanıyor...", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, backgroundColor: Colors.black45)),
+                  Text("Kimlik Doğrulanıyor...", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, backgroundColor: Colors.black45)),
                 ],
               ),
             ),
