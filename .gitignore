@@ -1,37 +1,19 @@
-# ==========================
 # Visual Studio
-# ==========================
 .vs/
 *.user
 *.suo
 *.userosscache
 
 # Build
-**/bin/
-**/obj/
+bin/
+obj/
 
 # Rider
 .idea/
 
-# Logs
-*.log
-
-# NuGet
-packages/
-
-# Flutter
-**/.dart_tool/
-**/build/
-
-# macOS
-.DS_Store
+# VSCode
+.vscode/
 
 # Windows
 Thumbs.db
-
-# VS Code
-.vscode/
-
-# Secrets
-.env
-.env.*
+Desktop.ini

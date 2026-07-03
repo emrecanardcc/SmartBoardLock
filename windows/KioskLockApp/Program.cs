@@ -16,8 +16,33 @@ namespace KioskLockApp
             // Windows başlar başlamaz çalışması için Kayıt Defterine kanca atıyoruz
             ForceStartup();
 
-            // Ekranı ve sistemi başlat
-            Application.Run(new SecureRenderer());
+            // Registry'den kayıtlı tahta var mı kontrol et
+            string boardId = "";
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\SmartBoardLock"))
+                {
+                    if (key != null)
+                    {
+                        boardId = key.GetValue("BoardId") as string;
+                    }
+                }
+            }
+            catch
+            {
+                // Okuma hatası olursa boş kabul et
+            }
+
+            // Eğer boardId yoksa (veya boşsa) kurulum/eşleşme ekranını aç
+            if (string.IsNullOrEmpty(boardId))
+            {
+                Application.Run(new PairingScreen());
+            }
+            else
+            {
+                // Kayıtlıysa doğrudan kilit ekranını aç
+                Application.Run(new SecureRenderer());
+            }
         }
 
         // --- BAŞLANGIÇTA ZORLA ÇALIŞTIRMA FONKSİYONU ---

@@ -6,11 +6,13 @@ using System.IO;
 using KioskLockApp.Hooks;
 using KioskLockApp.Services;
 using QRCoder;
+using Microsoft.Win32; // Registry okumak için gerekli
 
 namespace KioskLockApp.UI
 {
     public class SecureRenderer : Form
     {
+        private Label lblBoardName;
         private Label lblInfo;
         private Label lblPinDisplay;
         private Label lblCurrentPinCheat;
@@ -39,23 +41,52 @@ namespace KioskLockApp.UI
             watchdogTimer.Tick += WatchdogTimer_Tick;
             watchdogTimer.Start();
 
-            CheckStatus(); // EKSİK OLAN METOT ÇAĞRISI BURADA
+            CheckStatus();
+        }
+
+        // --- GÜNCELLENMİŞ İSİM OKUMA METODU ---
+        // Veritabanına gitmez, kurulumda Registry'e kaydedilen ismi okur.
+        private string GetSavedBoardName()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\SmartBoardLock"))
+                {
+                    if (key != null)
+                    {
+                        object val = key.GetValue("BoardName");
+                        if (val != null) return val.ToString().Trim();
+                    }
+                }
+            }
+            catch { }
+            return "İSİMSİZ TAHTA"; // Eğer Registry'de yoksa varsayılan
         }
 
         private void BuildUI()
         {
-            // --- SOL TARAF: ÇEVRİMDIŞI TUŞ TAKIMI ---
-            lblInfo = new Label() { Text = "AKILLI TAHTA KİLİTLİ", ForeColor = Color.White, Font = new Font("Arial", 24, FontStyle.Bold), AutoSize = true, Location = new Point(100, 100) };
+            // İsim doğrudan yerel Registry'den okunarak atanır.
+            lblBoardName = new Label()
+            {
+                Text = GetSavedBoardName(),
+                ForeColor = Color.Cyan,
+                Font = new Font("Arial", 48, FontStyle.Bold),
+                AutoSize = true,
+                Location = new Point(100, 30)
+            };
+            this.Controls.Add(lblBoardName);
+
+            lblInfo = new Label() { Text = "AKILLI TAHTA KİLİTLİ", ForeColor = Color.White, Font = new Font("Arial", 24, FontStyle.Bold), AutoSize = true, Location = new Point(100, 130) };
             this.Controls.Add(lblInfo);
 
-            lblCurrentPinCheat = new Label() { ForeColor = Color.Gray, Font = new Font("Arial", 16), AutoSize = true, Location = new Point(100, 150) };
+            lblCurrentPinCheat = new Label() { ForeColor = Color.Gray, Font = new Font("Arial", 16), AutoSize = true, Location = new Point(100, 180) };
             this.Controls.Add(lblCurrentPinCheat);
 
-            lblPinDisplay = new Label() { Text = "- - - - - -", ForeColor = Color.Yellow, Font = new Font("Arial", 36, FontStyle.Bold), AutoSize = true, Location = new Point(100, 220) };
+            lblPinDisplay = new Label() { Text = "- - - - - -", ForeColor = Color.Yellow, Font = new Font("Arial", 36, FontStyle.Bold), AutoSize = true, Location = new Point(100, 240) };
             this.Controls.Add(lblPinDisplay);
 
             int startX = 100;
-            int startY = 300;
+            int startY = 330;
             int btnSize = 90;
             int padding = 10;
 
@@ -75,17 +106,16 @@ namespace KioskLockApp.UI
             btnClear.Click += (s, e) => { enteredPin = ""; UpdatePinDisplay(); };
             this.Controls.Add(btnClear);
 
-            // --- SAĞ TARAF: DİNAMİK QR KOD ---
             pbQrCode = new PictureBox()
             {
                 Size = new Size(400, 400),
-                Location = new Point(700, 300),
+                Location = new Point(700, 330),
                 SizeMode = PictureBoxSizeMode.StretchImage,
                 BackColor = Color.White
             };
             this.Controls.Add(pbQrCode);
 
-            Label lblQrInfo = new Label() { Text = "Mobil Uygulama İle Okutun", ForeColor = Color.White, Font = new Font("Arial", 18, FontStyle.Bold), AutoSize = true, Location = new Point(740, 250) };
+            Label lblQrInfo = new Label() { Text = "Mobil Uygulama İle Okutun", ForeColor = Color.White, Font = new Font("Arial", 18, FontStyle.Bold), AutoSize = true, Location = new Point(740, 280) };
             this.Controls.Add(lblQrInfo);
 
             RefreshQrCode();
@@ -97,6 +127,7 @@ namespace KioskLockApp.UI
             if (currentMinute == lastQrTime) return;
 
             string payload = DynamicQrEngine.GenerateQrPayload();
+            if (payload == "ERR_NO_CONFIG") return;
 
             using (QRCodeGenerator qrGenerator = new QRCodeGenerator())
             {
@@ -151,7 +182,6 @@ namespace KioskLockApp.UI
             await CheckStatusAsync();
         }
 
-        // EKLENEN ARA METOT BURASI
         private async void CheckStatus()
         {
             await CheckStatusAsync();
