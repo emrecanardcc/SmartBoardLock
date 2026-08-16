@@ -4,8 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../data/datasources/supabase_datasource.dart';
 
+// --- YEPYENİ CANLI VE PROFESYONEL RENK PALETİ ---
+const Color bgLight = Color(0xFFF1F5F9);      // Açık Arduvaz
+const Color cardColor = Color(0xFFFFFFFF);    // Saf Beyaz 
+const Color textDark = Color(0xFF0F172A);     // Çok Koyu Arduvaz 
+const Color textGrey = Color(0xFF64748B);     // Orta Arduvaz 
+const Color primaryBlue = Color(0xFF3B82F6);  // Canlı Mavi 
+const Color successGreen = Color(0xFF10B981); // Zümrüt Yeşili 
+const Color dangerRed = Color(0xFFF43F5E);    // Gül Kırmızısı 
+
 class QrScannerScreen extends StatefulWidget {
-  // YENİ: Artık test verisi yok, bu ekran açılırken hangi tahtayı beklediğimizi bilecek.
   final String expectedBoardId;
   final String expectedOfflineSecret;
   final String boardName;
@@ -26,7 +34,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   bool _isProcessing = false;
 
   void _onDetect(BarcodeCapture capture) async {
-    if (_isProcessing) return; // Arka arkaya 100 kere okumasını engeller
+    if (_isProcessing) return; // Arka arkaya okumayı engeller
 
     final List<Barcode> barcodes = capture.barcodes;
     if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
@@ -35,6 +43,27 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       setState(() { _isProcessing = true; });
       await _verifyAndUnlock(rawValue);
     }
+  }
+
+  // --- YENİ: Modern Snackbar ---
+  void _showModernSnackbar(String message, {required bool isSuccess, required Color bgColor}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(isSuccess ? Icons.check_circle_rounded : Icons.error_rounded, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
+          ],
+        ),
+        backgroundColor: bgColor, 
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
+        elevation: 6,
+      )
+    );
   }
 
   Future<void> _verifyAndUnlock(String scannedData) async {
@@ -47,28 +76,25 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       final scannedTime = parts[1];
       final scannedSignature = parts[2];
 
-      // 1. SIKI GÜVENLİK: ID KONTROLÜ (Farklı Sınıf Engellemesi)
+      // 1. SIKI GÜVENLİK: ID KONTROLÜ
       if (scannedBoardId != widget.expectedBoardId) {
          throw Exception("Geçersiz İşlem: Hedef Kimlik Uyuşmazlığı\n(Seçilen: ${widget.boardName})");
       }
 
-      // 2. Zaman Damgası Kontrolü (Bayat QR kod engellemesi)
+      // 2. Zaman Damgası Kontrolü
       final now = DateTime.now().toUtc();
       final currentMinute = "${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}";
       
-      // Güvenlik: 1 dakikadan eski QR kodları reddet
       if (int.parse(currentMinute) - int.parse(scannedTime) > 1) {
          throw Exception("Geçersiz İşlem: Süresi Dolmuş QR Kod");
       }
 
-      // 3. Kriptografik İmza Kontrolü (Sahte QR engellemesi)
-      // Artık test secret yerine, o tahtaya ait gerçek şifreyi (widget.expectedOfflineSecret) kullanıyoruz
+      // 3. Kriptografik İmza Kontrolü
       final rawData = scannedBoardId + widget.expectedOfflineSecret + scannedTime;
       final bytes = utf8.encode(rawData);
       final digest = sha256.convert(bytes);
       final hashBytes = digest.bytes;
       
-      // C# ile aynı byte çevirimi
       String expectedSignature = "";
       for (int i = 0; i < hashBytes.length; i++) {
         expectedSignature += hashBytes[i].toRadixString(16).padLeft(2, '0').toUpperCase();
@@ -78,29 +104,19 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       if (scannedSignature != expectedSignature) throw Exception("Güvenlik İhlali: Geçersiz İmza");
 
       // --- HER ŞEY DOĞRUYSA KİLİDİ AÇ ---
-      // NOT: Datasource metoduna tahtanın ID'sini de gönderdiğinden emin ol.
-      // Eğer updateLockStatus(true, widget.expectedBoardId) gibi bir yapı kullanıyorsan onu güncelle.
       await _datasource.updateLockStatus(
-  boardId: widget.expectedBoardId,
-  isUnlocked: true,
-);
+        boardId: widget.expectedBoardId,
+        isUnlocked: true,
+      );
       
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Erişim Onaylandı. Kilit Açılıyor...", style: TextStyle(color: Colors.white)), backgroundColor: Colors.green));
-      Navigator.pop(context); // Tarayıcıyı kapat ve ana ekrana dön
+      _showModernSnackbar("Erişim Onaylandı. Kilit Açılıyor...", isSuccess: true, bgColor: successGreen);
+      Navigator.pop(context);
 
     } catch (e) {
       if (!mounted) return;
-      // Hatayı daha teknik ve temiz göstermek için .replaceAll kullanıyoruz
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', ''), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), 
-          backgroundColor: Colors.redAccent,
-          duration: const Duration(seconds: 3),
-        )
-      );
+      _showModernSnackbar(e.toString().replaceAll('Exception: ', ''), isSuccess: false, bgColor: dangerRed);
       
-      // 2 saniye sonra tekrar okumaya izin ver
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) setState(() { _isProcessing = false; });
       });
@@ -110,9 +126,13 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black, // Kamera arkaplanı karanlık kalmalı
+      extendBodyBehindAppBar: true,  // Kameranın AppBar altına kadar uzanmasını sağlar
       appBar: AppBar(
-        title: Text('${widget.boardName} Kilidini Aç'), 
-        backgroundColor: Colors.black,
+        title: Text('${widget.boardName} Kilidini Aç', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 20)), 
+        backgroundColor: Colors.black54, // Yarı saydam karanlık appbar
+        elevation: 0,
+        centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Stack(
@@ -122,8 +142,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
             overlayBuilder: (context, constraints) {
               return Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: _isProcessing ? Colors.green : Colors.blueAccent, width: 4),
-                  borderRadius: BorderRadius.circular(16)
+                  // Doğrulanıyorsa yeşil, bekliyorsa canlı mavi çerçeve
+                  border: Border.all(color: _isProcessing ? successGreen : primaryBlue, width: 4),
+                  borderRadius: BorderRadius.circular(24) // Daha yumuşak hatlı çerçeve
                 ),
                 margin: EdgeInsets.symmetric(
                   horizontal: constraints.maxWidth * 0.15,
@@ -132,15 +153,36 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
               );
             },
           ),
+          
+          // --- MODERN DOĞRULANIYOR KARTI ---
           if (_isProcessing)
-            const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(color: Colors.green),
-                  SizedBox(height: 16),
-                  Text("Kimlik Doğrulanıyor...", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, backgroundColor: Colors.black45)),
-                ],
+            Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                margin: const EdgeInsets.symmetric(horizontal: 40),
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 24, offset: const Offset(0, 10)),
+                  ]
+                ),
+                child: const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: primaryBlue, strokeWidth: 3),
+                    SizedBox(height: 24),
+                    Text(
+                      "Doğrulanıyor...", 
+                      style: TextStyle(color: textDark, fontSize: 20, fontWeight: FontWeight.w900)
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      "Kriptografik imza çözülüyor", 
+                      style: TextStyle(color: textGrey, fontSize: 13, fontWeight: FontWeight.w500)
+                    ),
+                  ],
+                ),
               ),
             ),
         ],

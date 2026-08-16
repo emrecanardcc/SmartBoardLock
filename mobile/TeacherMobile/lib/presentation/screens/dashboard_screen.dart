@@ -3,6 +3,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_screen.dart';
 import 'board_control_screen.dart';
 
+// --- YEPYENİ CANLI VE PROFESYONEL RENK PALETİ ---
+const Color bgLight = Color(0xFFF1F5F9);      // Açık Arduvaz
+const Color cardColor = Color(0xFFFFFFFF);    // Saf Beyaz 
+const Color textDark = Color(0xFF0F172A);     // Çok Koyu Arduvaz 
+const Color textGrey = Color(0xFF64748B);     // Orta Arduvaz 
+const Color primaryBlue = Color(0xFF3B82F6);  // Canlı Mavi 
+const Color successGreen = Color(0xFF10B981); // Zümrüt Yeşili 
+const Color dangerRed = Color(0xFFF43F5E);    // Gül Kırmızısı 
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -13,6 +22,8 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final _client = Supabase.instance.client;
   String? _schoolId;
+  String? _schoolName;
+  String? _teacherName;
   bool _isLoading = true;
 
   @override
@@ -26,15 +37,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final user = _client.auth.currentUser;
       if (user == null) return;
 
-      // Öğretmenin hangi okula bağlı olduğunu kendi profilinden çekiyoruz
+      // Öğretmenin okul id'sini ve adını kendi profilinden çekiyoruz
       final profile = await _client
           .from('user_profiles')
-          .select('school_id')
+          .select('school_id, full_name')
           .eq('id', user.id)
           .single();
       
+      _schoolId = profile['school_id'];
+      _teacherName = profile['full_name'] ?? 'Öğretmenim';
+
+      // Okulun adını okullar tablosundan çekiyoruz
+      if (_schoolId != null) {
+        final schoolData = await _client.from('schools').select('name').eq('id', _schoolId!).maybeSingle();
+        if (schoolData != null) {
+          _schoolName = schoolData['name'];
+        }
+      }
+      
       setState(() {
-        _schoolId = profile['school_id'];
         _isLoading = false;
       });
     } catch (e) {
@@ -42,23 +63,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  // Aşağı Kaydırarak Yenileme
+  Future<void> _refreshBoards() async {
+    setState(() {});
+    await Future.delayed(const Duration(milliseconds: 800));
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        backgroundColor: Colors.black, 
-        body: Center(child: CircularProgressIndicator(color: Colors.green))
+        backgroundColor: bgLight, 
+        body: Center(child: CircularProgressIndicator(color: primaryBlue))
       );
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: bgLight,
       appBar: AppBar(
-        title: const Text('Sınıflarım'),
-        backgroundColor: Colors.grey[900],
+        elevation: 0,
+        backgroundColor: bgLight,
+        title: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            _schoolName ?? 'Yükleniyor...',
+            style: const TextStyle(color: textDark, fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: -0.5),
+          ),
+        ),
+        centerTitle: false,
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout, color: Colors.redAccent),
+            icon: const Icon(Icons.logout_rounded, color: textGrey),
             tooltip: 'Çıkış Yap',
             onPressed: () async {
               await _client.auth.signOut();
@@ -70,68 +105,166 @@ class _DashboardScreenState extends State<DashboardScreen> {
               );
             },
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: _schoolId == null 
-        ? const Center(child: Text('Okul bilginiz bulunamadı.', style: TextStyle(color: Colors.red)))
-        : StreamBuilder<List<Map<String, dynamic>>>(
-            // Öğretmenin okulundaki tüm tahtaları getir
-            stream: _client.from('boards').stream(primaryKey: ['id']).eq('school_id', _schoolId!),
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return Center(child: Text('Hata: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
-              }
-              if (!snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator(color: Colors.green));
-              }
-              
-              final boards = snapshot.data!;
-              if (boards.isEmpty) {
-                return const Center(child: Text('Okulunuzda henüz aktif tahta bulunmuyor.', style: TextStyle(color: Colors.grey)));
-              }
+        ? const Center(child: Text('Okul bilginiz bulunamadı.', style: TextStyle(color: dangerRed, fontWeight: FontWeight.bold)))
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Şık Karşılama Alanı
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Merhaba $_teacherName,', style: const TextStyle(color: textGrey, fontSize: 16, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    const Text('Derslikler', style: TextStyle(color: primaryBlue, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+                  ],
+                ),
+              ),
 
-              return ListView.builder(
-                itemCount: boards.length,
-                itemBuilder: (context, index) {
-                  final board = boards[index];
-                  final isUnlocked = board['is_unlocked'] ?? false;
-                  
-                  return Card(
-                    color: Colors.grey[850],
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: ListTile(
-                      leading: Icon(
-                        isUnlocked ? Icons.lock_open : Icons.lock, 
-                        color: isUnlocked ? Colors.green : Colors.red
-                      ),
-                      title: Text(
-                        board['name'] ?? 'İsimsiz Tahta', 
-                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)
-                      ),
-                      subtitle: Text(
-                        isUnlocked ? 'Tahta Açık' : 'Tahta Kilitli', 
-                        style: TextStyle(color: isUnlocked ? Colors.green : Colors.redAccent)
-                      ),
-                      trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 18),
-                      onTap: () {
-                        // Tahtaya tıklandığında o tahtanın özel kontrol ekranına git
-                        // offlineSecret verisini eksiksiz bir şekilde yolluyoruz!
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => BoardControlScreen(
-                              boardId: board['id'],
-                              boardName: board['name'] ?? 'İsimsiz Tahta',
-                              offlineSecret: board['offline_secret'] ?? 'ŞİFRE_YOK',
+              Expanded(
+                child: StreamBuilder<List<Map<String, dynamic>>>(
+                  // Öğretmenin okulundaki tüm tahtaları getir
+                  stream: _client.from('boards').stream(primaryKey: ['id']).eq('school_id', _schoolId!),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Center(child: Text('Hata: ${snapshot.error}', style: const TextStyle(color: dangerRed)));
+                    }
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator(color: primaryBlue));
+                    }
+                    
+                    final boards = snapshot.data!;
+                    
+                    // Boş Liste Durumu (Empty State)
+                    if (boards.isEmpty) {
+                      return RefreshIndicator(
+                        color: primaryBlue,
+                        backgroundColor: Colors.white,
+                        onRefresh: _refreshBoards,
+                        child: ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: [
+                            SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+                            const Icon(Icons.space_dashboard_rounded, size: 80, color: textGrey),
+                            const SizedBox(height: 16),
+                            const Center(child: Text('Okulunuzda henüz aktif tahta bulunmuyor.', style: TextStyle(color: textGrey, fontSize: 16, fontWeight: FontWeight.w500))),
+                          ],
+                        ),
+                      );
+                    }
+
+                    // Tahtalar Listesi
+                    return RefreshIndicator(
+                      color: primaryBlue,
+                      backgroundColor: Colors.white,
+                      onRefresh: _refreshBoards,
+                      child: ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.only(bottom: 40),
+                        itemCount: boards.length,
+                        itemBuilder: (context, index) {
+                          final board = boards[index];
+                          final isUnlocked = board['is_unlocked'] ?? false;
+                          final lastUnlockedBy = board['last_unlocked_by'] ?? '-';
+                          final lastLockedBy = board['last_locked_by'] ?? '-';
+                          
+                          // --- YEPYENİ UX ODAKLI ÖĞRETMEN KART TASARIMI ---
+                          return Card(
+                            elevation: 0,
+                            margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              side: BorderSide(color: Colors.grey.withOpacity(0.15), width: 1),
                             ),
-                          ),
-                        );
-                      },
-                    ),
-                  );
-                },
-              );
-            },
+                            color: cardColor,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(24),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => BoardControlScreen(
+                                      boardId: board['id'],
+                                      boardName: board['name'] ?? 'İsimsiz Tahta',
+                                      offlineSecret: board['offline_secret'] ?? 'ŞİFRE_YOK',
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Row(
+                                  children: [
+                                    // Durum İkonu (Tahta Açık / Kapalı)
+                                    Container(
+                                      width: 56, height: 56,
+                                      decoration: BoxDecoration(
+                                        color: isUnlocked ? successGreen.withOpacity(0.1) : Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Icon(
+                                        isUnlocked ? Icons.smart_display_rounded : Icons.tv_off_rounded, 
+                                        color: isUnlocked ? successGreen : textGrey, 
+                                        size: 28
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    
+                                    // Tahta Bilgileri
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            board['name'] ?? 'İsimsiz Tahta', 
+                                            style: const TextStyle(color: textDark, fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: -0.3)
+                                          ),
+                                          const SizedBox(height: 6),
+                                          
+                                          // Durum Metni (Badge tarzı vurgu)
+                                          Text(
+                                            isUnlocked ? 'Durum: EĞİTİME AÇIK' : 'Durum: KİLİTLİ', 
+                                            style: TextStyle(
+                                              color: isUnlocked ? successGreen : textGrey, 
+                                              fontWeight: FontWeight.w800, 
+                                              fontSize: 12,
+                                              letterSpacing: 0.5
+                                            )
+                                          ),
+                                          
+                                          const SizedBox(height: 4),
+                                          // Loglar (Öğretmenler görsün diye eklendi)
+                                          Text('Son İşlem: ${isUnlocked ? lastUnlockedBy : lastLockedBy}', style: const TextStyle(color: textGrey, fontSize: 11, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                        ],
+                                      ),
+                                    ),
+                                    
+                                    // İleri Oku
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: primaryBlue.withOpacity(0.05),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.chevron_right_rounded, color: primaryBlue, size: 24),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
     );
   }

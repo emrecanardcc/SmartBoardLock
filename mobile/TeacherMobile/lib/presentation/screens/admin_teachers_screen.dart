@@ -1,6 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+// --- YEPYENİ CANLI VE PROFESYONEL RENK PALETİ ---
+const Color bgLight = Color(0xFFF1F5F9);      // Açık Arduvaz
+const Color cardColor = Color(0xFFFFFFFF);    // Saf Beyaz 
+const Color textDark = Color(0xFF0F172A);     // Çok Koyu Arduvaz 
+const Color textGrey = Color(0xFF64748B);     // Orta Arduvaz 
+const Color primaryBlue = Color(0xFF3B82F6);  // Canlı Mavi 
+const Color successGreen = Color(0xFF10B981); // Zümrüt Yeşili 
+const Color warningOrange = Color(0xFFF59E0B); // Kehribar 
+const Color dangerRed = Color(0xFFF43F5E);    // Gül Kırmızısı 
+
 class AdminTeachersScreen extends StatefulWidget {
   const AdminTeachersScreen({super.key});
 
@@ -13,8 +23,6 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
   String? _schoolId;
   bool _isLoading = true;
 
-  // DİKKAT: Buraya Supabase panelindeki 'service_role' (secret) anahtarını yapıştır!
-  // Normal URL'ni de url kısmına yaz.
   late final SupabaseClient _adminClient;
   final String _supabaseUrl = 'https://clkasnbpmhddhstoixdz.supabase.co';
   final String _serviceRoleKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsa2FzbmJwbWhkZGhzdG9peGR6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4Mjk4Nzg4NCwiZXhwIjoyMDk4NTYzODg0fQ.Pe4I_qm_qr3HfGNoPFTbbEoQbP1ZD0-KOVZfpI1OJ8c';
@@ -26,7 +34,6 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
     _loadAdminData();
   }
 
-  // Adminin okul bilgisini çek
   Future<void> _loadAdminData() async {
     try {
       final user = _client.auth.currentUser;
@@ -43,7 +50,34 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
     }
   }
 
-  // Yeni Öğretmen Ekleme Modalı
+  // --- YENİ: Aşağı Kaydırınca Yenileme ---
+  Future<void> _refreshTeachers() async {
+    setState(() {});
+    await Future.delayed(const Duration(milliseconds: 800));
+  }
+
+  // --- YENİ: Modern Snackbar ---
+  void _showModernSnackbar(String message, {required bool isSuccess, required Color bgColor}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(isSuccess ? Icons.check_circle_rounded : Icons.error_rounded, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
+          ],
+        ),
+        backgroundColor: bgColor, 
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
+        elevation: 6,
+      )
+    );
+  }
+
+  // --- MODERN DİYALOG: Yeni Öğretmen Ekleme ---
   Future<void> _showAddTeacherDialog() async {
     final nameController = TextEditingController();
     final emailController = TextEditingController();
@@ -56,28 +90,52 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
-            backgroundColor: Colors.grey[900],
-            title: const Text('Yeni Öğretmen Ekle', style: TextStyle(color: Colors.white)),
+            backgroundColor: cardColor,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: const Text('Yeni Öğretmen Ekle', style: TextStyle(color: textDark, fontWeight: FontWeight.bold)),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextField(
                     controller: nameController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(labelText: 'Ad Soyad', labelStyle: TextStyle(color: Colors.grey)),
+                    style: const TextStyle(color: textDark, fontWeight: FontWeight.w600),
+                    decoration: InputDecoration(
+                      labelText: 'Ad Soyad',
+                      labelStyle: const TextStyle(color: textGrey),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey.shade300, width: 2)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: primaryBlue, width: 2)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
                   ),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: emailController,
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: textDark, fontWeight: FontWeight.w600),
                     keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(labelText: 'E-Posta', labelStyle: TextStyle(color: Colors.grey)),
+                    decoration: InputDecoration(
+                      labelText: 'E-Posta Adresi',
+                      labelStyle: const TextStyle(color: textGrey),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey.shade300, width: 2)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: primaryBlue, width: 2)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
                   ),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: passwordController,
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: textDark, fontWeight: FontWeight.w600),
                     obscureText: true,
-                    decoration: const InputDecoration(labelText: 'Şifre (En az 6 hane)', labelStyle: TextStyle(color: Colors.grey)),
+                    decoration: InputDecoration(
+                      labelText: 'Şifre (En az 6 hane)',
+                      labelStyle: const TextStyle(color: textGrey),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey.shade300, width: 2)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: primaryBlue, width: 2)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
                   ),
                 ],
               ),
@@ -85,28 +143,34 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
             actions: [
               TextButton(
                 onPressed: isAdding ? null : () => Navigator.pop(context),
-                child: const Text('İptal', style: TextStyle(color: Colors.grey)),
+                child: const Text('İptal', style: TextStyle(color: textGrey, fontWeight: FontWeight.bold)),
               ),
               ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryBlue,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
                 onPressed: isAdding ? null : () async {
-                  if (nameController.text.isEmpty || emailController.text.isEmpty || passwordController.text.length < 6) return;
+                  if (nameController.text.isEmpty || emailController.text.isEmpty || passwordController.text.length < 6) {
+                    _showModernSnackbar('Lütfen tüm alanları geçerli şekilde doldurun.', isSuccess: false, bgColor: warningOrange);
+                    return;
+                  }
                   
                   setDialogState(() => isAdding = true);
                   
                   try {
-                    // 1. Master Key ile Admin API üzerinden kullanıcıyı oluştur (Oturum kapanmaz)
                     final response = await _adminClient.auth.admin.createUser(
                       AdminUserAttributes(
                         email: emailController.text.trim(),
                         password: passwordController.text.trim(),
-                        emailConfirm: true, // Doğrulama beklemeden direkt onaylı aç
+                        emailConfirm: true, 
                       )
                     );
 
                     final newUserId = response.user!.id;
 
-                    // 2. Oluşan kullanıcıyı okuluna 'teacher' rolüyle kaydet
                     await _adminClient.from('user_profiles').insert({
                       'id': newUserId,
                       'school_id': _schoolId,
@@ -116,15 +180,15 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
 
                     if (mounted) {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Öğretmen başarıyla eklendi!'), backgroundColor: Colors.green));
+                      _showModernSnackbar('${nameController.text} başarıyla eklendi!', isSuccess: true, bgColor: successGreen);
                     }
                   } catch (e) {
                     setDialogState(() => isAdding = false);
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red));
+                    _showModernSnackbar('Hata: $e', isSuccess: false, bgColor: dangerRed);
                   }
                 },
                 child: isAdding ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
-                                : const Text('Kaydet', style: TextStyle(color: Colors.white)),
+                                : const Text('Kaydet', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
               ),
             ],
           );
@@ -133,20 +197,34 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
     );
   }
 
-  // Öğretmeni Sistemden Silme
+  // --- MODERN DİYALOG: Öğretmen Silme ---
   Future<void> _deleteTeacher(String teacherId, String teacherName) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text('Öğretmeni Sil', style: TextStyle(color: Colors.redAccent)),
-        content: Text('$teacherName adlı öğretmenin sisteme erişimi tamamen silinecek. Emin misiniz?', style: const TextStyle(color: Colors.white)),
+        backgroundColor: cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_rounded, color: dangerRed, size: 28),
+            SizedBox(width: 12),
+            Text('Dikkat', style: TextStyle(color: textDark, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text('$teacherName adlı öğretmenin sisteme erişimi kalıcı olarak silinecek. Emin misiniz?', style: const TextStyle(color: textGrey, fontSize: 16)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('İptal', style: TextStyle(color: Colors.grey))),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false), 
+            child: const Text('İptal', style: TextStyle(color: textGrey, fontWeight: FontWeight.bold))
+          ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: dangerRed,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Sil', style: TextStyle(color: Colors.white)),
+            child: const Text('Sil', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -154,67 +232,139 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
 
     if (confirm == true) {
       try {
-        // Master Key ile öğretmeni auth tablosundan tamamen sil (Cascade sayesinde profili de silinir)
         await _adminClient.auth.admin.deleteUser(teacherId);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Öğretmen silindi.'), backgroundColor: Colors.redAccent));
+        if (mounted) _showModernSnackbar('$teacherName sistemden silindi.', isSuccess: true, bgColor: textDark);
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red));
+        if (mounted) _showModernSnackbar('Hata: $e', isSuccess: false, bgColor: dangerRed);
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator(color: Colors.green)));
+    if (_isLoading) return const Scaffold(backgroundColor: bgLight, body: Center(child: CircularProgressIndicator(color: primaryBlue)));
 
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(title: const Text('Öğretmen Yönetimi'), backgroundColor: Colors.grey[900]),
-      body: StreamBuilder<List<Map<String, dynamic>>>(
-        // 1. _client yerine _adminClient kullanıyoruz (RLS duvarına takılmamak için)
-        stream: _adminClient.from('user_profiles').stream(primaryKey: ['id']),
-        builder: (context, snapshot) {
-          // 2. Eğer arkada bir hata olursa sonsuz dönmek yerine hatayı ekrana bas
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Hata: ${snapshot.error}', style: const TextStyle(color: Colors.redAccent)),
-            );
-          }
-
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.green));
+      backgroundColor: bgLight,
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: bgLight,
+        iconTheme: const IconThemeData(color: textDark), // Geri butonu rengi
+        title: const Text('Öğretmenler', style: TextStyle(color: textDark, fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: -0.5)),
+        centerTitle: false,
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 8, 20, 16),
+            child: Text('Okuldaki yetkili öğretmen kadrosunu buradan yönetebilirsiniz.', style: TextStyle(color: textGrey, fontSize: 15, fontWeight: FontWeight.w500)),
+          ),
           
-          // Dart tarafında kendi okulumuzun öğretmenlerini filtreliyoruz
-          final teachers = snapshot.data!
-              .where((user) => user['school_id'] == _schoolId && user['role'] == 'teacher')
-              .toList();
+          Expanded(
+            child: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: _adminClient.from('user_profiles').stream(primaryKey: ['id']),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(child: Text('Hata: ${snapshot.error}', style: const TextStyle(color: dangerRed)));
+                }
 
-          if (teachers.isEmpty) return const Center(child: Text('Henüz öğretmen eklenmemiş.', style: TextStyle(color: Colors.grey)));
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: primaryBlue));
+                
+                final teachers = snapshot.data!
+                    .where((user) => user['school_id'] == _schoolId && user['role'] == 'teacher')
+                    .toList();
 
-          return ListView.builder(
-            itemCount: teachers.length,
-            itemBuilder: (context, index) {
-              final teacher = teachers[index];
-              return Card(
-                color: Colors.grey[850],
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: ListTile(
-                  leading: const CircleAvatar(backgroundColor: Colors.blueAccent, child: Icon(Icons.person, color: Colors.white)),
-                  title: Text(teacher['full_name'] ?? 'İsimsiz', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.redAccent),
-                    onPressed: () => _deleteTeacher(teacher['id'], teacher['full_name'] ?? 'İsimsiz'),
+                if (teachers.isEmpty) {
+                  return RefreshIndicator(
+                    color: primaryBlue,
+                    backgroundColor: Colors.white,
+                    onRefresh: _refreshTeachers,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+                        const Icon(Icons.people_outline_rounded, size: 80, color: textGrey),
+                        const SizedBox(height: 16),
+                        const Center(child: Text('Henüz kadroya öğretmen eklenmemiş.\nSağ alttaki butondan ekleme yapabilirsiniz.', textAlign: TextAlign.center, style: TextStyle(color: textGrey, fontSize: 16, height: 1.5, fontWeight: FontWeight.w500))),
+                      ],
+                    ),
+                  );
+                }
+
+                return RefreshIndicator(
+                  color: primaryBlue,
+                  backgroundColor: Colors.white,
+                  onRefresh: _refreshTeachers,
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(bottom: 100), 
+                    itemCount: teachers.length,
+                    itemBuilder: (context, index) {
+                      final teacher = teachers[index];
+                      
+                      // --- YEPYENİ UX ODAKLI ÖĞRETMEN KART TASARIMI ---
+                      return Card(
+                        elevation: 0,
+                        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          side: BorderSide(color: Colors.grey.withOpacity(0.15), width: 1),
+                        ),
+                        color: cardColor,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                            leading: Container(
+                              width: 50, height: 50,
+                              decoration: BoxDecoration(
+                                color: primaryBlue.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const Icon(Icons.person_rounded, color: primaryBlue, size: 28),
+                            ),
+                            title: Text(teacher['full_name'] ?? 'İsimsiz', style: const TextStyle(color: textDark, fontWeight: FontWeight.w800, fontSize: 18)),
+                            subtitle: const Text('Yetki: Öğretmen', style: TextStyle(color: textGrey, fontWeight: FontWeight.w500, fontSize: 13)),
+                            // Tehlikeli silme işlemi gizli Popup menüye taşındı
+                            trailing: PopupMenuButton<String>(
+                              icon: const Icon(Icons.more_vert_rounded, color: textGrey),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              color: Colors.white,
+                              onSelected: (value) {
+                                if (value == 'delete') _deleteTeacher(teacher['id'], teacher['full_name'] ?? 'İsimsiz');
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.person_remove_rounded, color: dangerRed, size: 20),
+                                      SizedBox(width: 12),
+                                      Text('Sistemden Sil', style: TextStyle(color: dangerRed, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                ),
-              );
-            },
-          );
-        },
+                );
+              },
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddTeacherDialog,
-        backgroundColor: Colors.green,
-        icon: const Icon(Icons.person_add, color: Colors.white),
-        label: const Text('Öğretmen Ekle', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: primaryBlue,
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        icon: const Icon(Icons.person_add_rounded, color: Colors.white, size: 26),
+        label: const Text('Öğretmen Ekle', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
       ),
     );
   }

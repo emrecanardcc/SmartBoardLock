@@ -27,8 +27,8 @@ class KioskRemoteApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
   title: 'Tahta Kumandası',
-  theme: ThemeData(primarySwatch: Colors.green),
-  // Supabase'de aktif bir oturum var mı kontrol et
+  
+  debugShowCheckedModeBanner: false,
   home:  const AuthGate(),
 );
   }

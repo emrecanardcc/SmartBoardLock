@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dashboard_screen.dart';
 import 'auth_gate.dart';
+
+// --- YEPYENİ CANLI VE PROFESYONEL RENK PALETİ ---
+const Color bgLight = Color(0xFFF1F5F9);      // Açık Arduvaz
+const Color cardColor = Color(0xFFFFFFFF);    // Saf Beyaz 
+const Color textDark = Color(0xFF0F172A);     // Çok Koyu Arduvaz 
+const Color textGrey = Color(0xFF64748B);     // Orta Arduvaz 
+const Color primaryBlue = Color(0xFF3B82F6);  // Canlı Mavi 
+const Color warningOrange = Color(0xFFF59E0B); // Kehribar (Uyarılar)
+const Color dangerRed = Color(0xFFF43F5E);    // Gül Kırmızısı (Hatalar)
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,38 +22,51 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _isPasswordVisible = false; // YENİ: Şifre göster/gizle özelliği eklendi
+
+  // YENİ: Modern Snackbar
+  void _showModernSnackbar(String message, {required bool isSuccess, required Color bgColor}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(isSuccess ? Icons.check_circle_rounded : Icons.error_rounded, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
+          ],
+        ),
+        backgroundColor: bgColor, 
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 4),
+        elevation: 6,
+      )
+    );
+  }
 
   Future<void> _signIn() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lütfen e-posta ve şifrenizi girin.', style: TextStyle(color: Colors.white)), backgroundColor: Colors.orange),
-      );
+      _showModernSnackbar('Lütfen e-posta ve şifrenizi eksiksiz girin.', isSuccess: false, bgColor: warningOrange);
       return;
     }
 
     setState(() { _isLoading = true; });
 
     try {
-      // Supabase Authentication ile giriş yap
       await Supabase.instance.client.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
       if (!mounted) return;
-      // Giriş başarılıysa Dashboard'a yönlendir (Geri dönüşü engellemek için pushReplacement)
-      // En üste import 'auth_gate.dart'; eklemeyi unutma
-Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AuthGate()));
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AuthGate()));
     } on AuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Giriş Başarısız: ${e.message}', style: const TextStyle(color: Colors.white)), backgroundColor: Colors.red),
-      );
+      _showModernSnackbar('Giriş Başarısız: E-posta veya şifre hatalı.', isSuccess: false, bgColor: dangerRed);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Beklenmeyen bir hata oluştu: $e', style: const TextStyle(color: Colors.white)), backgroundColor: Colors.red),
-      );
+      _showModernSnackbar('Beklenmeyen bir hata oluştu: $e', isSuccess: false, bgColor: dangerRed);
     } finally {
       if (mounted) setState(() { _isLoading = false; });
     }
@@ -54,7 +75,7 @@ Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black, // Karanlık ve şık bir tema
+      backgroundColor: bgLight, // Ferah arduvaz arka plan
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(32.0),
@@ -62,63 +83,126 @@ Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(Icons.school, size: 100, color: Colors.green),
+              // YENİ: Profesyonel İkon Tasarımı
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: primaryBlue.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.school_rounded, 
+                    size: 80, 
+                    color: primaryBlue,
+                  ),
+                ),
+              ),
               const SizedBox(height: 24),
+              
               const Text(
                 'Akıllı Tahta Sistemi',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: textDark, 
+                  fontSize: 28, 
+                  fontWeight: FontWeight.w900, 
+                  letterSpacing: -0.5
+                ),
               ),
               const SizedBox(height: 8),
+              
               const Text(
                 'Yönetici & Öğretmen Girişi',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, fontSize: 16),
+                style: TextStyle(
+                  color: textGrey, 
+                  fontSize: 16, 
+                  fontWeight: FontWeight.w500
+                ),
               ),
               const SizedBox(height: 48),
               
-              // E-posta Alanı
+              // --- MODERN E-POSTA ALANI ---
               TextField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: textDark, fontWeight: FontWeight.w600),
                 decoration: InputDecoration(
-                  labelText: 'E-Posta',
-                  labelStyle: const TextStyle(color: Colors.grey),
-                  prefixIcon: const Icon(Icons.email, color: Colors.grey),
-                  enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.grey), borderRadius: BorderRadius.circular(12)),
-                  focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.green), borderRadius: BorderRadius.circular(12)),
+                  labelText: 'E-Posta Adresi',
+                  labelStyle: const TextStyle(color: textGrey),
+                  prefixIcon: const Icon(Icons.email_rounded, color: textGrey),
+                  filled: true,
+                  fillColor: cardColor,
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey.withOpacity(0.2), width: 1), 
+                    borderRadius: BorderRadius.circular(16)
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: const BorderSide(color: primaryBlue, width: 2), 
+                    borderRadius: BorderRadius.circular(16)
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
               
-              // Şifre Alanı
+              // --- MODERN ŞİFRE ALANI ---
               TextField(
                 controller: _passwordController,
-                obscureText: true,
-                style: const TextStyle(color: Colors.white),
+                obscureText: !_isPasswordVisible,
+                style: const TextStyle(color: textDark, fontWeight: FontWeight.w600),
                 decoration: InputDecoration(
                   labelText: 'Şifre',
-                  labelStyle: const TextStyle(color: Colors.grey),
-                  prefixIcon: const Icon(Icons.lock, color: Colors.grey),
-                  enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.grey), borderRadius: BorderRadius.circular(12)),
-                  focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.green), borderRadius: BorderRadius.circular(12)),
+                  labelStyle: const TextStyle(color: textGrey),
+                  prefixIcon: const Icon(Icons.lock_rounded, color: textGrey),
+                  // Şifreyi göster/gizle butonu
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _isPasswordVisible ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                      color: textGrey,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _isPasswordVisible = !_isPasswordVisible;
+                      });
+                    },
+                  ),
+                  filled: true,
+                  fillColor: cardColor,
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey.withOpacity(0.2), width: 1), 
+                    borderRadius: BorderRadius.circular(16)
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: const BorderSide(color: primaryBlue, width: 2), 
+                    borderRadius: BorderRadius.circular(16)
+                  ),
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 40),
               
-              // Giriş Butonu
+              // --- DEVASA ANA GİRİŞ BUTONU ---
               SizedBox(
-                height: 56,
+                height: 56, // Parmak ucuyla kolay dokunulabilir yükseklik
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _signIn,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    backgroundColor: primaryBlue,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)
+                    ),
                   ),
                   child: _isLoading 
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('GİRİŞ YAP', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                      ? const SizedBox(
+                          width: 24, 
+                          height: 24, 
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)
+                        )
+                      : const Text(
+                          'GİRİŞ YAP', 
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 1.0)
+                        ),
                 ),
               ),
             ],
