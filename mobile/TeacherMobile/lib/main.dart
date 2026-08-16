@@ -1,35 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'core/constants/app_constants.dart';
-import 'presentation/screens/dashboard_screen.dart';
-import 'presentation/screens/login_screen.dart';
 import 'presentation/screens/auth_gate.dart';
-void main() async {
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  print("APP START");
+  // 1. .env dosyasını güvenli bir şekilde yükle
+  await dotenv.load(fileName: ".env");
 
+  // 2. Supabase'i dışarıya kapalı ortam değişkenleriyle başlat
   await Supabase.initialize(
-    url: AppConstants.supabaseUrl,
-    anonKey: AppConstants.supabaseAnonKey,
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
-
-  print("SUPABASE READY");
 
   runApp(const KioskRemoteApp());
 }
-
 
 class KioskRemoteApp extends StatelessWidget {
   const KioskRemoteApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-  title: 'Tahta Kumandası',
-  
-  debugShowCheckedModeBanner: false,
-  home:  const AuthGate(),
-);
+    return const MaterialApp(
+      title: 'Tahta Kumandası', 
+      debugShowCheckedModeBanner: false,
+      home: AuthGate(),
+    );
   }
 }
