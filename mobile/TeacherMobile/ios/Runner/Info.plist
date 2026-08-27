@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Akıllı tahta QR kodlarını okutabilmek için kameranıza erişmemiz gerekiyor.</string>
+	<string>Sınıf360, akıllı tahtalara güvenli giriş yapmak için QR kod okutmak amacıyla kameranıza erişim gerektirir.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Tahta Kumandasi</string>
+	<string>Sınıf360</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>tahta_kumandasi</string>
+	<string>Sınıf360</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

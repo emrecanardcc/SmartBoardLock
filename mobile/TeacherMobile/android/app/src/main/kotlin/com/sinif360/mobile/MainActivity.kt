@@ -1,4 +1,4 @@
-package com.example.tahta_kumandasi
+package com.sinif360.mobile
 
 import io.flutter.embedding.android.FlutterActivity
 

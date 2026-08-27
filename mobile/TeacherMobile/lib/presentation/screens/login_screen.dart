@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart'; // YENİ: URL başlatıcı eklendi
 import 'auth_gate.dart';
 
 // --- YEPYENİ CANLI VE PROFESYONEL RENK PALETİ ---
@@ -203,6 +204,25 @@ class _LoginScreenState extends State<LoginScreen> {
                           'GİRİŞ YAP', 
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 1.0)
                         ),
+                ),
+              ),
+              const SizedBox(height: 24), // YENİ: Boşluk eklendi
+
+              // YENİ: Gizlilik Politikası Butonu
+              TextButton(
+                onPressed: () async {
+                  final Uri url = Uri.parse('https://sinif360privacy.vercel.app'); 
+                  if (!await launchUrl(url)) {
+                    debugPrint('Link açılamadı');
+                  }
+                },
+                child: const Text(
+                  'Gizlilik Politikası',
+                  style: TextStyle(
+                    color: textGrey, // Tasarımına uygun gri bir ton
+                    decoration: TextDecoration.underline,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ],

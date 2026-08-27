@@ -69,6 +69,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await Future.delayed(const Duration(milliseconds: 800));
   }
 
+  // --- HESAP SİLME UYARI PENCERESİ (APPLE ONAYI İÇİN KRİTİK) ---
+  void _showDeleteAccountDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFFFFFFFF), // cardColor
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Color(0xFFF59E0B)), // warningOrange
+              SizedBox(width: 8),
+              Text(
+                "Hesap Silme",
+                style: TextStyle(
+                  color: Color(0xFF0F172A), // textDark
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            "Hesabınız ve yetkileriniz okul yönetimi tarafından kurumsal ağ üzerinden oluşturulmuştur.\n\nHesabınızı ve size ait tüm verileri kalıcı olarak silmek için lütfen okulunuzun bilgi işlem (IT) veya yönetim birimi ile iletişime geçin.",
+            style: TextStyle(
+              color: Color(0xFF64748B), // textGrey
+              fontSize: 14,
+              height: 1.5,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                "Anladım",
+                style: TextStyle(
+                  color: Color(0xFF3B82F6), // primaryBlue
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -92,18 +142,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         centerTitle: false,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout_rounded, color: textGrey),
-            tooltip: 'Çıkış Yap',
-            onPressed: () async {
-              await _client.auth.signOut();
-              if (!context.mounted) return;
-              Navigator.pushAndRemoveUntil(
-                context, 
-                MaterialPageRoute(builder: (context) => const LoginScreen()), 
-                (route) => false
-              );
+          // YENİ: Hesap ayarları menüsü
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.settings_rounded, color: textGrey),
+            tooltip: 'Ayarlar',
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            onSelected: (value) async {
+              if (value == 'delete') {
+                _showDeleteAccountDialog(context);
+              } else if (value == 'logout') {
+                await _client.auth.signOut();
+                if (!context.mounted) return;
+                Navigator.pushAndRemoveUntil(
+                  context, 
+                  MaterialPageRoute(builder: (context) => const LoginScreen()), 
+                  (route) => false
+                );
+              }
             },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_forever_rounded, color: dangerRed, size: 20),
+                    SizedBox(width: 8),
+                    Text('Hesabımı Sil', style: TextStyle(color: dangerRed, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem<String>(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout_rounded, color: textGrey, size: 20),
+                    SizedBox(width: 8),
+                    Text('Çıkış Yap', style: TextStyle(color: textDark)),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(width: 8),
         ],

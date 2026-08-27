@@ -6,9 +6,9 @@
 
     
     <application
-        android:label="tahta_kumandasi"
-        android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:label="Sınıf360"
+    android:name="${applicationName}"
+    android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"
