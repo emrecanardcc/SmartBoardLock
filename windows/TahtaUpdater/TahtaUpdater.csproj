@@ -1,22 +1,21 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
+		<!-- Konsol siyah ekranını tamamen iptal edip Windows formuna çevirir -->
 		<OutputType>WinExe</OutputType>
+
+		<!-- Windows Forms -->
 		<TargetFramework>net8.0-windows</TargetFramework>
 		<UseWindowsForms>true</UseWindowsForms>
 
+		<!-- Genel ayarlar -->
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<Version>2.0.0</Version>
 
+		<!-- SELF-CONTAINED -->
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<SelfContained>true</SelfContained>
-	</PropertyGroup>
 
-	<ItemGroup>
-		<PackageReference Include="Otp.NET" Version="1.4.1" />
-		<PackageReference Include="QRCoder" Version="1.8.0" />
-		<PackageReference Include="supabase-csharp" Version="0.16.2" />
-	</ItemGroup>
+	</PropertyGroup>
 
 </Project>

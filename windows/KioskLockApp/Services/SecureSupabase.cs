@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Win32;
+using System.Reflection; // YENİ: Uygulama versiyonunu okumak için eklendi
 
 namespace KioskLockApp.Services
 {
@@ -23,6 +24,54 @@ namespace KioskLockApp.Services
                 }
             }
             catch { return ""; }
+        }
+
+        // ==========================================
+        // YENİ: OTOMATİK GÜNCELLEME KONTROL SİSTEMİ
+        // ==========================================
+        public static async Task<(bool hasUpdate, string downloadUrl, string newVersion)> CheckForUpdatesAsync()
+        {
+            try
+            {
+                // 1. Kendi gömülü versiyonumuzu okuyoruz (Örn: "1.0.0.0")
+                Version currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
+
+                using (HttpClient client = new HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(5);
+                    client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
+                    client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
+
+                    // 2. app_versions tablosundan oluşturulma tarihine göre en son eklenen 1 kaydı çekiyoruz
+                    string url = $"{SUPABASE_URL}/rest/v1/app_versions?select=version_number,download_url&order=created_at.desc&limit=1";
+                    string response = await client.GetStringAsync(url);
+
+                    // Eğer veritabanı boş değilse
+                    if (response != "[]" && response.Contains("version_number"))
+                    {
+                        // Senin yazdığın harika ayrıştırıcı ile verileri çekiyoruz
+                        string dbVersionStr = ExtractJsonStringValue(response, "version_number");
+                        string downloadUrl = ExtractJsonStringValue(response, "download_url");
+
+                        if (!string.IsNullOrEmpty(dbVersionStr) && Version.TryParse(dbVersionStr, out Version latestVersion))
+                        {
+                            // 3. Karşılaştırma yapıyoruz: Veritabanındaki sürüm BÜYÜKSE güncelleme vardır
+                            if (latestVersion > currentVersion)
+                            {
+                                return (true, downloadUrl, dbVersionStr);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // İnternet yoksa sessizce devam et, tahtayı kilitli tut
+                System.Diagnostics.Debug.WriteLine("Güncelleme kontrol hatası: " + ex.Message);
+            }
+
+            // Güncelleme yoksa veya hata olduysa false dön
+            return (false, string.Empty, string.Empty);
         }
 
         public static async Task<bool?> CheckIfUnlockedAsync()
@@ -76,7 +125,6 @@ namespace KioskLockApp.Services
             return null;
         }
 
-        // YENİ: Eşleşme tamamlandığında artık 'name' bilgisini de alıyoruz
         public static async Task<Dictionary<string, string>> CheckPairingStatusAsync(string code)
         {
             try
@@ -87,7 +135,6 @@ namespace KioskLockApp.Services
                     client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
                     client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
 
-                    // Sorguya 'name' ekledik
                     string url = $"{SUPABASE_URL}/rest/v1/board_pairings?pairing_code=eq.{code}&select=board_id,offline_secret,status";
                     string response = await client.GetStringAsync(url);
 
@@ -95,15 +142,13 @@ namespace KioskLockApp.Services
                     {
                         string boardId = ExtractJsonStringValue(response, "board_id");
                         string offlineSecret = ExtractJsonStringValue(response, "offline_secret");
-                        
 
                         if (!string.IsNullOrEmpty(boardId) && !string.IsNullOrEmpty(offlineSecret))
                         {
                             return new Dictionary<string, string>
                             {
                                 { "board_id", boardId },
-                                { "offline_secret", offlineSecret },
-                                
+                                { "offline_secret", offlineSecret }
                             };
                         }
                     }
@@ -125,6 +170,7 @@ namespace KioskLockApp.Services
             if (quoteEnd == -1) return "";
             return json.Substring(quoteStart + 1, quoteEnd - quoteStart - 1);
         }
+
         public static async Task<string> GetBoardNameAsync(string boardId)
         {
             try
@@ -144,6 +190,43 @@ namespace KioskLockApp.Services
             catch
             {
                 return "";
+            }
+        }
+
+        public static async Task<string> GetSchoolNameAsync(string boardId)
+        {
+            try
+            {
+                using (HttpClient client = new HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(5);
+                    client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
+                    client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
+
+                    string boardUrl = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=school_id";
+                    string boardResponse = await client.GetStringAsync(boardUrl);
+
+                    string schoolId = ExtractJsonStringValue(boardResponse, "school_id");
+                    schoolId = schoolId.Replace("\"", "").Trim();
+
+                    if (string.IsNullOrEmpty(schoolId))
+                    {
+                        return "Bilinmeyen Okul";
+                    }
+
+                    string schoolUrl = $"{SUPABASE_URL}/rest/v1/schools?id=eq.{schoolId}&select=name";
+                    string schoolResponse = await client.GetStringAsync(schoolUrl);
+
+                    string schoolName = ExtractJsonStringValue(schoolResponse, "name");
+                    schoolName = schoolName.Replace("\"", "").Trim();
+
+                    return string.IsNullOrEmpty(schoolName) ? "Bilinmeyen Okul" : schoolName;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Supabase Hatası (GetSchoolNameAsync): " + ex.Message);
+                return "Bilinmeyen Okul";
             }
         }
     }

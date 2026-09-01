@@ -6,8 +6,15 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 
-		<PublishAot>true</PublishAot>
+		<!-- Windows x64 -->
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+
+		<!-- SELF-CONTAINED -->
+		<SelfContained>true</SelfContained>
 	</PropertyGroup>
+
+	<ItemGroup>
+		<Folder Include="Properties\PublishProfiles\" />
+	</ItemGroup>
 
 </Project>

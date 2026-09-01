@@ -6,18 +6,22 @@ using System.IO;
 using KioskLockApp.Hooks;
 using KioskLockApp.Services;
 using QRCoder;
-using Microsoft.Win32; // Registry okumak için gerekli
+using Microsoft.Win32;
 
 namespace KioskLockApp.UI
 {
     public class SecureRenderer : Form
     {
         private Label lblBoardName;
-        private Label lblInfo;
+        private Label lblSchoolName;
         private Label lblPinDisplay;
         private Label lblCurrentPinCheat;
         private PictureBox pbQrCode;
         private System.Windows.Forms.Timer watchdogTimer;
+
+        // --- SAAT İÇİN EKLENEN DEĞİŞKENLER ---
+        private Label lblClock;
+        private System.Windows.Forms.Timer clockTimer;
 
         private string enteredPin = "";
         private bool isOfflineUnlocked = false;
@@ -36,16 +40,44 @@ namespace KioskLockApp.UI
 
             BuildUI();
 
+            // --- SAAT ZAMANLAYICISI ---
+            clockTimer = new System.Windows.Forms.Timer();
+            clockTimer.Interval = 1000;
+            clockTimer.Tick += ClockTimer_Tick;
+            clockTimer.Start();
+
             watchdogTimer = new System.Windows.Forms.Timer();
             watchdogTimer.Interval = 3000;
             watchdogTimer.Tick += WatchdogTimer_Tick;
             watchdogTimer.Start();
 
+            // ==========================================
+            // YENİ: SESSİZ GÜNCELLEME KONTROLÜNÜ BAŞLAT
+            // ==========================================
+            _ = UpdateManager.CheckAndApplyUpdatesAsync();
+
             CheckStatus();
         }
 
-        // --- GÜNCELLENMİŞ İSİM OKUMA METODU ---
-        // Veritabanına gitmez, kurulumda Registry'e kaydedilen ismi okur.
+        // --- REGISTRY'DEN OKUL ADINI OKU ---
+        private string GetSavedSchoolName()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\SmartBoardLock"))
+                {
+                    if (key != null)
+                    {
+                        object val = key.GetValue("SchoolName");
+                        if (val != null) return val.ToString().Trim();
+                    }
+                }
+            }
+            catch { }
+            return "İSİMSİZ OKUL";
+        }
+
+        // --- REGISTRY'DEN TAHTA ADINI OKU ---
         private string GetSavedBoardName()
         {
             try
@@ -60,65 +92,167 @@ namespace KioskLockApp.UI
                 }
             }
             catch { }
-            return "İSİMSİZ TAHTA"; // Eğer Registry'de yoksa varsayılan
+            return "İSİMSİZ TAHTA";
         }
 
         private void BuildUI()
         {
-            // İsim doğrudan yerel Registry'den okunarak atanır.
+            int screenWidth = Screen.PrimaryScreen.Bounds.Width;
+            int screenHeight = Screen.PrimaryScreen.Bounds.Height;
+
+            // --- SAĞ %40'LIK PANEL HESAPLAMASI ---
+            int panelWidth = (int)(screenWidth * 0.40);
+            int panelX = screenWidth - panelWidth;
+            int centerX = panelX + (panelWidth / 2);
+
+            // 1. OKUL İSMİ (En Üstte)
+            lblSchoolName = new Label()
+            {
+                Text = GetSavedSchoolName().ToUpper(),
+                ForeColor = Color.White,
+                Font = new Font("Arial", 28, FontStyle.Bold),
+                AutoSize = false,
+                Size = new Size(panelWidth, 50),
+                Location = new Point(panelX, 60),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+            this.Controls.Add(lblSchoolName);
+
+            // 2. SINIF / TAHTA İSMİ (Okulun Altında)
             lblBoardName = new Label()
             {
                 Text = GetSavedBoardName(),
                 ForeColor = Color.Cyan,
-                Font = new Font("Arial", 48, FontStyle.Bold),
-                AutoSize = true,
-                Location = new Point(100, 30)
+                Font = new Font("Arial", 20, FontStyle.Bold),
+                AutoSize = false,
+                Size = new Size(panelWidth, 40),
+                Location = new Point(panelX, 120),
+                TextAlign = ContentAlignment.MiddleCenter
             };
             this.Controls.Add(lblBoardName);
 
-            lblInfo = new Label() { Text = "AKILLI TAHTA KİLİTLİ", ForeColor = Color.White, Font = new Font("Arial", 24, FontStyle.Bold), AutoSize = true, Location = new Point(100, 130) };
-            this.Controls.Add(lblInfo);
-
-            lblCurrentPinCheat = new Label() { ForeColor = Color.Gray, Font = new Font("Arial", 16), AutoSize = true, Location = new Point(100, 180) };
-            this.Controls.Add(lblCurrentPinCheat);
-
-            lblPinDisplay = new Label() { Text = "- - - - - -", ForeColor = Color.Yellow, Font = new Font("Arial", 36, FontStyle.Bold), AutoSize = true, Location = new Point(100, 240) };
-            this.Controls.Add(lblPinDisplay);
-
-            int startX = 100;
-            int startY = 330;
-            int btnSize = 90;
-            int padding = 10;
-
-            for (int i = 1; i <= 9; i++)
-            {
-                Button btn = new Button() { Text = i.ToString(), Size = new Size(btnSize, btnSize), Font = new Font("Arial", 28, FontStyle.Bold), BackColor = Color.FromArgb(40, 40, 40), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
-                btn.Location = new Point(startX + ((i - 1) % 3) * (btnSize + padding), startY + ((i - 1) / 3) * (btnSize + padding));
-                btn.Click += Numpad_Click;
-                this.Controls.Add(btn);
-            }
-
-            Button btn0 = new Button() { Text = "0", Size = new Size(btnSize, btnSize), Font = new Font("Arial", 28, FontStyle.Bold), BackColor = Color.FromArgb(40, 40, 40), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Location = new Point(startX + (btnSize + padding), startY + 3 * (btnSize + padding)) };
-            btn0.Click += Numpad_Click;
-            this.Controls.Add(btn0);
-
-            Button btnClear = new Button() { Text = "C", Size = new Size(btnSize, btnSize), Font = new Font("Arial", 28, FontStyle.Bold), BackColor = Color.IndianRed, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Location = new Point(startX + 2 * (btnSize + padding), startY + 3 * (btnSize + padding)) };
-            btnClear.Click += (s, e) => { enteredPin = ""; UpdatePinDisplay(); };
-            this.Controls.Add(btnClear);
-
+            // 3. QR KOD (Tahta isminin altında)
+            int qrSize = 220; // Dikeyde sığması için optimize edildi
             pbQrCode = new PictureBox()
             {
-                Size = new Size(400, 400),
-                Location = new Point(700, 330),
+                Size = new Size(qrSize, qrSize),
+                Location = new Point(centerX - (qrSize / 2), 190),
                 SizeMode = PictureBoxSizeMode.StretchImage,
                 BackColor = Color.White
             };
             this.Controls.Add(pbQrCode);
 
-            Label lblQrInfo = new Label() { Text = "Mobil Uygulama İle Okutun", ForeColor = Color.White, Font = new Font("Arial", 18, FontStyle.Bold), AutoSize = true, Location = new Point(740, 280) };
+            Label lblQrInfo = new Label()
+            {
+                Text = "Mobil Uygulama İle Okutun",
+                ForeColor = Color.LightGray,
+                Font = new Font("Arial", 14, FontStyle.Bold),
+                AutoSize = false,
+                Size = new Size(panelWidth, 30),
+                Location = new Point(panelX, 420),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
             this.Controls.Add(lblQrInfo);
 
+            // 4. GİRİLEN PIN GÖSTERGESİ
+            lblPinDisplay = new Label()
+            {
+                Text = "- - - - - -",
+                ForeColor = Color.Yellow,
+                Font = new Font("Arial", 32, FontStyle.Bold),
+                AutoSize = false,
+                Size = new Size(panelWidth, 50),
+                Location = new Point(panelX, 480),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+            this.Controls.Add(lblPinDisplay);
+
+            // 5. TUŞ TAKIMI (NUMPAD) (Pin göstergesinin altında)
+            int btnSize = 75;
+            int padding = 12;
+            int numpadWidth = (3 * btnSize) + (2 * padding);
+            int startX = centerX - (numpadWidth / 2);
+            int startY = 550; // Numpad'in dikeydeki başlangıç noktası
+
+            for (int i = 1; i <= 9; i++)
+            {
+                Button btn = new Button() { Text = i.ToString(), Size = new Size(btnSize, btnSize), Font = new Font("Arial", 24, FontStyle.Bold), BackColor = Color.FromArgb(40, 40, 40), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
+                btn.Location = new Point(startX + ((i - 1) % 3) * (btnSize + padding), startY + ((i - 1) / 3) * (btnSize + padding));
+                btn.Click += Numpad_Click;
+                this.Controls.Add(btn);
+            }
+
+            Button btn0 = new Button() { Text = "0", Size = new Size(btnSize, btnSize), Font = new Font("Arial", 24, FontStyle.Bold), BackColor = Color.FromArgb(40, 40, 40), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Location = new Point(startX + (btnSize + padding), startY + 3 * (btnSize + padding)) };
+            btn0.Click += Numpad_Click;
+            this.Controls.Add(btn0);
+
+            Button btnClear = new Button() { Text = "C", Size = new Size(btnSize, btnSize), Font = new Font("Arial", 24, FontStyle.Bold), BackColor = Color.IndianRed, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Location = new Point(startX + 2 * (btnSize + padding), startY + 3 * (btnSize + padding)) };
+            btnClear.Click += (s, e) => { enteredPin = ""; UpdatePinDisplay(); };
+            this.Controls.Add(btnClear);
+
+            // 6. BİLGİSAYARI KAPAT BUTONU (Tuş takımının en altında)
+            Button btnKapat = new Button();
+            btnKapat.Text = "Bilgisayarı Kapat";
+            btnKapat.Size = new Size(220, 50);
+            btnKapat.BackColor = Color.DarkRed;
+            btnKapat.ForeColor = Color.White;
+            btnKapat.Font = new Font("Arial", 12, FontStyle.Bold);
+            btnKapat.FlatStyle = FlatStyle.Flat;
+            btnKapat.Cursor = Cursors.Hand;
+            btnKapat.Location = new Point(centerX - (btnKapat.Width / 2), startY + 4 * (btnSize + padding) + 20);
+            btnKapat.Click += (sender, e) => { System.Diagnostics.Process.Start("shutdown", "/s /f /t 0"); };
+            this.Controls.Add(btnKapat);
+
+            // GİZLİ TEST KOPYA PIN (Ekranın en alt sağ köşesine saklandı)
+            lblCurrentPinCheat = new Label() { ForeColor = Color.FromArgb(30, 30, 30), Font = new Font("Arial", 8), AutoSize = true, Location = new Point(screenWidth - 150, screenHeight - 30) };
+            this.Controls.Add(lblCurrentPinCheat);
+
+            // --- SAAT TASARIMI (Ekranın sol üst köşesine alındı) ---
+            lblClock = new Label()
+            {
+                AutoSize = true,
+                Font = new Font("Segoe UI", 36F, FontStyle.Bold),
+                ForeColor = Color.White,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.TopLeft
+            };
+            this.Controls.Add(lblClock);
+
+            // ==========================================
+            // YENİ: UYGULAMA SÜRÜMÜNÜ EKRANA YAZDIR (Sol Alt Köşe)
+            // ==========================================
+            try
+            {
+                string currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString();
+
+                // "1.0.0.0" ise son sıfırı atıp "1.0.0" göstermesi için
+                if (currentVersion.EndsWith(".0"))
+                {
+                    currentVersion = currentVersion.Substring(0, currentVersion.Length - 2);
+                }
+
+                Label lblVersion = new Label()
+                {
+                    Text = "v" + currentVersion,
+                    ForeColor = Color.Gray, // Siyah ekranda net görünen ama göz yormayan gri
+                    Font = new Font("Arial", 11, FontStyle.Bold),
+                    AutoSize = true,
+                    Location = new Point(30, screenHeight - 50), // Sol alt köşe
+                    BackColor = Color.Transparent
+                };
+                this.Controls.Add(lblVersion);
+            }
+            catch { }
+
             RefreshQrCode();
+        }
+
+        // --- SAAT GÜNCELLEME METODU ---
+        private void ClockTimer_Tick(object sender, EventArgs e)
+        {
+            lblClock.Text = DateTime.Now.ToString("HH:mm:ss\ndd MMMM yyyy dddd");
+            // Saati sol üst köşede boşluğa sabitliyoruz
+            lblClock.Location = new Point(50, 50);
         }
 
         private void RefreshQrCode()
@@ -177,7 +311,7 @@ namespace KioskLockApp.UI
 
         private async void WatchdogTimer_Tick(object sender, EventArgs e)
         {
-            lblCurrentPinCheat.Text = "(Test Kopya PIN: " + OfflineTotpEngine.GetCurrentPin() + ")";
+            lblCurrentPinCheat.Text = "(Test: " + OfflineTotpEngine.GetCurrentPin() + ")";
             RefreshQrCode();
             await CheckStatusAsync();
         }
@@ -237,7 +371,9 @@ namespace KioskLockApp.UI
                     }
                 }
             }
-            catch { }
+            catch (Exception)
+            {
+            }
         }
 
         private void SecureRenderer_FormClosing(object sender, FormClosingEventArgs e)
