@@ -5,7 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Forms; // Windows Forms tam yetkiyle çağrıldı
+using System.Windows.Forms;
 
 namespace TahtaUpdater
 {
@@ -14,9 +14,8 @@ namespace TahtaUpdater
         [STAThread]
         static void Main(string[] args)
         {
-            // ÇAKIŞMAYI ÖNLEMEK İÇİN NET ADRES KULLANIYORUZ
-            System.Windows.Forms.Application.EnableVisualStyles();
-            System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
 
             if (args.Length < 2) return;
 
@@ -27,33 +26,49 @@ namespace TahtaUpdater
             File.WriteAllText(logPath, "Updater (UI) basladi...\n");
             File.AppendAllText(logPath, $"Hedef Klasör: {targetFolder}\n");
 
-            // 1. TAM EKRAN SİYAH KİLİT EKRANI OLUŞTURULUYOR
-            System.Windows.Forms.Form updateForm = new System.Windows.Forms.Form();
-            updateForm.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
-            updateForm.WindowState = System.Windows.Forms.FormWindowState.Maximized;
-            updateForm.BackColor = Color.Black;
-            updateForm.TopMost = true;
-            updateForm.ShowInTaskbar = false;
-            updateForm.Cursor = System.Windows.Forms.Cursors.WaitCursor;
-
-            System.Windows.Forms.Label lblInfo = new System.Windows.Forms.Label();
-            lblInfo.Text = "SİSTEM GÜNCELLENİYOR...\nLütfen tahtayı kapatmayın.";
-            lblInfo.ForeColor = Color.White;
-            lblInfo.Font = new Font("Arial", 36, FontStyle.Bold);
-            lblInfo.TextAlign = ContentAlignment.MiddleCenter;
-            lblInfo.Dock = DockStyle.Fill;
-            updateForm.Controls.Add(lblInfo);
-
-            // 2. EKRAN GÖRÜNDÜĞÜ AN ARKA PLANDA ÇIKARMA İŞLEMİNİ BAŞLAT
-            updateForm.Shown += async (s, e) => {
-                await Task.Run(() => PerformUpdate(zipPath, targetFolder, logPath));
-                System.Windows.Forms.Application.Exit(); // İşlem bitince ekranı kapat
+            // --- MODERN GÜNCELLEME EKRANI (FLUENT DESIGN) ---
+            Form updateForm = new Form
+            {
+                FormBorderStyle = FormBorderStyle.None,
+                WindowState = FormWindowState.Maximized,
+                BackColor = Color.FromArgb(245, 247, 251), // Sınıf360 Açık Gri Arka Plan
+                TopMost = true,
+                ShowInTaskbar = false,
+                Cursor = Cursors.WaitCursor
             };
 
-            System.Windows.Forms.Application.Run(updateForm);
+            // Ekranı 3x3 bölüp ortaya kartı oturtma
+            TableLayoutPanel rootGrid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 3 };
+            rootGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            rootGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            rootGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            rootGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+            rootGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            rootGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+            updateForm.Controls.Add(rootGrid);
+
+            // Ortadaki Beyaz Kart
+            Panel card = new Panel { Size = new Size(600, 350), BackColor = Color.White };
+
+            TableLayoutPanel cardContent = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1, Padding = new Padding(40) };
+            cardContent.Controls.Add(new Label { Text = "🔄", Font = new Font("Segoe UI", 48), ForeColor = Color.FromArgb(37, 99, 235), AutoSize = true, Anchor = AnchorStyles.None }, 0, 0);
+            cardContent.Controls.Add(new Label { Text = "Sınıf360", Font = new Font("Segoe UI", 14, FontStyle.Bold), ForeColor = Color.FromArgb(37, 99, 235), AutoSize = true, Anchor = AnchorStyles.None, Margin = new Padding(0, 10, 0, 10) }, 0, 1);
+            cardContent.Controls.Add(new Label { Text = "Sistem Güncelleniyor...", Font = new Font("Segoe UI", 26, FontStyle.Bold), ForeColor = Color.FromArgb(17, 24, 39), AutoSize = true, Anchor = AnchorStyles.None, Margin = new Padding(0, 0, 0, 15) }, 0, 2);
+            cardContent.Controls.Add(new Label { Text = "Lütfen akıllı tahtayı kapatmayın.\nYeni versiyon yükleniyor, bu işlem birkaç saniye sürecektir.", Font = new Font("Segoe UI", 13), ForeColor = Color.FromArgb(107, 114, 128), AutoSize = true, TextAlign = ContentAlignment.MiddleCenter, Anchor = AnchorStyles.None }, 0, 3);
+
+            card.Controls.Add(cardContent);
+            rootGrid.Controls.Add(card, 1, 1);
+
+            // Ekran yüklendiğinde arka planda çıkarma işlemine başla
+            updateForm.Shown += async (s, e) => {
+                await Task.Run(() => PerformUpdate(zipPath, targetFolder, logPath));
+                Application.Exit();
+            };
+
+            Application.Run(updateForm);
         }
 
-       static void PerformUpdate(string zipPath, string targetFolder, string logPath)
+        static void PerformUpdate(string zipPath, string targetFolder, string logPath)
         {
             string mainExeName = "KioskLockApp.exe";
 
@@ -66,16 +81,14 @@ namespace TahtaUpdater
                 Process[] kiosks = Process.GetProcessesByName("KioskLockApp");
                 foreach (var k in kiosks) { k.Kill(); k.WaitForExit(); }
 
-                Thread.Sleep(1000); // 1 saniye nefes al
+                Thread.Sleep(1000);
                 File.AppendAllText(logPath, "Eski surecler durduruldu.\n");
 
                 // 2. ADIM: TERTEMİZ SAYFA (KLASÖRÜN İÇİNİ KOMPLE SİL - UPDATER HARİÇ)
-                // Bu sayede eski çöpler, kalıntı dosyalar tamamen temizlenir!
                 if (Directory.Exists(targetFolder))
                 {
                     foreach (string file in Directory.GetFiles(targetFolder))
                     {
-                        // Updater kendi dosyasını silemez (çünkü şu an çalışıyor), onu es geçiyoruz
                         if (Path.GetFileName(file).StartsWith("TahtaUpdater", StringComparison.OrdinalIgnoreCase))
                             continue;
 
@@ -84,21 +97,20 @@ namespace TahtaUpdater
                     File.AppendAllText(logPath, "Eski dosyalar tamamen temizlendi (Sifirlandi).\n");
                 }
 
-                // 3. ADIM: YENİ DOSYALARI ZIP'TEN SIFIRDAN ÇIKart
+                // 3. ADIM: YENİ DOSYALARI ZIP'TEN SIFIRDAN ÇIKART
                 if (File.Exists(zipPath))
                 {
                     using (ZipArchive archive = ZipFile.OpenRead(zipPath))
                     {
                         foreach (ZipArchiveEntry file in archive.Entries)
                         {
-                            // Zip'in içinde updater varsa onu da es geçebiliriz
                             if (file.Name.StartsWith("TahtaUpdater", StringComparison.OrdinalIgnoreCase))
                                 continue;
 
                             string completeFileName = Path.Combine(targetFolder, file.FullName);
                             string directory = Path.GetDirectoryName(completeFileName);
-                            
-                            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory)) 
+
+                            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                                 Directory.CreateDirectory(directory);
 
                             if (!string.IsNullOrEmpty(file.Name))
@@ -107,7 +119,7 @@ namespace TahtaUpdater
                             }
                         }
                     }
-                    File.Delete(zipPath); // Zip çöpünü temizle
+                    File.Delete(zipPath);
                     File.AppendAllText(logPath, "Yeni dosyalar sifirdan yuklendi!\n");
                 }
 

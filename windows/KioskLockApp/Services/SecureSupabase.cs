@@ -4,7 +4,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Win32;
-using System.Reflection; // YENİ: Uygulama versiyonunu okumak için eklendi
+using System.Reflection;
 
 namespace KioskLockApp.Services
 {
@@ -27,13 +27,50 @@ namespace KioskLockApp.Services
         }
 
         // ==========================================
-        // YENİ: OTOMATİK GÜNCELLEME KONTROL SİSTEMİ
+        // YENİ: TAHTA SİLİNME KONTROLÜ
+        // ==========================================
+        public static async Task<bool> IsBoardDeletedAsync()
+        {
+            try
+            {
+                string boardId = GetRegistryValue("BoardId");
+
+                // Eğer ID yoksa zaten eşleşmemiş veya silinmiş sayılır
+                if (string.IsNullOrEmpty(boardId)) return true;
+
+                using (HttpClient client = new HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(5);
+                    client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
+                    client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
+
+                    // Supabase'den tahtanın var olup olmadığını kontrol et
+                    string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=id";
+                    string response = await client.GetStringAsync(url);
+
+                    // Eğer response boş bir dizi "[]" ise tahta silinmiştir
+                    if (response.Trim() == "[]")
+                    {
+                        return true;
+                    }
+
+                    return false;
+                }
+            }
+            catch (Exception)
+            {
+                // İnternet yoksa veya sunucuya ulaşılamıyorsa silinmiş gibi davranmaması için false dönüyoruz.
+                return false;
+            }
+        }
+
+        // ==========================================
+        // OTOMATİK GÜNCELLEME KONTROL SİSTEMİ
         // ==========================================
         public static async Task<(bool hasUpdate, string downloadUrl, string newVersion)> CheckForUpdatesAsync()
         {
             try
             {
-                // 1. Kendi gömülü versiyonumuzu okuyoruz (Örn: "1.0.0.0")
                 Version currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
 
                 using (HttpClient client = new HttpClient())
@@ -42,20 +79,16 @@ namespace KioskLockApp.Services
                     client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
                     client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
 
-                    // 2. app_versions tablosundan oluşturulma tarihine göre en son eklenen 1 kaydı çekiyoruz
                     string url = $"{SUPABASE_URL}/rest/v1/app_versions?select=version_number,download_url&order=created_at.desc&limit=1";
                     string response = await client.GetStringAsync(url);
 
-                    // Eğer veritabanı boş değilse
                     if (response != "[]" && response.Contains("version_number"))
                     {
-                        // Senin yazdığın harika ayrıştırıcı ile verileri çekiyoruz
                         string dbVersionStr = ExtractJsonStringValue(response, "version_number");
                         string downloadUrl = ExtractJsonStringValue(response, "download_url");
 
                         if (!string.IsNullOrEmpty(dbVersionStr) && Version.TryParse(dbVersionStr, out Version latestVersion))
                         {
-                            // 3. Karşılaştırma yapıyoruz: Veritabanındaki sürüm BÜYÜKSE güncelleme vardır
                             if (latestVersion > currentVersion)
                             {
                                 return (true, downloadUrl, dbVersionStr);
@@ -66,11 +99,9 @@ namespace KioskLockApp.Services
             }
             catch (Exception ex)
             {
-                // İnternet yoksa sessizce devam et, tahtayı kilitli tut
                 System.Diagnostics.Debug.WriteLine("Güncelleme kontrol hatası: " + ex.Message);
             }
 
-            // Güncelleme yoksa veya hata olduysa false dön
             return (false, string.Empty, string.Empty);
         }
 
