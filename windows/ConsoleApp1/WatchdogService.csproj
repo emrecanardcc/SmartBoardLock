@@ -17,4 +17,8 @@
 		<Folder Include="Properties\PublishProfiles\" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <PackageReference Include="supabase-csharp" Version="0.16.2" />
+	</ItemGroup>
+
 </Project>

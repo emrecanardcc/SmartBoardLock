@@ -1,13 +1,17 @@
-﻿using System;
-using System.Drawing;
-using System.Windows.Forms;
-using System.Diagnostics;
-using System.IO;
-using System.Collections.Generic;
-using KioskLockApp.Hooks;
+﻿using KioskLockApp.Hooks;
 using KioskLockApp.Services;
-using QRCoder;
 using Microsoft.Win32;
+using Postgrest.Attributes; // DÜZELTME: Supabase. öneki silindi
+using Postgrest.Models; // DÜZELTME: Supabase. öneki silindi
+using QRCoder;
+using Supabase.Realtime;
+using Supabase.Realtime.PostgresChanges; // YENİ: ListenType için eklendi
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.Windows.Forms;
 
 namespace KioskLockApp.UI
 {
@@ -20,16 +24,16 @@ namespace KioskLockApp.UI
         private bool isOfflineUnlocked = false;
         private string lastQrTime = "";
 
-        // İkinci ve üçüncü ekranları kilitlemek için tutulan form listesi
         private List<Form> secondaryScreens = new List<Form>();
-
-        // YENİ EK: Çevrimdışı meydan okuma (challenge) kodu
         private string currentChallengeCode = "";
+
+        private Supabase.Client realtimeClient;
+        private RealtimeChannel boardChannel;
 
         public SecureRenderer()
         {
             DeepWindowsHooks.InitializeHooks();
-            DisableTouchSwipes(); // Dokunmatik ekran kaydırmalarını kapat
+            DisableTouchSwipes();
 
             this.FormBorderStyle = FormBorderStyle.None;
             this.WindowState = FormWindowState.Maximized;
@@ -37,13 +41,11 @@ namespace KioskLockApp.UI
             this.TopMost = true;
             this.ShowInTaskbar = false;
 
-            // Odak kaybında kendini zorla öne alma tetikleyicisi
             this.Deactivate += SecureRenderer_Deactivate;
             this.FormClosing += SecureRenderer_FormClosing;
 
             BuildUI();
 
-            // YENİ EK: Form ilk açıldığında rastgele kodu oluştur ve ekranda göster
             currentChallengeCode = OfflineTotpEngine.GenerateChallengeCode();
             UpdateChallengeDisplay();
 
@@ -52,32 +54,76 @@ namespace KioskLockApp.UI
             clockTimer.Start();
             ClockTimer_Tick(null, null);
 
-            watchdogTimer = new System.Windows.Forms.Timer { Interval = 3000 };
+            watchdogTimer = new System.Windows.Forms.Timer { Interval = 60000 };
             watchdogTimer.Tick += WatchdogTimer_Tick;
             watchdogTimer.Start();
 
-            CoverOtherScreens(); // İkinci ekranları kilitle
+            CoverOtherScreens();
             _ = UpdateManager.CheckAndApplyUpdatesAsync();
             CheckStatus();
+
+            _ = InitializeRealtimeListenerAsync();
         }
 
-        // ==========================================
-        // 1. YENİ MASAÜSTÜ / GÖREV GÖRÜNÜMÜNDEN GİZLEME
-        // ==========================================
+        private async System.Threading.Tasks.Task InitializeRealtimeListenerAsync()
+        {
+            try
+            {
+                string boardId = SecureSupabase.GetRegistryValue("BoardId");
+                if (string.IsNullOrEmpty(boardId)) return;
+
+                string url = "https://clkasnbpmhddhstoixdz.supabase.co";
+                string key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsa2FzbmJwbWhkZGhzdG9peGR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5ODc4ODQsImV4cCI6MjA5ODU2Mzg4NH0.KpwOZoWwOu2DfwOec0y5LSvS6MRGGy4Uqot-Q1G0_x8";
+
+                var options = new Supabase.SupabaseOptions { AutoConnectRealtime = true };
+                realtimeClient = new Supabase.Client(url, key, options);
+                await realtimeClient.InitializeAsync();
+
+                boardChannel = realtimeClient.Realtime.Channel("realtime", "public", "boards");
+
+                // TAM YOL DÜZELTMESİ BURADA:
+                boardChannel.AddPostgresChangeHandler(
+                    Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.Updates,
+                    (sender, change) =>
+                    {
+                        // Gelen JSON verisini doğrudan Model'imize çeviriyoruz
+                        var record = change.Model<BoardRealtimeModel>();
+
+                        // Değişiklik bizim tahtamızın ID'sine mi ait?
+                        if (record != null && record.Id == boardId)
+                        {
+                            this.Invoke(new Action(() => {
+                                if (record.IsUnlocked)
+                                {
+                                    isOfflineUnlocked = false;
+                                    UnlockScreen();
+                                }
+                                else
+                                {
+                                    isOfflineUnlocked = false;
+                                    LockScreen();
+                                }
+                            }));
+                        }
+                    });
+
+                await boardChannel.Subscribe();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Realtime hatası: " + ex.Message);
+            }
+        }
         protected override CreateParams CreateParams
         {
             get
             {
                 CreateParams cp = base.CreateParams;
-                // WS_EX_TOOLWINDOW: Formu Alt+Tab, Win+Tab ve Görev Görünümünden gizler
                 cp.ExStyle |= 0x80;
                 return cp;
             }
         }
 
-        // ==========================================
-        // 2. ODAK (FOCUS) KAYBINDA ZORLA ÖNE ALMA
-        // ==========================================
         private void SecureRenderer_Deactivate(object sender, EventArgs e)
         {
             if (DeepWindowsHooks.IsLocked)
@@ -88,14 +134,11 @@ namespace KioskLockApp.UI
             }
         }
 
-        // ==========================================
-        // 3. İKİNCİL EKRANLARI (PROJEKSİYON) KİLİTLEME
-        // ==========================================
         private void CoverOtherScreens()
         {
             foreach (var screen in Screen.AllScreens)
             {
-                if (screen.Primary) continue; // Ana ekrana dokunma
+                if (screen.Primary) continue;
 
                 Form blackScreen = new Form
                 {
@@ -124,9 +167,6 @@ namespace KioskLockApp.UI
             secondaryScreens.Clear();
         }
 
-        // ==========================================
-        // 4. DOKUNMATİK KAYDIRMALARI (EDGE SWIPE) KAPATMA
-        // ==========================================
         private void DisableTouchSwipes()
         {
             try
@@ -136,7 +176,7 @@ namespace KioskLockApp.UI
                     key.SetValue("AllowEdgeSwipe", 0, RegistryValueKind.DWord);
                 }
             }
-            catch { /* Yetki yoksa sessizce geç (Uygulama Administrator olarak başlatılmalı) */ }
+            catch { }
         }
 
         private string GetSavedSchoolName()
@@ -177,6 +217,9 @@ namespace KioskLockApp.UI
         {
             if (lblTime != null) lblTime.Text = DateTime.Now.ToString("HH:mm");
             if (lblDate != null) lblDate.Text = DateTime.Now.ToString("dd MMMM yyyy, dddd");
+
+            // Karekodu buraya taşıyoruz. İlk açılışta anında ekrana gelir.
+            RefreshQrCode();
         }
 
         private void RefreshQrCode()
@@ -217,9 +260,6 @@ namespace KioskLockApp.UI
             }
         }
 
-        // ==========================================
-        // YENİ ÇEVRİMDİŞİ (OFFLINE) ŞİFRE KONTROLÜ
-        // ==========================================
         private void VerifyPinLogic()
         {
             if (OfflineTotpEngine.VerifyPin(enteredPin, currentChallengeCode))
@@ -228,7 +268,6 @@ namespace KioskLockApp.UI
                 UnlockScreen();
                 enteredPin = "";
 
-                // Güvenlik: Kullanılan kodu bir daha kullanılamaması için hemen yenile
                 currentChallengeCode = OfflineTotpEngine.GenerateChallengeCode();
                 UpdateChallengeDisplay();
             }
@@ -238,7 +277,6 @@ namespace KioskLockApp.UI
                 lblPinDisplay.ForeColor = Color.FromArgb(220, 38, 38);
                 enteredPin = "";
 
-                // Brute-Force (deneme yanılma) saldırılarını engellemek için hatalı girişte kodu yenile
                 currentChallengeCode = OfflineTotpEngine.GenerateChallengeCode();
                 UpdateChallengeDisplay();
 
@@ -248,7 +286,6 @@ namespace KioskLockApp.UI
 
         private void UpdateChallengeDisplay()
         {
-            // Designer tarafına hiç dokunmadan, alt başlık metnini dinamik bularak güncelliyoruz
             UpdateLabelTextRecursive(this, $"Çevrimdışı Kilit Açma Kodu: {currentChallengeCode}");
         }
 
@@ -256,12 +293,11 @@ namespace KioskLockApp.UI
         {
             foreach (Control c in parent.Controls)
             {
-                // UI kodunda "İnternet yoksa..." yazan Label'ı yakalıyoruz
-                if (c is Label lbl && (lbl.Text.Contains("Çevrimdışı") || lbl.Text.Contains("İnternet yoksa")))
+                if (c is Label lbl && (lbl.Text.Contains("Çevrimdışı") || lbl.Text.Contains("İnternet yoksa") || lbl.Text.Contains("Açma Kodu")))
                 {
                     lbl.Text = newText;
-                    lbl.Font = new Font("Segoe UI", 10, FontStyle.Bold); // Belirgin yapıyoruz
-                    lbl.ForeColor = Color.FromArgb(37, 99, 235); // Mavi (ColPrimary)
+                    lbl.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+                    lbl.ForeColor = Color.FromArgb(37, 99, 235);
                     return;
                 }
                 if (c.HasChildren)
@@ -292,7 +328,6 @@ namespace KioskLockApp.UI
 
         private async void WatchdogTimer_Tick(object sender, EventArgs e)
         {
-            RefreshQrCode();
             await CheckStatusAsync();
         }
 
@@ -361,14 +396,14 @@ namespace KioskLockApp.UI
         private void UnlockScreen()
         {
             DeepWindowsHooks.IsLocked = false;
-            RemoveSecondaryScreens(); // Kilit açılınca diğer ekranları da serbest bırak
+            RemoveSecondaryScreens();
             this.Hide();
         }
 
         private void LockScreen()
         {
             DeepWindowsHooks.IsLocked = true;
-            if (secondaryScreens.Count == 0 && Screen.AllScreens.Length > 1) CoverOtherScreens(); // Kilitlendiğinde ekran varsa kapat
+            if (secondaryScreens.Count == 0 && Screen.AllScreens.Length > 1) CoverOtherScreens();
             this.Show();
         }
 
@@ -394,5 +429,15 @@ namespace KioskLockApp.UI
         {
             if (e.CloseReason == CloseReason.UserClosing) e.Cancel = true;
         }
+    }
+
+    [Table("boards")]
+    public class BoardRealtimeModel : BaseModel
+    {
+        [Column("id")]
+        public string Id { get; set; }
+
+        [Column("is_unlocked")]
+        public bool IsUnlocked { get; set; }
     }
 }
