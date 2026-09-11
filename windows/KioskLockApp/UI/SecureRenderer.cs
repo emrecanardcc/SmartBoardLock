@@ -23,6 +23,9 @@ namespace KioskLockApp.UI
         // İkinci ve üçüncü ekranları kilitlemek için tutulan form listesi
         private List<Form> secondaryScreens = new List<Form>();
 
+        // YENİ EK: Çevrimdışı meydan okuma (challenge) kodu
+        private string currentChallengeCode = "";
+
         public SecureRenderer()
         {
             DeepWindowsHooks.InitializeHooks();
@@ -39,6 +42,10 @@ namespace KioskLockApp.UI
             this.FormClosing += SecureRenderer_FormClosing;
 
             BuildUI();
+
+            // YENİ EK: Form ilk açıldığında rastgele kodu oluştur ve ekranda göster
+            currentChallengeCode = OfflineTotpEngine.GenerateChallengeCode();
+            UpdateChallengeDisplay();
 
             clockTimer = new System.Windows.Forms.Timer { Interval = 1000 };
             clockTimer.Tick += ClockTimer_Tick;
@@ -210,20 +217,57 @@ namespace KioskLockApp.UI
             }
         }
 
+        // ==========================================
+        // YENİ ÇEVRİMDİŞİ (OFFLINE) ŞİFRE KONTROLÜ
+        // ==========================================
         private void VerifyPinLogic()
         {
-            if (OfflineTotpEngine.VerifyPin(enteredPin))
+            if (OfflineTotpEngine.VerifyPin(enteredPin, currentChallengeCode))
             {
                 isOfflineUnlocked = true;
                 UnlockScreen();
                 enteredPin = "";
+
+                // Güvenlik: Kullanılan kodu bir daha kullanılamaması için hemen yenile
+                currentChallengeCode = OfflineTotpEngine.GenerateChallengeCode();
+                UpdateChallengeDisplay();
             }
             else
             {
                 lblPinDisplay.Text = "HATALI PIN";
                 lblPinDisplay.ForeColor = Color.FromArgb(220, 38, 38);
                 enteredPin = "";
+
+                // Brute-Force (deneme yanılma) saldırılarını engellemek için hatalı girişte kodu yenile
+                currentChallengeCode = OfflineTotpEngine.GenerateChallengeCode();
+                UpdateChallengeDisplay();
+
                 System.Threading.Tasks.Task.Delay(1000).ContinueWith(t => { this.Invoke(new Action(() => UpdatePinDisplay())); });
+            }
+        }
+
+        private void UpdateChallengeDisplay()
+        {
+            // Designer tarafına hiç dokunmadan, alt başlık metnini dinamik bularak güncelliyoruz
+            UpdateLabelTextRecursive(this, $"Çevrimdışı Kilit Açma Kodu: {currentChallengeCode}");
+        }
+
+        private void UpdateLabelTextRecursive(Control parent, string newText)
+        {
+            foreach (Control c in parent.Controls)
+            {
+                // UI kodunda "İnternet yoksa..." yazan Label'ı yakalıyoruz
+                if (c is Label lbl && (lbl.Text.Contains("Çevrimdışı") || lbl.Text.Contains("İnternet yoksa")))
+                {
+                    lbl.Text = newText;
+                    lbl.Font = new Font("Segoe UI", 10, FontStyle.Bold); // Belirgin yapıyoruz
+                    lbl.ForeColor = Color.FromArgb(37, 99, 235); // Mavi (ColPrimary)
+                    return;
+                }
+                if (c.HasChildren)
+                {
+                    UpdateLabelTextRecursive(c, newText);
+                }
             }
         }
 

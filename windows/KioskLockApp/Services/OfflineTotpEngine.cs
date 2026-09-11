@@ -20,50 +20,49 @@ namespace KioskLockApp.Services
             catch { return ""; }
         }
 
-        public static string GenerateCodeForTime(DateTime time)
+        // Ekranda öğretmene gösterilecek 4 haneli rastgele Meydan Okuma (Challenge) kodunu üretir
+        public static string GenerateChallengeCode()
+        {
+            Random rnd = new Random();
+            return rnd.Next(1000, 9999).ToString();
+        }
+
+        // Kod ve tahtanın gizli anahtarını harmanlayarak 6 haneli Kilit Açma PIN'ini üretir
+        private static string CalculateResponsePin(string challengeCode)
         {
             string boardId = GetRegistryValue("BoardId");
             string offlineSecret = GetRegistryValue("OfflineSecret");
 
-            if (string.IsNullOrEmpty(boardId) || string.IsNullOrEmpty(offlineSecret))
+            if (string.IsNullOrEmpty(boardId) || string.IsNullOrEmpty(offlineSecret) || string.IsNullOrEmpty(challengeCode))
                 return "000000";
 
-            string timeString = time.ToString("yyyyMMddHHmm");
+            string rawData = challengeCode.Trim() + "-" + offlineSecret.Trim();
 
-            // Trim() eklenerek boşluk kaynaklı bozulmalar engellendi
-            string rawData = boardId.Trim() + offlineSecret.Trim() + timeString;
-
-            using (SHA256 sha256 = SHA256.Create())
+            using (HMACSHA256 hmac = new HMACSHA256(Encoding.UTF8.GetBytes(offlineSecret)))
             {
-                byte[] hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(rawData));
+                byte[] hashBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(rawData));
 
-                // SENİN ORİJİNAL, DOĞRU ALGORİTMANA GERİ DÖNÜLDÜ
-                int num = ((hashBytes[0] << 24) | (hashBytes[1] << 16) | (hashBytes[2] << 8) | hashBytes[3]) & 0x7FFFFFFF;
+                // Güvenli hash dönüşümü
+                int offset = hashBytes[hashBytes.Length - 1] & 0x0F;
+                int binary =
+                    ((hashBytes[offset] & 0x7f) << 24) |
+                    ((hashBytes[offset + 1] & 0xff) << 16) |
+                    ((hashBytes[offset + 2] & 0xff) << 8) |
+                    (hashBytes[offset + 3] & 0xff);
 
-                int pin = num % 1000000;
+                int pin = binary % 1000000;
                 return pin.ToString("D6");
             }
         }
 
-        public static string GetCurrentPin()
+        // Girilen PIN'in doğru olup olmadığını kontrol eder
+        public static bool VerifyPin(string enteredPin, string currentChallengeCode)
         {
-            return GenerateCodeForTime(DateTime.UtcNow);
-        }
+            if (string.IsNullOrEmpty(enteredPin) || enteredPin.Length != 6)
+                return false;
 
-        public static bool VerifyPin(string enteredPin)
-        {
-            DateTime now = DateTime.UtcNow;
-
-            string currentPin = GenerateCodeForTime(now);
-            string previousPin = GenerateCodeForTime(now.AddMinutes(-1));
-            string nextPin = GenerateCodeForTime(now.AddMinutes(1));
-
-            if (enteredPin == currentPin || enteredPin == previousPin || enteredPin == nextPin)
-            {
-                return true;
-            }
-
-            return false;
+            string expectedPin = CalculateResponsePin(currentChallengeCode);
+            return enteredPin == expectedPin;
         }
     }
 }
