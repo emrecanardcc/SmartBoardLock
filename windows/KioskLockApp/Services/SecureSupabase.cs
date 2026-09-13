@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Win32;
+using System.Reflection;
 
 namespace KioskLockApp.Services
 {
@@ -23,6 +24,85 @@ namespace KioskLockApp.Services
                 }
             }
             catch { return ""; }
+        }
+
+        // ==========================================
+        // YENİ: TAHTA SİLİNME KONTROLÜ
+        // ==========================================
+        public static async Task<bool> IsBoardDeletedAsync()
+        {
+            try
+            {
+                string boardId = GetRegistryValue("BoardId");
+
+                // Eğer ID yoksa zaten eşleşmemiş veya silinmiş sayılır
+                if (string.IsNullOrEmpty(boardId)) return true;
+
+                using (HttpClient client = new HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(5);
+                    client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
+                    client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
+
+                    // Supabase'den tahtanın var olup olmadığını kontrol et
+                    string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=id";
+                    string response = await client.GetStringAsync(url);
+
+                    // Eğer response boş bir dizi "[]" ise tahta silinmiştir
+                    if (response.Trim() == "[]")
+                    {
+                        return true;
+                    }
+
+                    return false;
+                }
+            }
+            catch (Exception)
+            {
+                // İnternet yoksa veya sunucuya ulaşılamıyorsa silinmiş gibi davranmaması için false dönüyoruz.
+                return false;
+            }
+        }
+
+        // ==========================================
+        // OTOMATİK GÜNCELLEME KONTROL SİSTEMİ
+        // ==========================================
+        public static async Task<(bool hasUpdate, string downloadUrl, string newVersion)> CheckForUpdatesAsync()
+        {
+            try
+            {
+                Version currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
+
+                using (HttpClient client = new HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(5);
+                    client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
+                    client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
+
+                    string url = $"{SUPABASE_URL}/rest/v1/app_versions?select=version_number,download_url&order=created_at.desc&limit=1";
+                    string response = await client.GetStringAsync(url);
+
+                    if (response != "[]" && response.Contains("version_number"))
+                    {
+                        string dbVersionStr = ExtractJsonStringValue(response, "version_number");
+                        string downloadUrl = ExtractJsonStringValue(response, "download_url");
+
+                        if (!string.IsNullOrEmpty(dbVersionStr) && Version.TryParse(dbVersionStr, out Version latestVersion))
+                        {
+                            if (latestVersion > currentVersion)
+                            {
+                                return (true, downloadUrl, dbVersionStr);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Güncelleme kontrol hatası: " + ex.Message);
+            }
+
+            return (false, string.Empty, string.Empty);
         }
 
         public static async Task<bool?> CheckIfUnlockedAsync()
@@ -76,7 +156,6 @@ namespace KioskLockApp.Services
             return null;
         }
 
-        // YENİ: Eşleşme tamamlandığında artık 'name' bilgisini de alıyoruz
         public static async Task<Dictionary<string, string>> CheckPairingStatusAsync(string code)
         {
             try
@@ -87,7 +166,6 @@ namespace KioskLockApp.Services
                     client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
                     client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
 
-                    // Sorguya 'name' ekledik
                     string url = $"{SUPABASE_URL}/rest/v1/board_pairings?pairing_code=eq.{code}&select=board_id,offline_secret,status";
                     string response = await client.GetStringAsync(url);
 
@@ -95,15 +173,13 @@ namespace KioskLockApp.Services
                     {
                         string boardId = ExtractJsonStringValue(response, "board_id");
                         string offlineSecret = ExtractJsonStringValue(response, "offline_secret");
-                        
 
                         if (!string.IsNullOrEmpty(boardId) && !string.IsNullOrEmpty(offlineSecret))
                         {
                             return new Dictionary<string, string>
                             {
                                 { "board_id", boardId },
-                                { "offline_secret", offlineSecret },
-                                
+                                { "offline_secret", offlineSecret }
                             };
                         }
                     }
@@ -125,6 +201,7 @@ namespace KioskLockApp.Services
             if (quoteEnd == -1) return "";
             return json.Substring(quoteStart + 1, quoteEnd - quoteStart - 1);
         }
+
         public static async Task<string> GetBoardNameAsync(string boardId)
         {
             try
@@ -144,6 +221,43 @@ namespace KioskLockApp.Services
             catch
             {
                 return "";
+            }
+        }
+
+        public static async Task<string> GetSchoolNameAsync(string boardId)
+        {
+            try
+            {
+                using (HttpClient client = new HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(5);
+                    client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
+                    client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
+
+                    string boardUrl = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=school_id";
+                    string boardResponse = await client.GetStringAsync(boardUrl);
+
+                    string schoolId = ExtractJsonStringValue(boardResponse, "school_id");
+                    schoolId = schoolId.Replace("\"", "").Trim();
+
+                    if (string.IsNullOrEmpty(schoolId))
+                    {
+                        return "Bilinmeyen Okul";
+                    }
+
+                    string schoolUrl = $"{SUPABASE_URL}/rest/v1/schools?id=eq.{schoolId}&select=name";
+                    string schoolResponse = await client.GetStringAsync(schoolUrl);
+
+                    string schoolName = ExtractJsonStringValue(schoolResponse, "name");
+                    schoolName = schoolName.Replace("\"", "").Trim();
+
+                    return string.IsNullOrEmpty(schoolName) ? "Bilinmeyen Okul" : schoolName;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Supabase Hatası (GetSchoolNameAsync): " + ex.Message);
+                return "Bilinmeyen Okul";
             }
         }
     }

@@ -26,6 +26,21 @@ namespace WatchdogService
             {
                 try
                 {
+                    // ==========================================
+                    // YENİ EKLENEN KISIM: GÜNCELLEME KONTROLÜ
+                    // ==========================================
+                    // İşletim sisteminde "Global\TahtaGuncelleniyor" adında bir sinyal var mı bakıyoruz
+                    bool isUpdateRunning = Mutex.TryOpenExisting(@"Global\TahtaGuncelleniyor", out _);
+
+                    if (isUpdateRunning)
+                    {
+                        // Sinyal var! Demek ki KioskLockApp arka planda güncelleniyor.
+                        // Kiosk'u geri açmaya ÇALIŞMA, 2 saniye bekle ve döngüyü başa sar.
+                        Thread.Sleep(2000);
+                        continue;
+                    }
+                    // ==========================================
+
                     // KioskLockApp sürecinin çalışıp çalışmadığını kontrol et
                     Process[] processes = Process.GetProcessesByName(targetProcessName);
 

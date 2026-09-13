@@ -1,21 +1,22 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
+		<!-- Konsol siyah ekranını tamamen iptal edip Windows formuna çevirir -->
 		<OutputType>WinExe</OutputType>
-		<TargetFramework>net8.0</TargetFramework>
+
+		<!-- Windows Forms -->
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<UseWindowsForms>true</UseWindowsForms>
+
+		<!-- Genel ayarlar -->
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 
-		<!-- Windows x64 -->
-		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
-
 		<!-- SELF-CONTAINED -->
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<SelfContained>true</SelfContained>
-	</PropertyGroup>
 
-	<ItemGroup>
-		<Folder Include="Properties\PublishProfiles\" />
-	</ItemGroup>
+	</PropertyGroup>
 
 	<ItemGroup>
 	  <PackageReference Include="supabase-csharp" Version="0.16.2" />

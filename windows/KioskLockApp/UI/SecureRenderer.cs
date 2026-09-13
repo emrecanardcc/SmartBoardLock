@@ -1,51 +1,201 @@
-﻿using System;
-using System.Drawing;
-using System.Windows.Forms;
-using System.Diagnostics;
-using System.IO;
-using KioskLockApp.Hooks;
+﻿using KioskLockApp.Hooks;
 using KioskLockApp.Services;
+using Microsoft.Win32;
+using Postgrest.Attributes; // DÜZELTME: Supabase. öneki silindi
+using Postgrest.Models; // DÜZELTME: Supabase. öneki silindi
 using QRCoder;
-using Microsoft.Win32; // Registry okumak için gerekli
+using Supabase.Realtime;
+using Supabase.Realtime.PostgresChanges; // YENİ: ListenType için eklendi
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.Windows.Forms;
 
 namespace KioskLockApp.UI
 {
-    public class SecureRenderer : Form
+    public partial class SecureRenderer : Form
     {
-        private Label lblBoardName;
-        private Label lblInfo;
-        private Label lblPinDisplay;
-        private Label lblCurrentPinCheat;
-        private PictureBox pbQrCode;
         private System.Windows.Forms.Timer watchdogTimer;
+        private System.Windows.Forms.Timer clockTimer;
 
         private string enteredPin = "";
         private bool isOfflineUnlocked = false;
         private string lastQrTime = "";
 
+        private List<Form> secondaryScreens = new List<Form>();
+        private string currentChallengeCode = "";
+
+        private Supabase.Client realtimeClient;
+        private RealtimeChannel boardChannel;
+
         public SecureRenderer()
         {
             DeepWindowsHooks.InitializeHooks();
+            DisableTouchSwipes();
 
             this.FormBorderStyle = FormBorderStyle.None;
             this.WindowState = FormWindowState.Maximized;
-            this.BackColor = Color.Black;
+            this.BackColor = Color.FromArgb(245, 247, 251);
             this.TopMost = true;
             this.ShowInTaskbar = false;
+
+            this.Deactivate += SecureRenderer_Deactivate;
             this.FormClosing += SecureRenderer_FormClosing;
 
             BuildUI();
 
-            watchdogTimer = new System.Windows.Forms.Timer();
-            watchdogTimer.Interval = 3000;
+            currentChallengeCode = OfflineTotpEngine.GenerateChallengeCode();
+            UpdateChallengeDisplay();
+
+            clockTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+            clockTimer.Tick += ClockTimer_Tick;
+            clockTimer.Start();
+            ClockTimer_Tick(null, null);
+
+            watchdogTimer = new System.Windows.Forms.Timer { Interval = 60000 };
             watchdogTimer.Tick += WatchdogTimer_Tick;
             watchdogTimer.Start();
 
+            CoverOtherScreens();
+            _ = UpdateManager.CheckAndApplyUpdatesAsync();
             CheckStatus();
+
+            _ = InitializeRealtimeListenerAsync();
         }
 
-        // --- GÜNCELLENMİŞ İSİM OKUMA METODU ---
-        // Veritabanına gitmez, kurulumda Registry'e kaydedilen ismi okur.
+        private async System.Threading.Tasks.Task InitializeRealtimeListenerAsync()
+        {
+            try
+            {
+                string boardId = SecureSupabase.GetRegistryValue("BoardId");
+                if (string.IsNullOrEmpty(boardId)) return;
+
+                string url = "https://clkasnbpmhddhstoixdz.supabase.co";
+                string key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsa2FzbmJwbWhkZGhzdG9peGR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5ODc4ODQsImV4cCI6MjA5ODU2Mzg4NH0.KpwOZoWwOu2DfwOec0y5LSvS6MRGGy4Uqot-Q1G0_x8";
+
+                var options = new Supabase.SupabaseOptions { AutoConnectRealtime = true };
+                realtimeClient = new Supabase.Client(url, key, options);
+                await realtimeClient.InitializeAsync();
+
+                boardChannel = realtimeClient.Realtime.Channel("realtime", "public", "boards");
+
+                // TAM YOL DÜZELTMESİ BURADA:
+                boardChannel.AddPostgresChangeHandler(
+                    Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.Updates,
+                    (sender, change) =>
+                    {
+                        // Gelen JSON verisini doğrudan Model'imize çeviriyoruz
+                        var record = change.Model<BoardRealtimeModel>();
+
+                        // Değişiklik bizim tahtamızın ID'sine mi ait?
+                        if (record != null && record.Id == boardId)
+                        {
+                            this.Invoke(new Action(() => {
+                                if (record.IsUnlocked)
+                                {
+                                    isOfflineUnlocked = false;
+                                    UnlockScreen();
+                                }
+                                else
+                                {
+                                    isOfflineUnlocked = false;
+                                    LockScreen();
+                                }
+                            }));
+                        }
+                    });
+
+                await boardChannel.Subscribe();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Realtime hatası: " + ex.Message);
+            }
+        }
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ExStyle |= 0x80;
+                return cp;
+            }
+        }
+
+        private void SecureRenderer_Deactivate(object sender, EventArgs e)
+        {
+            if (DeepWindowsHooks.IsLocked)
+            {
+                this.Activate();
+                this.Focus();
+                this.TopMost = true;
+            }
+        }
+
+        private void CoverOtherScreens()
+        {
+            foreach (var screen in Screen.AllScreens)
+            {
+                if (screen.Primary) continue;
+
+                Form blackScreen = new Form
+                {
+                    BackColor = Color.Black,
+                    FormBorderStyle = FormBorderStyle.None,
+                    StartPosition = FormStartPosition.Manual,
+                    Bounds = screen.Bounds,
+                    TopMost = true,
+                    ShowInTaskbar = false
+                };
+
+                blackScreen.Show();
+                secondaryScreens.Add(blackScreen);
+            }
+        }
+
+        private void RemoveSecondaryScreens()
+        {
+            foreach (var screen in secondaryScreens)
+            {
+                if (screen != null && !screen.IsDisposed)
+                {
+                    screen.Close();
+                }
+            }
+            secondaryScreens.Clear();
+        }
+
+        private void DisableTouchSwipes()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Policies\Microsoft\Windows\EdgeUI"))
+                {
+                    key.SetValue("AllowEdgeSwipe", 0, RegistryValueKind.DWord);
+                }
+            }
+            catch { }
+        }
+
+        private string GetSavedSchoolName()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\SmartBoardLock"))
+                {
+                    if (key != null)
+                    {
+                        object val = key.GetValue("SchoolName");
+                        if (val != null) return val.ToString().Trim();
+                    }
+                }
+            }
+            catch { }
+            return "Balakgazi Anadolu Lisesi";
+        }
+
         private string GetSavedBoardName()
         {
             try
@@ -60,64 +210,15 @@ namespace KioskLockApp.UI
                 }
             }
             catch { }
-            return "İSİMSİZ TAHTA"; // Eğer Registry'de yoksa varsayılan
+            return "11 - A Sınıfı";
         }
 
-        private void BuildUI()
+        private void ClockTimer_Tick(object sender, EventArgs e)
         {
-            // İsim doğrudan yerel Registry'den okunarak atanır.
-            lblBoardName = new Label()
-            {
-                Text = GetSavedBoardName(),
-                ForeColor = Color.Cyan,
-                Font = new Font("Arial", 48, FontStyle.Bold),
-                AutoSize = true,
-                Location = new Point(100, 30)
-            };
-            this.Controls.Add(lblBoardName);
+            if (lblTime != null) lblTime.Text = DateTime.Now.ToString("HH:mm");
+            if (lblDate != null) lblDate.Text = DateTime.Now.ToString("dd MMMM yyyy, dddd");
 
-            lblInfo = new Label() { Text = "AKILLI TAHTA KİLİTLİ", ForeColor = Color.White, Font = new Font("Arial", 24, FontStyle.Bold), AutoSize = true, Location = new Point(100, 130) };
-            this.Controls.Add(lblInfo);
-
-            lblCurrentPinCheat = new Label() { ForeColor = Color.Gray, Font = new Font("Arial", 16), AutoSize = true, Location = new Point(100, 180) };
-            this.Controls.Add(lblCurrentPinCheat);
-
-            lblPinDisplay = new Label() { Text = "- - - - - -", ForeColor = Color.Yellow, Font = new Font("Arial", 36, FontStyle.Bold), AutoSize = true, Location = new Point(100, 240) };
-            this.Controls.Add(lblPinDisplay);
-
-            int startX = 100;
-            int startY = 330;
-            int btnSize = 90;
-            int padding = 10;
-
-            for (int i = 1; i <= 9; i++)
-            {
-                Button btn = new Button() { Text = i.ToString(), Size = new Size(btnSize, btnSize), Font = new Font("Arial", 28, FontStyle.Bold), BackColor = Color.FromArgb(40, 40, 40), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
-                btn.Location = new Point(startX + ((i - 1) % 3) * (btnSize + padding), startY + ((i - 1) / 3) * (btnSize + padding));
-                btn.Click += Numpad_Click;
-                this.Controls.Add(btn);
-            }
-
-            Button btn0 = new Button() { Text = "0", Size = new Size(btnSize, btnSize), Font = new Font("Arial", 28, FontStyle.Bold), BackColor = Color.FromArgb(40, 40, 40), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Location = new Point(startX + (btnSize + padding), startY + 3 * (btnSize + padding)) };
-            btn0.Click += Numpad_Click;
-            this.Controls.Add(btn0);
-
-            Button btnClear = new Button() { Text = "C", Size = new Size(btnSize, btnSize), Font = new Font("Arial", 28, FontStyle.Bold), BackColor = Color.IndianRed, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Location = new Point(startX + 2 * (btnSize + padding), startY + 3 * (btnSize + padding)) };
-            btnClear.Click += (s, e) => { enteredPin = ""; UpdatePinDisplay(); };
-            this.Controls.Add(btnClear);
-
-            pbQrCode = new PictureBox()
-            {
-                Size = new Size(400, 400),
-                Location = new Point(700, 330),
-                SizeMode = PictureBoxSizeMode.StretchImage,
-                BackColor = Color.White
-            };
-            this.Controls.Add(pbQrCode);
-
-            Label lblQrInfo = new Label() { Text = "Mobil Uygulama İle Okutun", ForeColor = Color.White, Font = new Font("Arial", 18, FontStyle.Bold), AutoSize = true, Location = new Point(740, 280) };
-            this.Controls.Add(lblQrInfo);
-
+            // Karekodu buraya taşıyoruz. İlk açılışta anında ekrana gelir.
             RefreshQrCode();
         }
 
@@ -145,40 +246,88 @@ namespace KioskLockApp.UI
         {
             if (enteredPin.Length < 6)
             {
-                Button clickedBtn = sender as Button;
-                enteredPin += clickedBtn.Text;
-                UpdatePinDisplay();
-
-                if (enteredPin.Length == 6)
+                FluentButton clickedBtn = sender as FluentButton;
+                if (clickedBtn != null)
                 {
-                    if (OfflineTotpEngine.VerifyPin(enteredPin))
+                    enteredPin += clickedBtn.Text;
+                    UpdatePinDisplay();
+
+                    if (enteredPin.Length == 6)
                     {
-                        isOfflineUnlocked = true;
-                        UnlockScreen();
-                        enteredPin = "";
+                        VerifyPinLogic();
                     }
-                    else
-                    {
-                        lblPinDisplay.Text = "HATALI!";
-                        lblPinDisplay.ForeColor = Color.Red;
-                        enteredPin = "";
-                        System.Threading.Tasks.Task.Delay(1000).ContinueWith(t => { this.Invoke(new Action(() => UpdatePinDisplay())); });
-                    }
+                }
+            }
+        }
+
+        private void VerifyPinLogic()
+        {
+            if (OfflineTotpEngine.VerifyPin(enteredPin, currentChallengeCode))
+            {
+                isOfflineUnlocked = true;
+                UnlockScreen();
+                enteredPin = "";
+
+                currentChallengeCode = OfflineTotpEngine.GenerateChallengeCode();
+                UpdateChallengeDisplay();
+            }
+            else
+            {
+                lblPinDisplay.Text = "HATALI PIN";
+                lblPinDisplay.ForeColor = Color.FromArgb(220, 38, 38);
+                enteredPin = "";
+
+                currentChallengeCode = OfflineTotpEngine.GenerateChallengeCode();
+                UpdateChallengeDisplay();
+
+                System.Threading.Tasks.Task.Delay(1000).ContinueWith(t => { this.Invoke(new Action(() => UpdatePinDisplay())); });
+            }
+        }
+
+        private void UpdateChallengeDisplay()
+        {
+            UpdateLabelTextRecursive(this, $"Çevrimdışı Kilit Açma Kodu: {currentChallengeCode}");
+        }
+
+        private void UpdateLabelTextRecursive(Control parent, string newText)
+        {
+            foreach (Control c in parent.Controls)
+            {
+                if (c is Label lbl && (lbl.Text.Contains("Çevrimdışı") || lbl.Text.Contains("İnternet yoksa") || lbl.Text.Contains("Açma Kodu")))
+                {
+                    lbl.Text = newText;
+                    lbl.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+                    lbl.ForeColor = Color.FromArgb(37, 99, 235);
+                    return;
+                }
+                if (c.HasChildren)
+                {
+                    UpdateLabelTextRecursive(c, newText);
                 }
             }
         }
 
         private void UpdatePinDisplay()
         {
-            lblPinDisplay.ForeColor = Color.Yellow;
-            string paddedPin = enteredPin.PadRight(6, '-');
-            lblPinDisplay.Text = string.Join(" ", paddedPin.ToCharArray());
+            lblPinDisplay.ForeColor = Color.FromArgb(17, 24, 39);
+            if (string.IsNullOrEmpty(enteredPin))
+            {
+                lblPinDisplay.Text = "○  ○  ○  ○  ○  ○";
+            }
+            else
+            {
+                string display = "";
+                for (int i = 0; i < 6; i++)
+                {
+                    if (i < enteredPin.Length) display += "●  ";
+                    else display += "○  ";
+                }
+                lblPinDisplay.Text = display.Trim();
+            }
         }
 
         private async void WatchdogTimer_Tick(object sender, EventArgs e)
         {
-            lblCurrentPinCheat.Text = "(Test Kopya PIN: " + OfflineTotpEngine.GetCurrentPin() + ")";
-            RefreshQrCode();
             await CheckStatusAsync();
         }
 
@@ -190,6 +339,13 @@ namespace KioskLockApp.UI
         private async System.Threading.Tasks.Task CheckStatusAsync()
         {
             EnsureWatchdogIsAlive();
+
+            bool isDeleted = await SecureSupabase.IsBoardDeletedAsync();
+            if (isDeleted)
+            {
+                ResetToPairingMode();
+                return;
+            }
 
             bool? isUnlocked = await SecureSupabase.CheckIfUnlockedAsync();
 
@@ -210,15 +366,44 @@ namespace KioskLockApp.UI
             }
         }
 
+        private void ResetToPairingMode()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\SmartBoardLock", true))
+                {
+                    if (key != null)
+                    {
+                        key.DeleteValue("BoardId", false);
+                        key.DeleteValue("OfflineSecret", false);
+                        key.DeleteValue("BoardName", false);
+                        key.DeleteValue("SchoolName", false);
+                    }
+                }
+            }
+            catch { }
+
+            watchdogTimer?.Stop();
+            clockTimer?.Stop();
+
+            DeepWindowsHooks.IsLocked = false;
+            RemoveSecondaryScreens();
+
+            Application.Restart();
+            Environment.Exit(0);
+        }
+
         private void UnlockScreen()
         {
             DeepWindowsHooks.IsLocked = false;
+            RemoveSecondaryScreens();
             this.Hide();
         }
 
         private void LockScreen()
         {
             DeepWindowsHooks.IsLocked = true;
+            if (secondaryScreens.Count == 0 && Screen.AllScreens.Length > 1) CoverOtherScreens();
             this.Show();
         }
 
@@ -244,5 +429,15 @@ namespace KioskLockApp.UI
         {
             if (e.CloseReason == CloseReason.UserClosing) e.Cancel = true;
         }
+    }
+
+    [Table("boards")]
+    public class BoardRealtimeModel : BaseModel
+    {
+        [Column("id")]
+        public string Id { get; set; }
+
+        [Column("is_unlocked")]
+        public bool IsUnlocked { get; set; }
     }
 }
