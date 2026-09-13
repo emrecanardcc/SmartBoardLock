@@ -1,17 +1,15 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../data/services/totp_service.dart';
 
 // --- YEPYENİ CANLI VE PROFESYONEL RENK PALETİ ---
-const Color bgLight = Color(0xFFF1F5F9);      // Açık Arduvaz
-const Color cardColor = Color(0xFFFFFFFF);    // Saf Beyaz 
-const Color textDark = Color(0xFF0F172A);     // Çok Koyu Arduvaz 
-const Color textGrey = Color(0xFF64748B);     // Orta Arduvaz 
-const Color primaryBlue = Color(0xFF3B82F6);  // Canlı Mavi 
-const Color warningOrange = Color(0xFFF59E0B); // Kehribar (Dikkat / İnternet Yok)
+const Color bgLight = Color(0xFFF1F5F9);      
+const Color cardColor = Color(0xFFFFFFFF);    
+const Color textDark = Color(0xFF0F172A);     
+const Color textGrey = Color(0xFF64748B);     
+const Color primaryBlue = Color(0xFF3B82F6);  
+const Color warningOrange = Color(0xFFF59E0B); 
 
 class TotpScreen extends StatefulWidget {
-  // YENİ: Artık test verisi yerine, bu ekrana gelirken bilgileri dinamik olarak alacağız.
   final String boardId;
   final String offlineSecret;
   final String boardName;
@@ -28,50 +26,28 @@ class TotpScreen extends StatefulWidget {
 }
 
 class _TotpScreenState extends State<TotpScreen> {
-  String _currentCode = "Yükleniyor...";
-  int _remainingSeconds = 60;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _updateCode();
-    _startTimer();
-  }
-
-  void _updateCode() {
-    if (!mounted) return;
-    
-    setState(() {
-      _currentCode = TotpService.generateCode(
-        // YENİ: Dinamik parametreler kullanılıyor
-        boardId: widget.boardId,
-        offlineSecret: widget.offlineSecret,
-        time: DateTime.now().toUtc(), // C# ile aynı evrensel saati baz alıyoruz
-      );
-    });
-  }
-
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) return;
-      
-      setState(() {
-        // Bir sonraki dakikaya kaç saniye kaldığını hesapla
-        _remainingSeconds = 60 - DateTime.now().second;
-      });
-
-      // Saniye 0 olduğunda (yeni dakikaya girildiğinde) şifreyi otomatik yenile
-      if (DateTime.now().second == 0) {
-        _updateCode();
-      }
-    });
-  }
+  final TextEditingController _challengeController = TextEditingController();
+  String _generatedPin = "";
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _challengeController.dispose();
     super.dispose();
+  }
+
+  void _calculatePin(String challenge) {
+    if (challenge.length == 4) {
+      setState(() {
+        _generatedPin = TotpService.generateResponse(
+          offlineSecret: widget.offlineSecret,
+          challengeCode: challenge,
+        );
+      });
+    } else {
+      if (_generatedPin.isNotEmpty) {
+        setState(() => _generatedPin = "");
+      }
+    }
   }
 
   @override
@@ -118,69 +94,67 @@ class _TotpScreenState extends State<TotpScreen> {
               const SizedBox(height: 12),
               
               const Text(
-                'Tahtadaki tuş takımını kullanarak aşağıdaki 6 haneli şifreyi girin. Bu şifre güvenlik amacıyla her dakika otomatik olarak yenilenir.',
+                'Tahtadaki ekranda yazan 4 haneli çevrimdışı kilit açma kodunu aşağıya girerek 6 haneli şifrenizi oluşturabilirsiniz.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: textGrey, fontSize: 15, height: 1.5, fontWeight: FontWeight.w500),
               ),
-              const SizedBox(height: 48),
+              const SizedBox(height: 32),
               
-              // --- DEVASA MODERN ŞİFRE GÖSTERİM KARTI ---
+              // --- KOD GİRİŞ ALANI ---
               Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
                 decoration: BoxDecoration(
                   color: cardColor,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: primaryBlue.withOpacity(0.2), width: 2),
+                  borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(color: primaryBlue.withOpacity(0.1), blurRadius: 24, offset: const Offset(0, 8)),
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
                   ]
                 ),
-                child: Text(
-                  _currentCode,
+                child: TextField(
+                  controller: _challengeController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 4,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 48,
-                    fontWeight: FontWeight.w900,
-                    color: primaryBlue,
-                    letterSpacing: 12,
+                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 12, color: textDark),
+                  decoration: InputDecoration(
+                    counterText: '',
+                    hintText: '0000',
+                    hintStyle: TextStyle(color: textGrey.withOpacity(0.3), letterSpacing: 12),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 20),
                   ),
+                  onChanged: _calculatePin,
                 ),
               ),
               
               const SizedBox(height: 40),
               
-              // --- MODERN KALAN SÜRE SAYACI ---
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(100), // Kapsül (Pill) görünümü
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-                  ]
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        value: _remainingSeconds / 60,
-                        color: warningOrange,
-                        backgroundColor: Colors.grey.shade200,
-                        strokeWidth: 3.5,
-                      ),
+              // --- DEVASA MODERN ŞİFRE GÖSTERİM KARTI ---
+              if (_generatedPin.isNotEmpty) ...[
+                const Text('GİRİLECEK ŞİFRE', style: TextStyle(color: textGrey, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: cardColor,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: primaryBlue.withOpacity(0.2), width: 2),
+                    boxShadow: [
+                      BoxShadow(color: primaryBlue.withOpacity(0.1), blurRadius: 24, offset: const Offset(0, 8)),
+                    ]
+                  ),
+                  child: SelectableText(
+                    _generatedPin,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.w900,
+                      color: primaryBlue,
+                      letterSpacing: 12,
                     ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Yeni şifreye $_remainingSeconds saniye kaldı',
-                      style: const TextStyle(color: textDark, fontSize: 14, fontWeight: FontWeight.w700),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
