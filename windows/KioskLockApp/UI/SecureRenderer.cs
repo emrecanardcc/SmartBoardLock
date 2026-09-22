@@ -1,11 +1,11 @@
 ﻿using KioskLockApp.Hooks;
 using KioskLockApp.Services;
 using Microsoft.Win32;
-using Postgrest.Attributes; // DÜZELTME: Supabase. öneki silindi
-using Postgrest.Models; // DÜZELTME: Supabase. öneki silindi
+using Postgrest.Attributes;
+using Postgrest.Models;
 using QRCoder;
 using Supabase.Realtime;
-using Supabase.Realtime.PostgresChanges; // YENİ: ListenType için eklendi
+using Supabase.Realtime.PostgresChanges;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -19,6 +19,8 @@ namespace KioskLockApp.UI
     {
         private System.Windows.Forms.Timer watchdogTimer;
         private System.Windows.Forms.Timer clockTimer;
+        // YENİ: Agresif odaklayıcı ve Görev Yöneticisi kapatıcı zamanlayıcı
+        private System.Windows.Forms.Timer aggressiveSecurityTimer;
 
         private string enteredPin = "";
         private bool isOfflineUnlocked = false;
@@ -58,11 +60,35 @@ namespace KioskLockApp.UI
             watchdogTimer.Tick += WatchdogTimer_Tick;
             watchdogTimer.Start();
 
+            // 1. SAVUNMA HATTI: 100 milisaniyede bir çalışan agresif güvenlik döngüsü
+            aggressiveSecurityTimer = new System.Windows.Forms.Timer { Interval = 100 };
+            aggressiveSecurityTimer.Tick += AggressiveSecurityTimer_Tick;
+            aggressiveSecurityTimer.Start();
+
             CoverOtherScreens();
             _ = UpdateManager.CheckAndApplyUpdatesAsync();
             CheckStatus();
 
             _ = InitializeRealtimeListenerAsync();
+        }
+
+        // YENİ: Agresif Odaklayıcı ve Görev Yöneticisi Engelleyici
+        private void AggressiveSecurityTimer_Tick(object sender, EventArgs e)
+        {
+            if (DeepWindowsHooks.IsLocked)
+            {
+                // Programı zorla en üste ve odağa al
+                this.TopMost = true;
+                this.Activate();
+                this.Focus();
+
+                // Görev Yöneticisi (Taskmgr) açılmaya çalışılırsa anında öldür
+                Process[] taskMgrs = Process.GetProcessesByName("taskmgr");
+                foreach (Process p in taskMgrs)
+                {
+                    try { p.Kill(); } catch { }
+                }
+            }
         }
 
         private async System.Threading.Tasks.Task InitializeRealtimeListenerAsync()
@@ -81,19 +107,22 @@ namespace KioskLockApp.UI
 
                 boardChannel = realtimeClient.Realtime.Channel("realtime", "public", "boards");
 
-                // TAM YOL DÜZELTMESİ BURADA:
                 boardChannel.AddPostgresChangeHandler(
                     Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.Updates,
                     (sender, change) =>
                     {
-                        // Gelen JSON verisini doğrudan Model'imize çeviriyoruz
                         var record = change.Model<BoardRealtimeModel>();
 
-                        // Değişiklik bizim tahtamızın ID'sine mi ait?
                         if (record != null && record.Id == boardId)
                         {
                             this.Invoke(new Action(() => {
-                                if (record.IsUnlocked)
+                                // 2. SAVUNMA HATTI: Müdür paneli tahtayı pasife çektiyse tamamen aç
+                                if (!record.IsActive)
+                                {
+                                    isOfflineUnlocked = false;
+                                    UnlockScreen(); // Kalkanları indir
+                                }
+                                else if (record.IsUnlocked)
                                 {
                                     isOfflineUnlocked = false;
                                     UnlockScreen();
@@ -114,6 +143,7 @@ namespace KioskLockApp.UI
                 System.Diagnostics.Debug.WriteLine("Realtime hatası: " + ex.Message);
             }
         }
+
         protected override CreateParams CreateParams
         {
             get
@@ -213,14 +243,13 @@ namespace KioskLockApp.UI
             return "11 - A Sınıfı";
         }
 
-       private void ClockTimer_Tick(object sender, EventArgs e)
-{
-    if (lblTime != null) lblTime.Text = DateTime.Now.ToString("HH:mm");
-    if (lblDate != null) lblDate.Text = DateTime.Now.ToString("dd MMMM yyyy, dddd");
-    
-    // Karekodu buraya taşıyoruz. İlk açılışta anında ekrana gelir.
-    RefreshQrCode(); 
-}
+        private void ClockTimer_Tick(object sender, EventArgs e)
+        {
+            if (lblTime != null) lblTime.Text = DateTime.Now.ToString("HH:mm");
+            if (lblDate != null) lblDate.Text = DateTime.Now.ToString("dd MMMM yyyy, dddd");
+
+            RefreshQrCode();
+        }
 
         private void RefreshQrCode()
         {
@@ -347,6 +376,9 @@ namespace KioskLockApp.UI
                 return;
             }
 
+            // NOT: SecureSupabase sınıfında CheckIfUnlockedAsync() methodunu 
+            // sadece IsUnlocked değil, IsActive durumunu da kontrol edecek şekilde ayarlamamız gerekecek.
+            // Şimdilik mevcut yapıyı koruyarak devam ediyoruz.
             bool? isUnlocked = await SecureSupabase.CheckIfUnlockedAsync();
 
             if (isUnlocked == true)
@@ -385,6 +417,7 @@ namespace KioskLockApp.UI
 
             watchdogTimer?.Stop();
             clockTimer?.Stop();
+            aggressiveSecurityTimer?.Stop();
 
             DeepWindowsHooks.IsLocked = false;
             RemoveSecondaryScreens();
@@ -395,14 +428,14 @@ namespace KioskLockApp.UI
 
         private void UnlockScreen()
         {
-            DeepWindowsHooks.IsLocked = false;
+            DeepWindowsHooks.IsLocked = false; // Kancayı serbest bırak
             RemoveSecondaryScreens();
             this.Hide();
         }
 
         private void LockScreen()
         {
-            DeepWindowsHooks.IsLocked = true;
+            DeepWindowsHooks.IsLocked = true; // Kancayı devreye al
             if (secondaryScreens.Count == 0 && Screen.AllScreens.Length > 1) CoverOtherScreens();
             this.Show();
         }
@@ -439,5 +472,9 @@ namespace KioskLockApp.UI
 
         [Column("is_unlocked")]
         public bool IsUnlocked { get; set; }
+
+        // YENİ: Supabase'den aktif/pasif durumunu yakalamak için
+        [Column("is_active")]
+        public bool IsActive { get; set; }
     }
 }

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Windows.Forms;
 
 namespace KioskLockApp.Hooks
 {
@@ -36,7 +37,10 @@ namespace KioskLockApp.Hooks
         {
             if (nCode >= 0 && IsLocked)
             {
-                // Ekran kilitliyse tüm klavye tuşlarını (Alt+Tab, Windows tuşu dahil) yut!
+                // Ekran kilitliyse tüm klavye tuşlarını yutarak Alt+Tab, Alt+F4, Win Key gibi 
+                // işletim sistemi kısayollarını fiziksel seviyede bloke ediyoruz.
+                // (Ctrl+Alt+Del donanımsal interrupt olduğu için SecureRenderer içindeki 
+                // AggressiveSecurityTimer ile Görev Yöneticisi öldürülerek engellenir).
                 return (IntPtr)1;
             }
             return CallNextHookEx(_keyboardHookID, nCode, wParam, lParam);

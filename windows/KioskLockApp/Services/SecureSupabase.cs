@@ -27,7 +27,7 @@ namespace KioskLockApp.Services
         }
 
         // ==========================================
-        // YENİ: TAHTA SİLİNME KONTROLÜ
+        // TAHTA SİLİNME KONTROLÜ
         // ==========================================
         public static async Task<bool> IsBoardDeletedAsync()
         {
@@ -105,6 +105,9 @@ namespace KioskLockApp.Services
             return (false, string.Empty, string.Empty);
         }
 
+        // ==========================================
+        // YENİ EKLENEN AKTİF/PASİF VE KİLİT KONTROLÜ
+        // ==========================================
         public static async Task<bool?> CheckIfUnlockedAsync()
         {
             string boardId = GetRegistryValue("BoardId");
@@ -118,10 +121,15 @@ namespace KioskLockApp.Services
                     client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
                     client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
 
-                    string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=is_unlocked";
+                    // SORGUNUN DEĞİŞTİĞİ YER: is_active kolonu da çekiliyor
+                    string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=is_unlocked,is_active";
                     string response = await client.GetStringAsync(url);
                     string cleanResponse = response.Replace(" ", "").ToLower();
 
+                    // 1. ÖNCELİK: Eğer tahta "Pasif" (is_active: false) duruma getirilmişse, kilitli dahi olsa doğrudan AÇIK (true) döndür.
+                    if (cleanResponse.Contains("\"is_active\":false")) return true;
+
+                    // 2. ÖNCELİK: Tahta aktifse, is_unlocked durumuna bakarak karar ver.
                     if (cleanResponse.Contains("\"is_unlocked\":true")) return true;
                     if (cleanResponse.Contains("\"is_unlocked\":false")) return false;
                 }
