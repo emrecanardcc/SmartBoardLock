@@ -213,14 +213,14 @@ namespace KioskLockApp.UI
             return "11 - A Sınıfı";
         }
 
-        private void ClockTimer_Tick(object sender, EventArgs e)
-        {
-            if (lblTime != null) lblTime.Text = DateTime.Now.ToString("HH:mm");
-            if (lblDate != null) lblDate.Text = DateTime.Now.ToString("dd MMMM yyyy, dddd");
-
-            // Karekodu buraya taşıyoruz. İlk açılışta anında ekrana gelir.
-            RefreshQrCode();
-        }
+       private void ClockTimer_Tick(object sender, EventArgs e)
+{
+    if (lblTime != null) lblTime.Text = DateTime.Now.ToString("HH:mm");
+    if (lblDate != null) lblDate.Text = DateTime.Now.ToString("dd MMMM yyyy, dddd");
+    
+    // Karekodu buraya taşıyoruz. İlk açılışta anında ekrana gelir.
+    RefreshQrCode(); 
+}
 
         private void RefreshQrCode()
         {
