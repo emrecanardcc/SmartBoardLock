@@ -1,17 +1,16 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/services/totp_service.dart';
 import 'qr_scanner_screen.dart';
 
 // --- YEPYENİ CANLI VE PROFESYONEL RENK PALETİ ---
-const Color bgLight = Color(0xFFF1F5F9);      // Açık Arduvaz
-const Color cardColor = Color(0xFFFFFFFF);    // Saf Beyaz 
-const Color textDark = Color(0xFF0F172A);     // Çok Koyu Arduvaz 
-const Color textGrey = Color(0xFF64748B);     // Orta Arduvaz 
-const Color primaryBlue = Color(0xFF3B82F6);  // Canlı Mavi 
-const Color successGreen = Color(0xFF10B981); // Zümrüt Yeşili 
-const Color dangerRed = Color(0xFFF43F5E);    // Gül Kırmızısı 
+const Color bgLight = Color(0xFFF1F5F9);      
+const Color cardColor = Color(0xFFFFFFFF);    
+const Color textDark = Color(0xFF0F172A);     
+const Color textGrey = Color(0xFF64748B);     
+const Color primaryBlue = Color(0xFF3B82F6);  
+const Color successGreen = Color(0xFF10B981); 
+const Color dangerRed = Color(0xFFF43F5E);    
 
 class BoardControlScreen extends StatefulWidget {
   final String boardId;
@@ -32,26 +31,23 @@ class BoardControlScreen extends StatefulWidget {
 class _BoardControlScreenState extends State<BoardControlScreen> {
   final _client = Supabase.instance.client;
   
-  late Timer _timer;
-  String _currentTotpCode = '';
-  bool _isOfflineCodeVisible = false;
-  String? _adminName; // YENİ: İşlemi yapan kişiyi kaydetmek için
+  bool _isOfflineModeVisible = false;
+  final TextEditingController _challengeController = TextEditingController();
+  String _generatedPin = '';
+  String? _adminName; 
 
   @override
   void initState() {
     super.initState();
     _loadAdminData();
-    _generateDynamicCode();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _generateDynamicCode());
   }
 
   @override
   void dispose() {
-    _timer.cancel();
+    _challengeController.dispose();
     super.dispose();
   }
 
-  // YENİ: Tahtayı kilitleyen kişinin adını veritabanına yazmak için çekiyoruz
   Future<void> _loadAdminData() async {
     try {
       final user = _client.auth.currentUser;
@@ -62,23 +58,26 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
     } catch (_) {}
   }
 
-  void _generateDynamicCode() {
-    final newCode = TotpService.generateCode(
-      boardId: widget.boardId,
-      offlineSecret: widget.offlineSecret,
-      time: DateTime.now().toUtc(),
-    );
-    if (mounted && _currentTotpCode != newCode) {
-      setState(() => _currentTotpCode = newCode);
+  void _calculateOfflinePin(String challenge) {
+    if (challenge.length == 4) {
+      setState(() {
+        _generatedPin = TotpService.generateResponse(
+          offlineSecret: widget.offlineSecret,
+          challengeCode: challenge,
+        );
+      });
+    } else {
+      if (_generatedPin.isNotEmpty) {
+        setState(() => _generatedPin = '');
+      }
     }
   }
 
-  // Tahtayı doğrudan kilitleme fonksiyonu
   Future<void> _lockBoard() async {
     try {
       await _client.from('boards').update({
         'is_unlocked': false,
-        'last_locked_by': _adminName ?? 'Öğretmen/Yetkili' // Kapatan kişiyi kaydet
+        'last_locked_by': _adminName ?? 'Öğretmen/Yetkili'
       }).eq('id', widget.boardId);
       
       if (mounted) {
@@ -91,7 +90,6 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
     }
   }
 
-  // YENİ: Modern Snackbar
   void _showModernSnackbar(String message, {required bool isSuccess, required Color bgColor}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -182,10 +180,10 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
                 
                 const Spacer(),
 
-                // --- GİZLENEBİLİR OFFLINE ŞİFRE KARTI ---
-                if (_isOfflineCodeVisible) ...[
+                // --- ÇEVRİMDİŞİ ŞİFRE ÜRETİM ALANI ---
+                if (_isOfflineModeVisible) ...[
                   Container(
-                    padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                    padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: cardColor,
                       borderRadius: BorderRadius.circular(20),
@@ -201,15 +199,40 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
                           children: [
                             Icon(Icons.wifi_off_rounded, color: primaryBlue, size: 20),
                             SizedBox(width: 8),
-                            Text('Çevrimdışı Şifre (Süreli)', style: TextStyle(color: textGrey, fontSize: 14, fontWeight: FontWeight.w700)),
+                            Text('İnternetsiz Kilit Açma', style: TextStyle(color: textGrey, fontSize: 14, fontWeight: FontWeight.w700)),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                        SelectableText(
-                          _currentTotpCode,
-                          style: const TextStyle(color: primaryBlue, fontSize: 42, fontWeight: FontWeight.w900, letterSpacing: 12),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _challengeController,
+                          keyboardType: TextInputType.number,
+                          maxLength: 4,
                           textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 8),
+                          decoration: InputDecoration(
+                            counterText: '',
+                            hintText: '0000',
+                            hintStyle: TextStyle(color: textGrey.withOpacity(0.3), letterSpacing: 8),
+                            labelText: 'Tahtadaki 4 Haneli Kodu Girin',
+                            floatingLabelAlignment: FloatingLabelAlignment.center,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(color: primaryBlue, width: 2),
+                            ),
+                          ),
+                          onChanged: _calculateOfflinePin,
                         ),
+                        if (_generatedPin.isNotEmpty) ...[
+                          const SizedBox(height: 20),
+                          const Text('GİRİLECEK ŞİFRE', style: TextStyle(color: textGrey, fontSize: 12, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          SelectableText(
+                            _generatedPin,
+                            style: const TextStyle(color: primaryBlue, fontSize: 42, fontWeight: FontWeight.w900, letterSpacing: 12),
+                            textAlign: TextAlign.center,
+                          ),
+                        ]
                       ],
                     ),
                   ),
@@ -218,10 +241,18 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
 
                 // --- ŞİFRE GÖSTER/GİZLE BUTONU ---
                 TextButton.icon(
-                  onPressed: () => setState(() => _isOfflineCodeVisible = !_isOfflineCodeVisible),
-                  icon: Icon(_isOfflineCodeVisible ? Icons.visibility_off_rounded : Icons.visibility_rounded, color: textGrey),
+                  onPressed: () {
+                    setState(() {
+                      _isOfflineModeVisible = !_isOfflineModeVisible;
+                      if (!_isOfflineModeVisible) {
+                        _challengeController.clear();
+                        _generatedPin = '';
+                      }
+                    });
+                  },
+                  icon: Icon(_isOfflineModeVisible ? Icons.visibility_off_rounded : Icons.visibility_rounded, color: textGrey),
                   label: Text(
-                    _isOfflineCodeVisible ? 'Şifreyi Gizle' : 'Manuel Kilit Açma Şifresini Göster',
+                    _isOfflineModeVisible ? 'Çevrimdışı Paneli Gizle' : 'İnternet Yoksa Buraya Tıklayın',
                     style: const TextStyle(color: textGrey, fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ),
@@ -260,7 +291,7 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12), // Alt kısımdan hafif boşluk
+                const SizedBox(height: 12),
               ],
             ),
           );

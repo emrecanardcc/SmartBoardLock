@@ -2,27 +2,31 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 class TotpService {
-  static String generateCode({
-    required String boardId,
+  /// Kiosk ekranındaki 4 haneli meydan okuma (challenge) kodunu alıp 
+  /// 6 haneli kilit açma PIN'ini üretir.
+  static String generateResponse({
     required String offlineSecret,
-    required DateTime time,
+    required String challengeCode,
   }) {
-    // ÖNEMLİ: C# ve Flutter'ın aynı şifreyi üretmesi için UTC saat dilimini baz almalıyız!
-    final utcTime = time.toUtc();
-    final timeString = "${utcTime.year}${utcTime.month.toString().padLeft(2, '0')}${utcTime.day.toString().padLeft(2, '0')}${utcTime.hour.toString().padLeft(2, '0')}${utcTime.minute.toString().padLeft(2, '0')}";
-    
-    final rawData = boardId.trim() + offlineSecret.trim() + timeString;
-    
-    final bytes = utf8.encode(rawData);
-    final digest = sha256.convert(bytes);
+    // 1. C# ile birebir aynı olması için boşlukları temizliyoruz
+    final secretKey = offlineSecret.trim();
+    final message = challengeCode.trim();
+
+    // 2. HMAC-SHA256 Algoritması (Secret = Key, Challenge = Message)
+    final keyBytes = utf8.encode(secretKey);
+    final messageBytes = utf8.encode(message);
+
+    final hmac = Hmac(sha256, keyBytes);
+    final digest = hmac.convert(messageBytes);
     final hashBytes = digest.bytes;
 
-    // Little-Endian okuma (C# uyumlu)
+    // 3. Little-Endian Okuma (C# uyumluluğu için ilk 4 baytı alıyoruz)
     int num = ((hashBytes[0] << 24) | 
-             (hashBytes[1] << 16) | 
-             (hashBytes[2] << 8) | 
-             hashBytes[3]) & 0x7FFFFFFF;
+               (hashBytes[1] << 16) | 
+               (hashBytes[2] << 8) | 
+               hashBytes[3]) & 0x7FFFFFFF;
                
+    // 4. 6 Haneli PIN Formatı
     int pin = num % 1000000;
     
     return pin.toString().padLeft(6, '0');
