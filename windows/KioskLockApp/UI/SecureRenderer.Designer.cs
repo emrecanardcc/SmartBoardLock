@@ -8,7 +8,6 @@ namespace KioskLockApp.UI
 {
     public partial class SecureRenderer
     {
-        // Renk Paleti (Design System)
         private readonly Color ColBg = Color.FromArgb(245, 247, 251);
         private readonly Color ColCard = Color.FromArgb(255, 255, 255);
         private readonly Color ColTextMain = Color.FromArgb(17, 24, 39);
@@ -18,38 +17,34 @@ namespace KioskLockApp.UI
         private readonly Color ColBorder = Color.FromArgb(229, 231, 235);
         private readonly Color ColDanger = Color.FromArgb(220, 38, 38);
 
-        // UI Elementleri
         private Label lblTime;
         private Label lblDate;
         private Label lblPinDisplay;
         private PictureBox pbQrCode;
 
-        // DPI ölçek çarpanı: 96 = Windows'un "standart" (%100) DPI değeridir.
-        private float DpiScale => this.DeviceDpi / 96f;
+        // YENİ: Sınıf seviyesine taşındılar (Hata vermemesi için)
+        private Label lblBoard;
+        private Label lblSchool;
 
-        // Kısayol: bir pixel değerini DPI'a göre ölçekler
+        private float DpiScale => this.DeviceDpi / 96f;
         private int S(int px) => (int)Math.Round(px * DpiScale);
 
         private void BuildUI()
         {
-            // 1. ANA IZGARA (Üst %8, Orta %82, Alt %10)
             TableLayoutPanel root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 8F));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 82F));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 10F));
             this.Controls.Add(root);
 
-            // --- HEADER ---
             TableLayoutPanel header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 3, Padding = new Padding(S(30), 0, S(30), 0) };
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
 
-            // Marka
             Label lblBrand = new Label { Text = "Sınıf360", Font = new Font("Segoe UI", 22, FontStyle.Bold), ForeColor = ColPrimary, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
             header.Controls.Add(lblBrand, 0, 0);
 
-            // Saat ve Tarih
             TableLayoutPanel pnlDateTime = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
             pnlDateTime.RowStyles.Add(new RowStyle(SizeType.Percent, 65F));
             pnlDateTime.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));
@@ -58,63 +53,56 @@ namespace KioskLockApp.UI
             pnlDateTime.Controls.Add(lblTime, 0, 0);
             pnlDateTime.Controls.Add(lblDate, 0, 1);
             header.Controls.Add(pnlDateTime, 1, 0);
-
             root.Controls.Add(header, 0, 0);
 
-            // --- MAIN CONTENT (35% - 35% - 30%) ---
             TableLayoutPanel mainGrid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 3, Padding = new Padding(S(15), 0, S(15), 0) };
             mainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35F));
             mainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35F));
             mainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
             root.Controls.Add(mainGrid, 0, 1);
 
-            // SOL KART: AFİŞLER
             FluentCard cardAfis = new FluentCard(S(16)) { Dock = DockStyle.Fill, Margin = new Padding(S(10)) };
-            cardAfis.Controls.Add(CreateHeaderAndEmptyState("AFİŞLER", "Etkinlikler ve bilgilendirme", "🖼️", "Henüz afiş bulunmuyor", "Yeni afişler yayınlandığında\nburada görüntülenecektir."));
+            cardAfis.Controls.Add(CreateHeaderAndEmptyState("AFİŞLER", "Etkinlikler ve bilgilendirme", "🖼️️", "Henüz afiş bulunmuyor", "Yeni afişler yayınlandığında\nburada görüntülenecektir."));
             mainGrid.Controls.Add(cardAfis, 0, 0);
 
-            // ORTA KART: DUYURULAR
             FluentCard cardDuyuru = new FluentCard(S(16)) { Dock = DockStyle.Fill, Margin = new Padding(S(10)) };
             cardDuyuru.Controls.Add(CreateHeaderAndEmptyState("DUYURULAR", "Güncel okul duyuruları", "📢", "Henüz duyuru bulunmuyor", "Yeni bir duyuru eklendiğinde\nburada listelenecektir."));
             mainGrid.Controls.Add(cardDuyuru, 1, 0);
 
-            // SAĞ KART: LOGIN / QR
             FluentCard cardLogin = new FluentCard(S(16)) { Dock = DockStyle.Fill, Margin = new Padding(S(10)) };
-
-            // Taşmaları tamamen önleyen yüzdelik dikey grid
             TableLayoutPanel loginLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1, Padding = new Padding(S(5)) };
-            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 15F)); // Okul / Sınıf
-            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 40F)); // QR Kod + Versiyon
-            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 2F));  // Ayraç
-            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 13F)); // PIN
-            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 30F)); // Numpad
+            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 15F));
+            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 40F));
+            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 2F));
+            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 13F));
+            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 30F));
             cardLogin.Controls.Add(loginLayout);
 
-            // 1. Okul & Sınıf Başlıkları 
             TableLayoutPanel pnlSchoolInfo = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
             pnlSchoolInfo.RowStyles.Add(new RowStyle(SizeType.Percent, 40F));
             pnlSchoolInfo.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));
             pnlSchoolInfo.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
             Label lblLogo = new Label { Text = "🏫", Font = new Font("Segoe UI", 24), AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomCenter, ForeColor = ColPrimary };
-            Label lblSchool = new Label { Text = GetSavedSchoolName().ToUpper(), Font = new Font("Segoe UI", 16, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
-            Label lblBoard = new Label { Text = GetSavedBoardName(), Font = new Font("Segoe UI", 12, FontStyle.Bold), ForeColor = ColPrimary, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopCenter };
+
+            // YENİ: Başındaki "Label" kelimeleri kaldırıldı (yukarıda tanımlandığı için)
+            lblSchool = new Label { Text = GetSavedSchoolName().ToUpper(), Font = new Font("Segoe UI", 16, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
+            lblBoard = new Label { Text = GetSavedBoardName(), Font = new Font("Segoe UI", 12, FontStyle.Bold), ForeColor = ColPrimary, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopCenter };
+
             pnlSchoolInfo.Controls.Add(lblLogo, 0, 0);
             pnlSchoolInfo.Controls.Add(lblSchool, 0, 1);
             pnlSchoolInfo.Controls.Add(lblBoard, 0, 2);
             loginLayout.Controls.Add(pnlSchoolInfo, 0, 0);
 
-            // 2. QR Kod Alanı ve Hemen Altında Sürüm (Version) Bilgisi
             TableLayoutPanel pnlQrArea = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
             pnlQrArea.RowStyles.Add(new RowStyle(SizeType.Percent, 15F));
             pnlQrArea.RowStyles.Add(new RowStyle(SizeType.Percent, 55F));
             pnlQrArea.RowStyles.Add(new RowStyle(SizeType.Percent, 15F));
-            pnlQrArea.RowStyles.Add(new RowStyle(SizeType.Percent, 15F)); // Versiyon için yeni satır
+            pnlQrArea.RowStyles.Add(new RowStyle(SizeType.Percent, 15F));
 
             Label lblQrTitle = new Label { Text = "Mobil uygulamaya bağlan", Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomCenter };
             pbQrCode = new PictureBox { SizeMode = PictureBoxSizeMode.Zoom, Dock = DockStyle.Fill, Margin = new Padding(S(5)) };
             Label lblQrSub = new Label { Text = "Uygulamadaki 'Karekod Okut' butonunu kullanın", Font = new Font("Segoe UI", 9), ForeColor = ColTextSec, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopCenter };
 
-            // Versiyon numarasını otomatik çeken yapı
             string appVersion = "1.0.0";
             try
             {
@@ -128,15 +116,13 @@ namespace KioskLockApp.UI
             pnlQrArea.Controls.Add(lblQrTitle, 0, 0);
             pnlQrArea.Controls.Add(pbQrCode, 0, 1);
             pnlQrArea.Controls.Add(lblQrSub, 0, 2);
-            pnlQrArea.Controls.Add(lblVersion, 0, 3); // QR altına iliştirildi
+            pnlQrArea.Controls.Add(lblVersion, 0, 3);
             loginLayout.Controls.Add(pnlQrArea, 0, 1);
 
-            // 3. Ayraç Çizgisi
             Panel separator = new Panel { Dock = DockStyle.Fill };
             separator.Paint += (s, e) => { e.Graphics.DrawLine(new Pen(ColBorder), S(40), separator.Height / 2, separator.Width - S(40), separator.Height / 2); };
             loginLayout.Controls.Add(separator, 0, 2);
 
-            // 4. PIN Girişi
             TableLayoutPanel pnlPinTop = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
             pnlPinTop.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
             pnlPinTop.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
@@ -149,7 +135,6 @@ namespace KioskLockApp.UI
             pnlPinTop.Controls.Add(lblPinSub, 0, 2);
             loginLayout.Controls.Add(pnlPinTop, 0, 3);
 
-            // 5. Numpad
             TableLayoutPanel numpadWrapper = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 3 };
             numpadWrapper.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 15F));
             numpadWrapper.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70F));
@@ -183,13 +168,11 @@ namespace KioskLockApp.UI
 
             mainGrid.Controls.Add(cardLogin, 2, 0);
 
-            // --- FOOTER ---
             TableLayoutPanel footer = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 3, Padding = new Padding(S(30), 0, S(30), S(10)) };
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
 
-            // Sol taraftaki eski versiyon etiketi temizlendi (çünkü artık QR altında)
             footer.Controls.Add(new Panel { Dock = DockStyle.Fill }, 0, 0);
 
             Panel pnlPowerWrapper = new Panel { Dock = DockStyle.Fill };
@@ -258,7 +241,6 @@ namespace KioskLockApp.UI
         }
     }
 
-    // --- FLUENT DESIGN BİLEŞENLERİ ---
     public class FluentCard : Panel
     {
         private int radius;

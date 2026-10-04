@@ -13,153 +13,153 @@ namespace KioskLockApp.Services
         private const string SUPABASE_URL = "https://clkasnbpmhddhstoixdz.supabase.co";
         private const string SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsa2FzbmJwbWhkZGhzdG9peGR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5ODc4ODQsImV4cCI6MjA5ODU2Mzg4NH0.KpwOZoWwOu2DfwOec0y5LSvS6MRGGy4Uqot-Q1G0_x8";
 
-        // Registry'den veri okumak için tek merkez
-        public static string GetRegistryValue(string keyName)
+        // Tekil HttpClient (Zaman aşımı / Timeout hatalarını bitirir)
+        private static readonly HttpClient sharedClient = CreateSharedClient();
+
+        private static HttpClient CreateSharedClient()
+        {
+            var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
+            client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
+            return client;
+        }
+
+        public static string GetRegistryValue(string keyName, string defaultValue = "")
         {
             try
             {
                 using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\SmartBoardLock"))
                 {
-                    return key?.GetValue(keyName)?.ToString()?.Trim() ?? "";
+                    return key?.GetValue(keyName)?.ToString()?.Trim() ?? defaultValue;
                 }
             }
-            catch { return ""; }
+            catch { return defaultValue; }
         }
 
-        // ==========================================
-        // TAHTA SİLİNME KONTROLÜ
-        // ==========================================
-        public static async Task<bool> IsBoardDeletedAsync()
+        public static void SetRegistryValue(string keyName, string value)
         {
             try
             {
-                string boardId = GetRegistryValue("BoardId");
-
-                // Eğer ID yoksa zaten eşleşmemiş veya silinmiş sayılır
-                if (string.IsNullOrEmpty(boardId)) return true;
-
-                using (HttpClient client = new HttpClient())
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\SmartBoardLock"))
                 {
-                    client.Timeout = TimeSpan.FromSeconds(5);
-                    client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
-                    client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
-
-                    // Supabase'den tahtanın var olup olmadığını kontrol et
-                    string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=id";
-                    string response = await client.GetStringAsync(url);
-
-                    // Eğer response boş bir dizi "[]" ise tahta silinmiştir
-                    if (response.Trim() == "[]")
-                    {
-                        return true;
-                    }
-
-                    return false;
+                    key.SetValue(keyName, value);
                 }
             }
-            catch (Exception)
+            catch { }
+        }
+
+        public static async Task<(string state, string boardName, bool isActive)> GetBoardStateSingleQueryAsync()
+        {
+            string boardId = GetRegistryValue("BoardId");
+            string currentName = GetRegistryValue("BoardName");
+            bool lastKnownActive = GetRegistryValue("LastKnownIsActive", "true") == "true";
+
+            if (string.IsNullOrEmpty(boardId)) return ("DELETED", currentName, lastKnownActive);
+
+            try
             {
-                // İnternet yoksa veya sunucuya ulaşılamıyorsa silinmiş gibi davranmaması için false dönüyoruz.
-                return false;
+                string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=is_unlocked,is_active,name";
+                string response = await sharedClient.GetStringAsync(url);
+                string cleanResponse = response.Replace(" ", "").ToLower();
+
+                if (cleanResponse == "[]") return ("DELETED", currentName, lastKnownActive);
+
+                string fetchedName = ExtractJsonStringValue(response, "name");
+                if (!string.IsNullOrEmpty(fetchedName) && fetchedName != currentName)
+                {
+                    SetRegistryValue("BoardName", fetchedName);
+                    currentName = fetchedName;
+                }
+
+                bool isActive = cleanResponse.Contains("\"is_active\":true");
+                SetRegistryValue("LastKnownIsActive", isActive ? "true" : "false");
+
+                if (!isActive || cleanResponse.Contains("\"is_unlocked\":true"))
+                    return ("UNLOCKED", currentName, isActive);
+
+                return ("LOCKED", currentName, isActive);
+            }
+            catch
+            {
+                return ("ERROR", currentName, lastKnownActive);
             }
         }
 
-        // ==========================================
-        // OTOMATİK GÜNCELLEME KONTROL SİSTEMİ
-        // ==========================================
+        public static async Task SyncOfflineStatusAsync()
+        {
+            string pendingAction = GetRegistryValue("PendingOfflineSync");
+            if (string.IsNullOrEmpty(pendingAction)) return;
+
+            string boardId = GetRegistryValue("BoardId");
+            if (string.IsNullOrEmpty(boardId)) return;
+
+            try
+            {
+                bool targetUnlockState = (pendingAction == "UNLOCK");
+                string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}";
+                string jsonBody = $"{{\"is_unlocked\": {targetUnlockState.ToString().ToLower()}, \"last_locked_by\": \"Tahta (Çevrimdışı)\"}}";
+
+                var request = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+                {
+                    Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+                };
+                request.Headers.Add("Prefer", "return=minimal");
+
+                var response = await sharedClient.SendAsync(request);
+                if (response.IsSuccessStatusCode)
+                {
+                    SetRegistryValue("PendingOfflineSync", "");
+                }
+            }
+            catch { }
+        }
+
+        public static async Task ForceUpdateLockStateAsync(bool unlock)
+        {
+            SetRegistryValue("PendingOfflineSync", unlock ? "UNLOCK" : "LOCK");
+            await SyncOfflineStatusAsync();
+        }
+
         public static async Task<(bool hasUpdate, string downloadUrl, string newVersion)> CheckForUpdatesAsync()
         {
             try
             {
                 Version currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
+                string url = $"{SUPABASE_URL}/rest/v1/app_versions?select=version_number,download_url&order=created_at.desc&limit=1";
+                string response = await sharedClient.GetStringAsync(url);
 
-                using (HttpClient client = new HttpClient())
+                if (response != "[]" && response.Contains("version_number"))
                 {
-                    client.Timeout = TimeSpan.FromSeconds(5);
-                    client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
-                    client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
+                    string dbVersionStr = ExtractJsonStringValue(response, "version_number");
+                    string downloadUrl = ExtractJsonStringValue(response, "download_url");
 
-                    string url = $"{SUPABASE_URL}/rest/v1/app_versions?select=version_number,download_url&order=created_at.desc&limit=1";
-                    string response = await client.GetStringAsync(url);
-
-                    if (response != "[]" && response.Contains("version_number"))
+                    if (!string.IsNullOrEmpty(dbVersionStr) && Version.TryParse(dbVersionStr, out Version latestVersion))
                     {
-                        string dbVersionStr = ExtractJsonStringValue(response, "version_number");
-                        string downloadUrl = ExtractJsonStringValue(response, "download_url");
-
-                        if (!string.IsNullOrEmpty(dbVersionStr) && Version.TryParse(dbVersionStr, out Version latestVersion))
-                        {
-                            if (latestVersion > currentVersion)
-                            {
-                                return (true, downloadUrl, dbVersionStr);
-                            }
-                        }
+                        if (latestVersion > currentVersion) return (true, downloadUrl, dbVersionStr);
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine("Güncelleme kontrol hatası: " + ex.Message);
-            }
-
+            catch { }
             return (false, string.Empty, string.Empty);
-        }
-
-        // ==========================================
-        // YENİ EKLENEN AKTİF/PASİF VE KİLİT KONTROLÜ
-        // ==========================================
-        public static async Task<bool?> CheckIfUnlockedAsync()
-        {
-            string boardId = GetRegistryValue("BoardId");
-            if (string.IsNullOrEmpty(boardId)) return false;
-
-            try
-            {
-                using (HttpClient client = new HttpClient())
-                {
-                    client.Timeout = TimeSpan.FromSeconds(5);
-                    client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
-                    client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
-
-                    // SORGUNUN DEĞİŞTİĞİ YER: is_active kolonu da çekiliyor
-                    string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=is_unlocked,is_active";
-                    string response = await client.GetStringAsync(url);
-                    string cleanResponse = response.Replace(" ", "").ToLower();
-
-                    // 1. ÖNCELİK: Eğer tahta "Pasif" (is_active: false) duruma getirilmişse, kilitli dahi olsa doğrudan AÇIK (true) döndür.
-                    if (cleanResponse.Contains("\"is_active\":false")) return true;
-
-                    // 2. ÖNCELİK: Tahta aktifse, is_unlocked durumuna bakarak karar ver.
-                    if (cleanResponse.Contains("\"is_unlocked\":true")) return true;
-                    if (cleanResponse.Contains("\"is_unlocked\":false")) return false;
-                }
-            }
-            catch { return null; }
-            return false;
         }
 
         public static async Task<string> GenerateAndRegisterPairingCodeAsync()
         {
             Random rnd = new Random();
-            using (HttpClient client = new HttpClient())
+            for (int i = 0; i < 5; i++)
             {
-                client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
-                client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
-                client.DefaultRequestHeaders.Add("Prefer", "return=minimal");
+                string code = rnd.Next(100000, 999999).ToString();
+                string url = $"{SUPABASE_URL}/rest/v1/board_pairings";
+                string jsonBody = $"{{\"pairing_code\": \"{code}\", \"status\": \"pending\"}}";
 
-                for (int i = 0; i < 5; i++)
+                try
                 {
-                    string code = rnd.Next(100000, 999999).ToString();
-                    string url = $"{SUPABASE_URL}/rest/v1/board_pairings";
-                    string jsonBody = $"{{\"pairing_code\": \"{code}\", \"status\": \"pending\"}}";
-
-                    try
-                    {
-                        var response = await client.PostAsync(url, new StringContent(jsonBody, Encoding.UTF8, "application/json"));
-                        if (response.IsSuccessStatusCode) return code;
-                    }
-                    catch { }
+                    var request = new HttpRequestMessage(new HttpMethod("POST"), url) { Content = new StringContent(jsonBody, Encoding.UTF8, "application/json") };
+                    request.Headers.Add("Prefer", "return=minimal");
+                    var response = await sharedClient.SendAsync(request);
+                    if (response.IsSuccessStatusCode) return code;
                 }
+                catch { }
             }
             return null;
         }
@@ -168,33 +168,52 @@ namespace KioskLockApp.Services
         {
             try
             {
-                using (HttpClient client = new HttpClient())
+                string url = $"{SUPABASE_URL}/rest/v1/board_pairings?pairing_code=eq.{code}&select=board_id,offline_secret,status";
+                string response = await sharedClient.GetStringAsync(url);
+
+                if (response.Replace(" ", "").ToLower().Contains("\"status\":\"completed\""))
                 {
-                    client.Timeout = TimeSpan.FromSeconds(5);
-                    client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
-                    client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
+                    string boardId = ExtractJsonStringValue(response, "board_id");
+                    string offlineSecret = ExtractJsonStringValue(response, "offline_secret");
 
-                    string url = $"{SUPABASE_URL}/rest/v1/board_pairings?pairing_code=eq.{code}&select=board_id,offline_secret,status";
-                    string response = await client.GetStringAsync(url);
-
-                    if (response.Replace(" ", "").ToLower().Contains("\"status\":\"completed\""))
+                    if (!string.IsNullOrEmpty(boardId) && !string.IsNullOrEmpty(offlineSecret))
                     {
-                        string boardId = ExtractJsonStringValue(response, "board_id");
-                        string offlineSecret = ExtractJsonStringValue(response, "offline_secret");
-
-                        if (!string.IsNullOrEmpty(boardId) && !string.IsNullOrEmpty(offlineSecret))
-                        {
-                            return new Dictionary<string, string>
-                            {
-                                { "board_id", boardId },
-                                { "offline_secret", offlineSecret }
-                            };
-                        }
+                        return new Dictionary<string, string> { { "board_id", boardId }, { "offline_secret", offlineSecret } };
                     }
                 }
             }
             catch { }
             return null;
+        }
+
+        public static async Task<string> GetBoardNameAsync(string boardId)
+        {
+            try
+            {
+                string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=name";
+                string response = await sharedClient.GetStringAsync(url);
+                return ExtractJsonStringValue(response, "name");
+            }
+            catch { return ""; }
+        }
+
+        public static async Task<string> GetSchoolNameAsync(string boardId)
+        {
+            try
+            {
+                string boardUrl = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=school_id";
+                string boardResponse = await sharedClient.GetStringAsync(boardUrl);
+                string schoolId = ExtractJsonStringValue(boardResponse, "school_id").Replace("\"", "").Trim();
+
+                if (string.IsNullOrEmpty(schoolId)) return "Bilinmeyen Okul";
+
+                string schoolUrl = $"{SUPABASE_URL}/rest/v1/schools?id=eq.{schoolId}&select=name";
+                string schoolResponse = await sharedClient.GetStringAsync(schoolUrl);
+                string schoolName = ExtractJsonStringValue(schoolResponse, "name").Replace("\"", "").Trim();
+
+                return string.IsNullOrEmpty(schoolName) ? "Bilinmeyen Okul" : schoolName;
+            }
+            catch { return "Bilinmeyen Okul"; }
         }
 
         private static string ExtractJsonStringValue(string json, string key)
@@ -208,65 +227,6 @@ namespace KioskLockApp.Services
             int quoteEnd = json.IndexOf("\"", quoteStart + 1);
             if (quoteEnd == -1) return "";
             return json.Substring(quoteStart + 1, quoteEnd - quoteStart - 1);
-        }
-
-        public static async Task<string> GetBoardNameAsync(string boardId)
-        {
-            try
-            {
-                using (HttpClient client = new HttpClient())
-                {
-                    client.Timeout = TimeSpan.FromSeconds(5);
-                    client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
-                    client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
-
-                    string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=name";
-                    string response = await client.GetStringAsync(url);
-
-                    return ExtractJsonStringValue(response, "name");
-                }
-            }
-            catch
-            {
-                return "";
-            }
-        }
-
-        public static async Task<string> GetSchoolNameAsync(string boardId)
-        {
-            try
-            {
-                using (HttpClient client = new HttpClient())
-                {
-                    client.Timeout = TimeSpan.FromSeconds(5);
-                    client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
-                    client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
-
-                    string boardUrl = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=school_id";
-                    string boardResponse = await client.GetStringAsync(boardUrl);
-
-                    string schoolId = ExtractJsonStringValue(boardResponse, "school_id");
-                    schoolId = schoolId.Replace("\"", "").Trim();
-
-                    if (string.IsNullOrEmpty(schoolId))
-                    {
-                        return "Bilinmeyen Okul";
-                    }
-
-                    string schoolUrl = $"{SUPABASE_URL}/rest/v1/schools?id=eq.{schoolId}&select=name";
-                    string schoolResponse = await client.GetStringAsync(schoolUrl);
-
-                    string schoolName = ExtractJsonStringValue(schoolResponse, "name");
-                    schoolName = schoolName.Replace("\"", "").Trim();
-
-                    return string.IsNullOrEmpty(schoolName) ? "Bilinmeyen Okul" : schoolName;
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine("Supabase Hatası (GetSchoolNameAsync): " + ex.Message);
-                return "Bilinmeyen Okul";
-            }
         }
     }
 }
