@@ -11,6 +11,7 @@
 
 		<!-- SELF-CONTAINED -->
 		<SelfContained>true</SelfContained>
+		<Version>2.0.8</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
