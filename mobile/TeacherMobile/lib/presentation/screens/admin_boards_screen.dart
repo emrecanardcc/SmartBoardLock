@@ -28,11 +28,13 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
   final _client = Supabase.instance.client;
   final ScrollController _scrollController = ScrollController();
   RealtimeChannel? _boardChannel;
+  RealtimeChannel? _schoolChannel;
 
   String? _schoolId;
   String? _schoolName;
   String? _adminName;
   bool _isLoadingProfile = true;
+  bool _isSchoolLicensed = true;
 
   // Sayfalama (Lazy Loading) ve Filtreleme
   final List<Map<String, dynamic>> _boards = [];
@@ -68,6 +70,7 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
   void dispose() {
     _scrollController.dispose();
     _boardChannel?.unsubscribe();
+    _schoolChannel?.unsubscribe();
     super.dispose();
   }
 
@@ -79,6 +82,18 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
     }
   }
 
+  bool _evalLicense(Map<String, dynamic>? data) {
+    if (data == null) return true;
+    final isLicensed = data['is_licensed'] as bool? ?? true;
+    if (!isLicensed) return false;
+    final expiresAtStr = data['license_expires_at'] as String?;
+    if (expiresAtStr != null && expiresAtStr.isNotEmpty) {
+      final dt = DateTime.tryParse(expiresAtStr);
+      if (dt != null && dt.isBefore(DateTime.now())) return false;
+    }
+    return true;
+  }
+
   Future<void> _loadAdminData() async {
     try {
       final user = _client.auth.currentUser;
@@ -86,11 +101,12 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
 
       final profile = await _client.from('user_profiles').select('school_id, full_name').eq('id', user.id).single();
       _schoolId = profile['school_id'];
-      _adminName = profile['full_name'] ?? 'Yönetici';
+      _adminName = profile['full_name'] ?? 'Kurum Yöneticisi';
 
       if (_schoolId != null) {
-        final schoolData = await _client.from('schools').select('name').eq('id', _schoolId!).maybeSingle();
+        final schoolData = await _client.from('schools').select('name, is_licensed, license_expires_at').eq('id', _schoolId!).maybeSingle();
         _schoolName = schoolData?['name'];
+        _isSchoolLicensed = _evalLicense(schoolData);
       }
     } catch (_) {}
     setState(() => _isLoadingProfile = false);
@@ -173,6 +189,24 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
         });
       },
     ).subscribe();
+
+    if (_schoolId != null) {
+      _schoolChannel = _client.channel('admin_school_realtime:$_schoolId').onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'schools',
+        callback: (payload) {
+          if (payload.newRecord['id'] == _schoolId) {
+            setState(() {
+              _isSchoolLicensed = _evalLicense(payload.newRecord);
+              if (payload.newRecord['name'] != null) {
+                _schoolName = payload.newRecord['name'];
+              }
+            });
+          }
+        },
+      ).subscribe();
+    }
   }
 
   // --- YARDIMCI METOTLAR ---
@@ -202,6 +236,10 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
   }
 
   Future<void> _toggleBoardLock(String boardId, bool currentStatus) async {
+    if (!_isSchoolLicensed) {
+      _showModernSnackbar('Kurum lisansı sona ermiştir. İşlem yapılamaz. Lisans yenileme: emrecanardc.dev@gmail.com', isSuccess: false, bgColor: dangerRed);
+      return;
+    }
     try {
       final updateData = <String, dynamic>{'is_unlocked': !currentStatus};
       if (!currentStatus) {
@@ -216,6 +254,10 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
   }
 
   Future<void> _lockAllBoards() async {
+    if (!_isSchoolLicensed) {
+      _showModernSnackbar('Kurum lisansı sona ermiştir. İşlem yapılamaz. Lisans yenileme: emrecanardc.dev@gmail.com', isSuccess: false, bgColor: dangerRed);
+      return;
+    }
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -527,21 +569,21 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
               icon: Icons.bug_report_rounded,
               iconColor: dangerRed,
               title: 'Sorun / Arıza Bildir',
-              subtitle: 'Süper Admin teknik paneline arıza kaydı gönder',
+              subtitle: 'Geliştirici & Teknik Destek Ekibine arıza kaydı gönder',
               onTap: () {
                 Navigator.pop(ctx);
                 ReportIssueDialog.show(
                   context,
                   schoolId: _schoolId ?? '',
                   userRole: 'school_admin',
-                  userName: _adminName ?? 'Okul Müdürü',
+                  userName: _adminName ?? 'Kurum Yöneticisi',
                 );
               },
             ),
             _buildSettingsActionItem(
               icon: Icons.lightbulb_rounded,
               iconColor: warningOrange,
-              title: 'Yönetici Rehberi & İpuçları',
+              title: 'Kurum Yöneticisi Rehberi & İpuçları',
               subtitle: 'Toplu kilit, kademe ve eşleştirme yöntemleri',
               onTap: () {
                 Navigator.pop(ctx);
@@ -553,7 +595,7 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
               icon: Icons.logout_rounded,
               iconColor: dangerRed,
               title: 'Çıkış Yap',
-              subtitle: 'Yönetici oturumunu güvenle sonlandır',
+              subtitle: 'Kurum yöneticisi oturumunu güvenle sonlandır',
               textColor: dangerRed,
               onTap: () async {
                 Navigator.pop(ctx);
@@ -646,6 +688,7 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (!_isSchoolLicensed) _buildLicenseWarningBanner(),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
             child: Column(
@@ -653,7 +696,7 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
               children: [
                 Text('Merhaba $_adminName,', style: const TextStyle(color: textGrey, fontSize: 15, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 2),
-                const Text('Yönetim Paneli', style: TextStyle(color: primaryBlue, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+                const Text('Kurum Yönetim Paneli', style: TextStyle(color: primaryBlue, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
               ],
             ),
           ),
@@ -875,6 +918,48 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
         icon: const Icon(Icons.add_rounded, color: Colors.white),
         label: const Text('Yeni Tahta Eşle', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         onPressed: () => _showAddEditBoardDialog(),
+      ),
+    );
+  }
+
+  Widget _buildLicenseWarningBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: dangerRed.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: dangerRed.withValues(alpha: 0.3)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.gpp_bad_rounded, color: dangerRed, size: 28),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Kurum Lisansı Sona Ermiştir',
+                  style: TextStyle(
+                    color: dangerRed,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Akıllı tahtalar açık tutulmaktadır; kilit kontrolü duraklatılmıştır.\nLisans yenileme için: emrecanardc.dev@gmail.com',
+                  style: TextStyle(
+                    color: textDark,
+                    fontSize: 11,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

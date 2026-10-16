@@ -89,7 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: primaryBlue.withOpacity(0.1),
+                    color: primaryBlue.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -114,7 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 8),
               
               const Text(
-                'Yönetici & Öğretmen Girişi',
+                'Kurum Yöneticisi & Öğretmen Girişi',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: textGrey, 
@@ -136,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   filled: true,
                   fillColor: cardColor,
                   enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey.withOpacity(0.2), width: 1), 
+                    borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.2), width: 1), 
                     borderRadius: BorderRadius.circular(16)
                   ),
                   focusedBorder: OutlineInputBorder(
@@ -171,7 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   filled: true,
                   fillColor: cardColor,
                   enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey.withOpacity(0.2), width: 1), 
+                    borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.2), width: 1), 
                     borderRadius: BorderRadius.circular(16)
                   ),
                   focusedBorder: OutlineInputBorder(

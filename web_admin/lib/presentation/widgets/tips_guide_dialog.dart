@@ -102,12 +102,12 @@ class _TipsGuideDialogState extends State<_TipsGuideDialog>
                 tabs: [
                   const Tab(
                     icon: Icon(Icons.school_rounded, size: 18),
-                    text: 'Okul Müdürü Rehberi',
+                    text: 'Kurum Yöneticisi Rehberi',
                   ),
                   if (widget.isSuperAdmin)
                     const Tab(
                       icon: Icon(Icons.admin_panel_settings_rounded, size: 18),
-                      text: 'Süper Admin Rehberi',
+                      text: 'Sistem Yöneticisi Rehberi',
                     ),
                   const Tab(
                     icon: Icon(Icons.tips_and_updates_rounded, size: 18),

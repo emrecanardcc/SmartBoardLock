@@ -252,9 +252,9 @@ class _UserChip extends StatelessWidget {
             : AppColors.badgeTeacher;
 
     final roleLabel = isSuperAdmin
-        ? 'Süper Admin'
+        ? 'Sistem Yöneticisi'
         : isAdmin
-            ? 'Okul Müdürü'
+            ? 'Kurum Yöneticisi'
             : 'Öğretmen';
 
     return Row(

@@ -563,7 +563,7 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Süper Admin Uzaktan Onarım Motoru (TahtaRepair.exe)',
+                      'Sistem Yöneticisi Uzaktan Onarım Motoru (TahtaRepair.exe)',
                       style: GoogleFonts.inter(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,

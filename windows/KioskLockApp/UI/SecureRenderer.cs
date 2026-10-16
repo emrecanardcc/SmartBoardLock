@@ -109,9 +109,20 @@ namespace KioskLockApp.UI
             aggressiveSecurityTimer.Tick += AggressiveSecurityTimer_Tick;
             aggressiveSecurityTimer.Start();
 
-            // Hafif ping: Veritabanını şişirmemek için her 3 dakikada bir (180 sn) hafif ping atar
+            // Hafif ping ve Lisans Kontrolü: Her 3 dakikada bir (180 sn) ping atar ve lisans durumunu doğrular
             heartbeatTimer = new System.Windows.Forms.Timer { Interval = 180000 };
-            heartbeatTimer.Tick += async (s, e) => await SecureSupabase.SendHeartbeatAsync();
+            heartbeatTimer.Tick += async (s, e) => {
+                await SecureSupabase.SendHeartbeatAsync();
+                string bId = SecureSupabase.GetRegistryValue("BoardId");
+                if (!string.IsNullOrEmpty(bId))
+                {
+                    bool isLicensed = await SecureSupabase.CheckLicenseStatusAsync(bId);
+                    if (!isLicensed)
+                    {
+                        SilentExitOnUnlicensed();
+                    }
+                }
+            };
             heartbeatTimer.Start();
 
             NetworkChange.NetworkAvailabilityChanged += async (s, e) => {
@@ -565,6 +576,21 @@ namespace KioskLockApp.UI
                 DeepWindowsHooks.IsLocked = false;
                 Environment.Exit(0);
             }
+        }
+
+        private void SilentExitOnUnlicensed()
+        {
+            try
+            {
+                watchdogTimer?.Stop();
+                clockTimer?.Stop();
+                aggressiveSecurityTimer?.Stop();
+                heartbeatTimer?.Stop();
+                DeepWindowsHooks.IsLocked = false;
+                RemoveSecondaryScreens();
+            }
+            catch { }
+            Environment.Exit(0);
         }
 
         private string GetSavedSchoolName() => SecureSupabase.GetRegistryValue("SchoolName", "Bilinmeyen Okul");

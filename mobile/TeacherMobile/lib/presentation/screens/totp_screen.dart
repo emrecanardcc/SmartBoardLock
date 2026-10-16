@@ -71,7 +71,7 @@ class _TotpScreenState extends State<TotpScreen> {
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: warningOrange.withOpacity(0.1),
+                  color: warningOrange.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -106,7 +106,7 @@ class _TotpScreenState extends State<TotpScreen> {
                   color: cardColor,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
                   ]
                 ),
                 child: TextField(
@@ -118,7 +118,7 @@ class _TotpScreenState extends State<TotpScreen> {
                   decoration: InputDecoration(
                     counterText: '',
                     hintText: '0000',
-                    hintStyle: TextStyle(color: textGrey.withOpacity(0.3), letterSpacing: 12),
+                    hintStyle: TextStyle(color: textGrey.withValues(alpha: 0.3), letterSpacing: 12),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                     contentPadding: const EdgeInsets.symmetric(vertical: 20),
                   ),
@@ -138,9 +138,9 @@ class _TotpScreenState extends State<TotpScreen> {
                   decoration: BoxDecoration(
                     color: cardColor,
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: primaryBlue.withOpacity(0.2), width: 2),
+                    border: Border.all(color: primaryBlue.withValues(alpha: 0.2), width: 2),
                     boxShadow: [
-                      BoxShadow(color: primaryBlue.withOpacity(0.1), blurRadius: 24, offset: const Offset(0, 8)),
+                      BoxShadow(color: primaryBlue.withValues(alpha: 0.1), blurRadius: 24, offset: const Offset(0, 8)),
                     ]
                   ),
                   child: SelectableText(

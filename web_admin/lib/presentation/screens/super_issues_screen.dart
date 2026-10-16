@@ -243,7 +243,7 @@ class _SuperIssuesScreenState extends State<SuperIssuesScreen> {
                   ),
 
                   const SizedBox(height: 16),
-                  Text('Süper Admin Çözüm Notu / Açıklaması',
+                  Text('Geliştirici & Teknik Destek Ekibi Çözüm Notu / Açıklaması',
                       style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textDark)),
                   const SizedBox(height: 6),
                   TextField(

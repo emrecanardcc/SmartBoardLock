@@ -1,6 +1,7 @@
 using System;
 using System.Windows.Forms;
 using KioskLockApp.UI;
+using KioskLockApp.Services;
 using Microsoft.Win32; // Kayıt Defteri (Registry) işlemleri için gerekli kütüphane
 
 namespace KioskLockApp
@@ -44,7 +45,39 @@ namespace KioskLockApp
             }
             else
             {
-                // Kayıtlıysa doğrudan kilit ekranını aç
+                // =========================================================================
+                // LİSANS DOĞRULAMA & SESSİZ KAPANMA KONTROLÜ
+                // =========================================================================
+                // Eğer okulun lisansı yoksa, pasife alınmışsa veya süresi dolmuşsa:
+                // Tahta ekranı ASLA kilitlenmez, arka planda hiçbir işlem çalışmaz,
+                // uygulama tamamen sessizce anında sonlanır (Environment.Exit(0)).
+                // =========================================================================
+                bool isLicensed = true;
+                try
+                {
+                    var licenseTask = SecureSupabase.CheckLicenseStatusAsync(boardId);
+                    if (licenseTask.Wait(3000))
+                    {
+                        isLicensed = licenseTask.Result;
+                    }
+                    else
+                    {
+                        isLicensed = SecureSupabase.GetCachedLicenseStatus();
+                    }
+                }
+                catch
+                {
+                    isLicensed = SecureSupabase.GetCachedLicenseStatus();
+                }
+
+                if (!isLicensed)
+                {
+                    // Lisans geçersiz veya bitmiş: Sessizce sonlandır
+                    Environment.Exit(0);
+                    return;
+                }
+
+                // Lisans aktif: Kilit ekranını ve donanım korumasını başlat
                 Application.Run(new SecureRenderer());
             }
         }

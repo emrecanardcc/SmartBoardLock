@@ -8,6 +8,9 @@ class SchoolModel {
   final int userCount;
   final int teacherCount;
   final int adminCount;
+  final bool isLicensed;
+  final DateTime? licenseExpiresAt;
+  final String? licenseNotes;
 
   const SchoolModel({
     required this.id,
@@ -18,7 +21,26 @@ class SchoolModel {
     this.userCount = 0,
     this.teacherCount = 0,
     this.adminCount = 0,
+    this.isLicensed = true,
+    this.licenseExpiresAt,
+    this.licenseNotes,
   });
+
+  /// Lisansın anlık olarak aktif olup olmadığını hesaplar
+  bool get isLicenseActive {
+    if (!isLicensed) return false;
+    if (licenseExpiresAt == null) return true;
+    return licenseExpiresAt!.isAfter(DateTime.now());
+  }
+
+  /// Kalan lisans günü sayısı
+  int get remainingLicenseDays {
+    if (licenseExpiresAt == null) return 9999;
+    return licenseExpiresAt!.difference(DateTime.now()).inDays;
+  }
+
+  /// Lisansın bitmesine 15 gün veya daha az kalmış mı?
+  bool get isExpiringSoon => isLicenseActive && remainingLicenseDays <= 15;
 
   factory SchoolModel.fromMap(Map<String, dynamic> map) {
     return SchoolModel(
@@ -30,7 +52,24 @@ class SchoolModel {
       userCount: map['user_count'] as int? ?? 0,
       teacherCount: map['teacher_count'] as int? ?? 0,
       adminCount: map['admin_count'] as int? ?? 0,
+      isLicensed: map['is_licensed'] as bool? ?? true,
+      licenseExpiresAt: map['license_expires_at'] != null
+          ? DateTime.tryParse(map['license_expires_at'] as String)
+          : null,
+      licenseNotes: map['license_notes'] as String?,
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'city': city,
+      'created_at': createdAt.toIso8601String(),
+      'is_licensed': isLicensed,
+      'license_expires_at': licenseExpiresAt?.toIso8601String(),
+      'license_notes': licenseNotes,
+    };
   }
 
   SchoolModel copyWith({
@@ -42,6 +81,9 @@ class SchoolModel {
     int? userCount,
     int? teacherCount,
     int? adminCount,
+    bool? isLicensed,
+    DateTime? licenseExpiresAt,
+    String? licenseNotes,
   }) {
     return SchoolModel(
       id: id ?? this.id,
@@ -52,6 +94,9 @@ class SchoolModel {
       userCount: userCount ?? this.userCount,
       teacherCount: teacherCount ?? this.teacherCount,
       adminCount: adminCount ?? this.adminCount,
+      isLicensed: isLicensed ?? this.isLicensed,
+      licenseExpiresAt: licenseExpiresAt ?? this.licenseExpiresAt,
+      licenseNotes: licenseNotes ?? this.licenseNotes,
     );
   }
 

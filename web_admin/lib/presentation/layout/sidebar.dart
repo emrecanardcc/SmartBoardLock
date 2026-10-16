@@ -178,7 +178,7 @@ class AppSidebar extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Web Paneli',
+                      isSuperAdmin ? 'Merkezi Yönetim' : 'Kurum Yönetimi',
                       style: TextStyle(
                         color: AppColors.sidebarText,
                         fontSize: 11,

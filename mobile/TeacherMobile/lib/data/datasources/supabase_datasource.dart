@@ -21,4 +21,12 @@ class SupabaseDatasource {
         .stream(primaryKey: ['id'])
         .eq('id', boardId);
   }
+
+  Stream<Map<String, dynamic>?> streamSchoolLicense(String schoolId) {
+    return _client
+        .from('schools')
+        .stream(primaryKey: ['id'])
+        .eq('id', schoolId)
+        .map((rows) => rows.isNotEmpty ? rows.first : null);
+  }
 }

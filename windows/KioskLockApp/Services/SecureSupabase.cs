@@ -348,6 +348,94 @@ namespace KioskLockApp.Services
             catch { return "Bilinmeyen Okul"; }
         }
 
+        public static async Task<bool> CheckLicenseStatusAsync(string boardId)
+        {
+            try
+            {
+                // 1. Önce tahtadan school_id al
+                string boardUrl = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=school_id";
+                string boardResponse = await sharedClient.GetStringAsync(boardUrl);
+                string schoolId = ExtractJsonStringValue(boardResponse, "school_id").Replace("\"", "").Trim();
+
+                if (string.IsNullOrEmpty(schoolId))
+                {
+                    return GetCachedLicenseStatus();
+                }
+
+                // 2. Okulun lisans bilgilerini sorgula (is_licensed, license_expires_at)
+                string schoolUrl = $"{SUPABASE_URL}/rest/v1/schools?id=eq.{schoolId}&select=is_licensed,license_expires_at";
+                string schoolResponse = await sharedClient.GetStringAsync(schoolUrl);
+
+                bool isLicensed = true;
+                string isLicensedVal = ExtractJsonRawValue(schoolResponse, "is_licensed");
+                if (isLicensedVal.Equals("false", StringComparison.OrdinalIgnoreCase))
+                {
+                    isLicensed = false;
+                }
+
+                string expiresAtStr = ExtractJsonStringValue(schoolResponse, "license_expires_at").Replace("\"", "").Trim();
+                if (!string.IsNullOrEmpty(expiresAtStr) && DateTime.TryParse(expiresAtStr, out DateTime expDate))
+                {
+                    if (DateTime.UtcNow > expDate.ToUniversalTime())
+                    {
+                        isLicensed = false;
+                    }
+                }
+
+                // 3. Durumu Windows Registry'ye önbellekle
+                SetRegistryValue("IsLicensed", isLicensed ? "1" : "0");
+                if (!string.IsNullOrEmpty(expiresAtStr))
+                {
+                    SetRegistryValue("LicenseExpiresAt", expiresAtStr);
+                }
+
+                return isLicensed;
+            }
+            catch
+            {
+                // Çevrimdışı durum: Yerel Registry'deki önbellek durumunu oku
+                return GetCachedLicenseStatus();
+            }
+        }
+
+        public static bool GetCachedLicenseStatus()
+        {
+            try
+            {
+                string isLicensedVal = GetRegistryValue("IsLicensed", "1");
+                if (isLicensedVal == "0") return false;
+
+                string expiresAtStr = GetRegistryValue("LicenseExpiresAt", "");
+                if (!string.IsNullOrEmpty(expiresAtStr) && DateTime.TryParse(expiresAtStr, out DateTime dt))
+                {
+                    if (DateTime.UtcNow > dt.ToUniversalTime())
+                    {
+                        SetRegistryValue("IsLicensed", "0");
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        private static string ExtractJsonRawValue(string json, string key)
+        {
+            string searchKey = $"\"{key}\"";
+            int startIndex = json.IndexOf(searchKey);
+            if (startIndex == -1) return "";
+            startIndex += searchKey.Length;
+            int colonIndex = json.IndexOf(":", startIndex);
+            if (colonIndex == -1) return "";
+            int endIndex = json.IndexOfAny(new char[] { ',', '}', ']' }, colonIndex + 1);
+            if (endIndex == -1) endIndex = json.Length;
+            return json.Substring(colonIndex + 1, endIndex - colonIndex - 1).Trim().Replace("\"", "");
+        }
+
         private static string ExtractJsonStringValue(string json, string key)
         {
             string searchKey = $"\"{key}\"";

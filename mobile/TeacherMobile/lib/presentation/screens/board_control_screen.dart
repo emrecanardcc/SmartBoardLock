@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/services/totp_service.dart';
 import 'qr_scanner_screen.dart';
 
-// --- YEPYENİ CANLI VE PROFESYONEL RENK PALETİ ---
+// --- CANLI VE PROFESYONEL RENK PALETİ ---
 const Color bgLight = Color(0xFFF1F5F9);      
 const Color cardColor = Color(0xFFFFFFFF);    
 const Color textDark = Color(0xFF0F172A);     
@@ -16,12 +16,14 @@ class BoardControlScreen extends StatefulWidget {
   final String boardId;
   final String boardName;
   final String offlineSecret;
+  final bool isSchoolLicensed;
 
   const BoardControlScreen({
     super.key,
     required this.boardId,
     required this.boardName,
     required this.offlineSecret,
+    this.isSchoolLicensed = true,
   });
 
   @override
@@ -74,6 +76,11 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
   }
 
   Future<void> _lockBoard() async {
+    if (!widget.isSchoolLicensed) {
+      _showModernSnackbar('Kurum lisansı sona ermiştir. İşlem yapılamaz. Lisans yenileme: emrecanardc.dev@gmail.com', isSuccess: false, bgColor: dangerRed);
+      return;
+    }
+
     try {
       await _client.from('boards').update({
         'is_unlocked': false,
@@ -100,13 +107,11 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
             Expanded(child: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
           ],
         ),
-        backgroundColor: bgColor, 
+        backgroundColor: bgColor,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 3),
-        elevation: 6,
-      )
+      ),
     );
   }
 
@@ -115,8 +120,11 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
     return Scaffold(
       backgroundColor: bgLight,
       appBar: AppBar(
-        title: Text(widget.boardName, style: const TextStyle(color: textDark, fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: -0.5)),
-        backgroundColor: bgLight,
+        title: Text(
+          widget.boardName, 
+          style: const TextStyle(color: textDark, fontWeight: FontWeight.w900, fontSize: 20)
+        ),
+        backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
         iconTheme: const IconThemeData(color: textDark),
@@ -135,6 +143,47 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (!widget.isSchoolLicensed)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: dangerRed.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: dangerRed.withValues(alpha: 0.3)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.gpp_bad_rounded, color: dangerRed, size: 28),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Okul Lisansı Sona Ermiştir',
+                                style: TextStyle(
+                                  color: dangerRed,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Akıllı tahtalar açık tutulmaktadır; kilit kontrolü duraklatılmıştır.\nLisans yenileme: emrecanardc.dev@gmail.com',
+                                style: TextStyle(
+                                  color: textDark,
+                                  fontSize: 11,
+                                  height: 1.3,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 const Spacer(),
 
                 // --- DİNAMİK VE MODERN DURUM İKONU ---
@@ -144,7 +193,7 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
                     width: 160,
                     height: 160,
                     decoration: BoxDecoration(
-                      color: isUnlocked ? successGreen.withOpacity(0.1) : textDark.withOpacity(0.05),
+                      color: isUnlocked ? successGreen.withValues(alpha: 0.1) : textDark.withValues(alpha: 0.05),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -187,9 +236,9 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
                     decoration: BoxDecoration(
                       color: cardColor,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: primaryBlue.withOpacity(0.3), width: 2),
+                      border: Border.all(color: primaryBlue.withValues(alpha: 0.3), width: 2),
                       boxShadow: [
-                        BoxShadow(color: primaryBlue.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, 8)),
+                        BoxShadow(color: primaryBlue.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 8)),
                       ]
                     ),
                     child: Column(
@@ -212,7 +261,7 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
                           decoration: InputDecoration(
                             counterText: '',
                             hintText: '0000',
-                            hintStyle: TextStyle(color: textGrey.withOpacity(0.3), letterSpacing: 8),
+                            hintStyle: TextStyle(color: textGrey.withValues(alpha: 0.3), letterSpacing: 8),
                             labelText: 'Tahtadaki 4 Haneli Kodu Girin',
                             floatingLabelAlignment: FloatingLabelAlignment.center,
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -264,6 +313,15 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
                   height: 56,
                   child: ElevatedButton.icon(
                     onPressed: () {
+                      if (!widget.isSchoolLicensed) {
+                        _showModernSnackbar(
+                          'Kurum lisansı sona ermiştir. İşlem yapılamaz. Lisans yenileme: emrecanardc.dev@gmail.com',
+                          isSuccess: false,
+                          bgColor: dangerRed,
+                        );
+                        return;
+                      }
+
                       if (isUnlocked) {
                         _lockBoard();
                       } else {
@@ -280,13 +338,23 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: isUnlocked ? textDark : primaryBlue,
+                      backgroundColor: !widget.isSchoolLicensed
+                          ? Colors.grey.shade400
+                          : (isUnlocked ? textDark : primaryBlue),
                       elevation: 0,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
-                    icon: Icon(isUnlocked ? Icons.lock_rounded : Icons.qr_code_scanner_rounded, color: Colors.white, size: 24),
+                    icon: Icon(
+                      !widget.isSchoolLicensed
+                          ? Icons.block_rounded
+                          : (isUnlocked ? Icons.lock_rounded : Icons.qr_code_scanner_rounded),
+                      color: Colors.white,
+                      size: 24,
+                    ),
                     label: Text(
-                      isUnlocked ? 'Tahtayı Kilitle' : 'QR Okutarak Kilidi Aç', 
+                      !widget.isSchoolLicensed
+                          ? 'Lisans Süresi Dolmuştur'
+                          : (isUnlocked ? 'Tahtayı Kilitle' : 'QR Okutarak Kilidi Aç'), 
                       style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)
                     ),
                   ),

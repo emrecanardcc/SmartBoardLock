@@ -27,11 +27,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _client = Supabase.instance.client;
   final ScrollController _scrollController = ScrollController();
   RealtimeChannel? _boardChannel;
+  RealtimeChannel? _schoolChannel;
 
   String? _schoolId;
   String? _schoolName;
   String? _teacherName;
   bool _isLoadingProfile = true;
+  bool _isSchoolLicensed = true;
 
   // Sayfalama (Lazy Loading) ve Filtreleme Değişkenleri
   final List<Map<String, dynamic>> _boards = [];
@@ -70,6 +72,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void dispose() {
     _scrollController.dispose();
     _boardChannel?.unsubscribe();
+    _schoolChannel?.unsubscribe();
     super.dispose();
   }
 
@@ -82,6 +85,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  bool _evalLicense(Map<String, dynamic>? data) {
+    if (data == null) return true;
+    final isLicensed = data['is_licensed'] as bool? ?? true;
+    if (!isLicensed) return false;
+    final expiresAtStr = data['license_expires_at'] as String?;
+    if (expiresAtStr != null && expiresAtStr.isNotEmpty) {
+      final dt = DateTime.tryParse(expiresAtStr);
+      if (dt != null && dt.isBefore(DateTime.now())) return false;
+    }
+    return true;
+  }
+
   Future<void> _loadTeacherData() async {
     try {
       final user = _client.auth.currentUser;
@@ -92,8 +107,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _teacherName = profile['full_name'] ?? 'Öğretmenim';
 
       if (_schoolId != null) {
-        final schoolData = await _client.from('schools').select('name').eq('id', _schoolId!).maybeSingle();
+        final schoolData = await _client.from('schools').select('name, is_licensed, license_expires_at').eq('id', _schoolId!).maybeSingle();
         _schoolName = schoolData?['name'];
+        _isSchoolLicensed = _evalLicense(schoolData);
       }
     } catch (_) {}
     setState(() => _isLoadingProfile = false);
@@ -201,6 +217,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       },
     ).subscribe();
+
+    if (_schoolId != null) {
+      _schoolChannel = _client.channel('public:schools:$_schoolId').onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'schools',
+        callback: (payload) {
+          if (payload.newRecord['id'] == _schoolId) {
+            setState(() {
+              _isSchoolLicensed = _evalLicense(payload.newRecord);
+              if (payload.newRecord['name'] != null) {
+                _schoolName = payload.newRecord['name'];
+              }
+            });
+          }
+        },
+      ).subscribe();
+    }
   }
 
   void _showDeleteAccountDialog(BuildContext context) {
@@ -453,6 +487,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (!_isSchoolLicensed) _buildLicenseWarningBanner(),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
                   child: Column(
@@ -706,6 +741,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               boardId: board['id'],
                                               boardName: board['name'] ?? 'İsimsiz Tahta',
                                               offlineSecret: board['offline_secret'] ?? 'ŞİFRE_YOK',
+                                              isSchoolLicensed: _isSchoolLicensed,
                                             ),
                                           ),
                                         );
@@ -776,6 +812,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _buildLicenseWarningBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: dangerRed.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: dangerRed.withValues(alpha: 0.3)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.gpp_bad_rounded, color: dangerRed, size: 28),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Okul Lisansı Sona Ermiştir',
+                  style: TextStyle(
+                    color: dangerRed,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Akıllı tahtalar açık tutulmaktadır; kilit kontrolü duraklatılmıştır.\nLisans yenileme: emrecanardc.dev@gmail.com',
+                  style: TextStyle(
+                    color: textDark,
+                    fontSize: 11,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

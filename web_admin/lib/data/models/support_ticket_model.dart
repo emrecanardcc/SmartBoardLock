@@ -125,9 +125,9 @@ class SupportTicketModel {
   String get roleLabel {
     switch (reporterRole) {
       case 'school_admin':
-        return 'Okul Yöneticisi';
+        return 'Kurum Yöneticisi';
       case 'super_admin':
-        return 'Süper Admin';
+        return 'Sistem Yöneticisi';
       case 'teacher':
       default:
         return 'Öğretmen';

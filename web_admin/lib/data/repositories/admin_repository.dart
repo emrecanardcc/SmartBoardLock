@@ -135,11 +135,21 @@ class AdminRepository {
   Future<SchoolModel?> createSchool({
     required String name,
     required String city,
+    bool isLicensed = true,
+    DateTime? licenseExpiresAt,
+    String? licenseNotes,
   }) async {
     try {
+      final payload = <String, dynamic>{
+        'name': name.trim(),
+        'city': city.trim(),
+        'is_licensed': isLicensed,
+        'license_expires_at': (licenseExpiresAt ?? DateTime.now().add(const Duration(days: 365))).toIso8601String(),
+        'license_notes': licenseNotes?.trim(),
+      };
       final data = await _db
           .from('schools')
-          .insert({'name': name.trim(), 'city': city.trim()})
+          .insert(payload)
           .select()
           .single();
       return SchoolModel.fromMap(data);
@@ -153,11 +163,22 @@ class AdminRepository {
     required String schoolId,
     required String name,
     required String city,
+    bool? isLicensed,
+    DateTime? licenseExpiresAt,
+    String? licenseNotes,
   }) async {
     try {
+      final payload = <String, dynamic>{
+        'name': name.trim(),
+        'city': city.trim(),
+      };
+      if (isLicensed != null) payload['is_licensed'] = isLicensed;
+      if (licenseExpiresAt != null) payload['license_expires_at'] = licenseExpiresAt.toIso8601String();
+      if (licenseNotes != null) payload['license_notes'] = licenseNotes.trim();
+
       await _db
           .from('schools')
-          .update({'name': name.trim(), 'city': city.trim()})
+          .update(payload)
           .eq('id', schoolId);
     } catch (e) {
       debugPrint('updateSchool error: $e');
@@ -174,6 +195,34 @@ class AdminRepository {
     }
   }
 
+  /// Realtime school stream
+  Stream<List<SchoolModel>> streamSchools() {
+    return _client
+        .from('schools')
+        .stream(primaryKey: ['id'])
+        .order('name', ascending: true)
+        .map((rows) => rows.map((m) => SchoolModel.fromMap(m)).toList());
+  }
+
+  Stream<SchoolModel?> streamSchool(String schoolId) {
+    return _client
+        .from('schools')
+        .stream(primaryKey: ['id'])
+        .eq('id', schoolId)
+        .map((rows) => rows.isNotEmpty ? SchoolModel.fromMap(rows.first) : null);
+  }
+
+  Future<SchoolModel?> getSchoolById(String schoolId) async {
+    try {
+      final data = await _db.from('schools').select().eq('id', schoolId).maybeSingle();
+      if (data == null) return null;
+      return SchoolModel.fromMap(Map<String, dynamic>.from(data as Map));
+    } catch (e) {
+      debugPrint('getSchoolById error: $e');
+      return null;
+    }
+  }
+
   // ─────────────────────────── BOARDS ──────────────────────────────────────
 
   /// Realtime board stream — okul müdürü için school_id filtreli
@@ -187,7 +236,7 @@ class AdminRepository {
         .map((rows) => rows.map((m) => BoardModel.fromMap(m)).toList());
   }
 
-  /// Tüm tahtaları çek (süper admin için filtre yok)
+  /// Tüm tahtaları çek (Sistem Yöneticisi için filtre yok)
   Future<List<BoardModel>> getBoards(String? schoolId) async {
     try {
       var query = _db.from('boards').select();

@@ -54,6 +54,43 @@ namespace WatchdogService
                     else
                     {
                         // Süreç çalışmıyor!
+
+                        // =========================================================================
+                        // LİSANS GEÇERLİLİK KONTROLÜ
+                        // =========================================================================
+                        // Eğer okulun lisansı yoksa, devre dışıysa veya süresi dolmuşsa:
+                        // Bekçi KioskLockApp'i ASLA çalıştırmaz, sessizce bekler.
+                        // =========================================================================
+                        string isLicensed = "1";
+                        string licenseExpiresAt = "";
+                        try
+                        {
+                            using (RegistryKey? rkLock = Registry.CurrentUser.OpenSubKey(@"Software\SmartBoardLock", false))
+                            {
+                                if (rkLock != null)
+                                {
+                                    isLicensed = rkLock.GetValue("IsLicensed")?.ToString()?.Trim() ?? "1";
+                                    licenseExpiresAt = rkLock.GetValue("LicenseExpiresAt")?.ToString()?.Trim() ?? "";
+                                }
+                            }
+                        }
+                        catch { }
+
+                        if (isLicensed == "0")
+                        {
+                            Thread.Sleep(5000);
+                            continue;
+                        }
+
+                        if (!string.IsNullOrEmpty(licenseExpiresAt) && DateTime.TryParse(licenseExpiresAt, out DateTime expDate))
+                        {
+                            if (DateTime.UtcNow > expDate.ToUniversalTime())
+                            {
+                                Thread.Sleep(5000);
+                                continue;
+                            }
+                        }
+
                         // Kayıt Defterinden (Registry) kurulu olduğu yolu oku
                         string kioskExePath = "";
                         using (RegistryKey? rk = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", false))
