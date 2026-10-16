@@ -3,18 +3,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ReportIssueDialog extends StatefulWidget {
   final String schoolId;
-  final String? initialBoardId;
   final String? initialBoardName;
-  final List<Map<String, dynamic>> availableBoards;
   final String userRole; // 'teacher' or 'school_admin'
   final String userName;
 
   const ReportIssueDialog({
     super.key,
     required this.schoolId,
-    this.initialBoardId,
     this.initialBoardName,
-    this.availableBoards = const [],
     required this.userRole,
     required this.userName,
   });
@@ -22,9 +18,7 @@ class ReportIssueDialog extends StatefulWidget {
   static Future<void> show(
     BuildContext context, {
     required String schoolId,
-    String? initialBoardId,
     String? initialBoardName,
-    List<Map<String, dynamic>> availableBoards = const [],
     required String userRole,
     required String userName,
   }) {
@@ -38,9 +32,7 @@ class ReportIssueDialog extends StatefulWidget {
         ),
         child: ReportIssueDialog(
           schoolId: schoolId,
-          initialBoardId: initialBoardId,
           initialBoardName: initialBoardName,
-          availableBoards: availableBoards,
           userRole: userRole,
           userName: userName,
         ),
@@ -55,11 +47,11 @@ class ReportIssueDialog extends StatefulWidget {
 class _ReportIssueDialogState extends State<ReportIssueDialog> {
   final _client = Supabase.instance.client;
   final _formKey = GlobalKey<FormState>();
+  final _boardController = TextEditingController();
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
 
   String _selectedCategory = 'board_app';
-  String? _selectedBoardId;
   bool _isSubmitting = false;
 
   final Map<String, Map<String, dynamic>> _categories = {
@@ -98,11 +90,14 @@ class _ReportIssueDialogState extends State<ReportIssueDialog> {
   @override
   void initState() {
     super.initState();
-    _selectedBoardId = widget.initialBoardId;
+    if (widget.initialBoardName != null && widget.initialBoardName!.isNotEmpty) {
+      _boardController.text = widget.initialBoardName!;
+    }
   }
 
   @override
   void dispose() {
+    _boardController.dispose();
     _titleController.dispose();
     _descController.dispose();
     super.dispose();
@@ -122,13 +117,15 @@ class _ReportIssueDialogState extends State<ReportIssueDialog> {
     setState(() => _isSubmitting = true);
 
     try {
+      final boardInput = _boardController.text.trim();
+
       final ticketData = <String, dynamic>{
-        'school_id': widget.schoolId,
-        'board_id': _selectedBoardId,
-        'user_id': user.id,
-        'user_name': widget.userName,
-        'user_role': widget.userRole,
-        'category': _selectedCategory,
+        'school_id': widget.schoolId.isEmpty ? null : widget.schoolId,
+        'board_name': boardInput.isEmpty ? 'Genel / Belirtilmedi' : boardInput,
+        'reporter_id': user.id,
+        'reporter_name': widget.userName,
+        'reporter_role': widget.userRole,
+        'category': _categories[_selectedCategory]?['label'] ?? _selectedCategory,
         'title': _titleController.text.trim(),
         'description': _descController.text.trim(),
         'status': 'pending',
@@ -149,12 +146,28 @@ class _ReportIssueDialogState extends State<ReportIssueDialog> {
                 SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Sorun bildirimi Süper Admin ekibine iletildi. En kısa sürede incelenecektir.',
+                    'Sorun bildiriminiz Süper Admin teknik paneline iletildi.',
                     style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
             ),
+          ),
+        );
+      }
+    } on PostgrestException catch (e) {
+      if (mounted) {
+        String msg = 'Bildirim gönderilemedi: ${e.message}';
+        if (e.code == 'PGRST205' || e.message.contains('support_tickets')) {
+          msg = 'Veritabanında support_tickets tablosu henüz oluşturulmamış. Lütfen Supabase SQL Editor üzerinden supabase_support_tickets_migration.sql dosyasını çalıştırın.';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFFF43F5E),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 5),
+            content: Text(msg, style: const TextStyle(color: Colors.white)),
           ),
         );
       }
@@ -165,7 +178,7 @@ class _ReportIssueDialogState extends State<ReportIssueDialog> {
             backgroundColor: const Color(0xFFF43F5E),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            content: Text('Bildirim gönderilemedi: $e', style: const TextStyle(color: Colors.white)),
+            content: Text('Hata oluştu: $e', style: const TextStyle(color: Colors.white)),
           ),
         );
       }
@@ -178,7 +191,7 @@ class _ReportIssueDialogState extends State<ReportIssueDialog> {
   Widget build(BuildContext context) {
     return Container(
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.85,
+        maxHeight: MediaQuery.of(context).size.height * 0.88,
       ),
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -187,7 +200,7 @@ class _ReportIssueDialogState extends State<ReportIssueDialog> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Drag handle
+          // Tutamaç
           Center(
             child: Container(
               margin: const EdgeInsets.only(top: 12, bottom: 8),
@@ -199,7 +212,7 @@ class _ReportIssueDialogState extends State<ReportIssueDialog> {
               ),
             ),
           ),
-          // Title Bar
+          // Başlık Çubuğu
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             child: Row(
@@ -226,7 +239,7 @@ class _ReportIssueDialogState extends State<ReportIssueDialog> {
                         ),
                       ),
                       Text(
-                        'Süper Admin teknik destek paneline doğrudan iletilir',
+                        'Süper Admin teknik paneline doğrudan iletilir',
                         style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                       ),
                     ],
@@ -240,7 +253,7 @@ class _ReportIssueDialogState extends State<ReportIssueDialog> {
             ),
           ),
           const Divider(height: 1),
-          // Form
+          // Form Alanları
           Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
@@ -293,58 +306,22 @@ class _ReportIssueDialogState extends State<ReportIssueDialog> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Tahta Seçimi (Opsiyonel veya Genel)
+                    // İlgili Akıllı Tahta / Sınıf (Elle Yazma)
                     const Text(
-                      'İlgili Akıllı Tahta (İsteğe Bağlı)',
+                      'İlgili Akıllı Tahta / Derslik',
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A)),
                     ),
                     const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String?>(
-                          value: _selectedBoardId,
-                          isExpanded: true,
-                          items: [
-                            const DropdownMenuItem<String?>(
-                              value: null,
-                              child: Row(
-                                children: [
-                                  Icon(Icons.school_rounded, size: 18, color: Color(0xFF64748B)),
-                                  SizedBox(width: 10),
-                                  Text('Genel Okul / Sistem Sorunu', style: TextStyle(fontSize: 13)),
-                                ],
-                              ),
-                            ),
-                            ...widget.availableBoards.map((b) {
-                              final name = b['name'] ?? 'Tahta';
-                              final grade = b['grade'] != null && b['grade'].toString().isNotEmpty ? "${b['grade']}. Sınıf " : "";
-                              final branch = b['branch'] ?? "";
-                              return DropdownMenuItem<String?>(
-                                value: b['id'] as String,
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.tv_rounded, size: 18, color: Color(0xFF3B82F6)),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        '$name ($grade$branch)'.trim(),
-                                        style: const TextStyle(fontSize: 13),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }),
-                          ],
-                          onChanged: (val) => setState(() => _selectedBoardId = val),
-                        ),
+                    TextFormField(
+                      controller: _boardController,
+                      decoration: InputDecoration(
+                        hintText: 'Örn: 9-A Sınıfı, Fizik Lab, 11-B Tahtası (veya Genel)',
+                        hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+                        prefixIcon: const Icon(Icons.meeting_room_rounded, color: Color(0xFF3B82F6), size: 20),
+                        filled: true,
+                        fillColor: const Color(0xFFF1F5F9),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -359,7 +336,7 @@ class _ReportIssueDialogState extends State<ReportIssueDialog> {
                       controller: _titleController,
                       maxLength: 100,
                       decoration: InputDecoration(
-                        hintText: 'Örn: 9-A tahtası kilit açılmıyor veya QR okumuyor',
+                        hintText: 'Örn: Kilit ekranı açılmıyor veya QR okumuyor',
                         hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
                         filled: true,
                         fillColor: const Color(0xFFF1F5F9),
@@ -385,7 +362,7 @@ class _ReportIssueDialogState extends State<ReportIssueDialog> {
                       maxLines: 4,
                       maxLength: 500,
                       decoration: InputDecoration(
-                        hintText: 'Sorunun tam olarak ne zaman başladığını, ekranda beliren uyarıyı veya detayları açıklayın...',
+                        hintText: 'Sorunun ne zaman başladığını, ekranda beliren uyarıyı veya detayları açıklayın...',
                         hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
                         filled: true,
                         fillColor: const Color(0xFFF1F5F9),

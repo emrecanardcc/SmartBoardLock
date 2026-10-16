@@ -331,7 +331,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ReportIssueDialog.show(
                   context,
                   schoolId: _schoolId ?? '',
-                  availableBoards: _boards,
                   userRole: 'teacher',
                   userName: _teacherName ?? 'Öğretmen',
                 );

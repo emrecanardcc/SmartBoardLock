@@ -533,7 +533,6 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
                 ReportIssueDialog.show(
                   context,
                   schoolId: _schoolId ?? '',
-                  availableBoards: _boards,
                   userRole: 'school_admin',
                   userName: _adminName ?? 'Okul Müdürü',
                 );
