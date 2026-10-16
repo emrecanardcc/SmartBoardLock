@@ -1,4 +1,4 @@
-﻿using KioskLockApp.Hooks;
+using KioskLockApp.Hooks;
 using KioskLockApp.Services;
 using Microsoft.Win32;
 using Postgrest.Attributes;
@@ -28,6 +28,8 @@ namespace KioskLockApp.UI
         private System.Windows.Forms.Timer watchdogTimer;
         private System.Windows.Forms.Timer clockTimer;
         private System.Windows.Forms.Timer aggressiveSecurityTimer;
+        private System.Windows.Forms.Timer heartbeatTimer;
+        private System.Windows.Forms.Timer posterSlideshowTimer;
 
         private FloatingLockButtonForm floatingLockBtn;
         private string enteredPin = "";
@@ -41,17 +43,31 @@ namespace KioskLockApp.UI
 
         private readonly string[] BlacklistedProcesses = { "taskmgr", "cmd", "powershell", "regedit", "mmc", "sethc", "utilman", "osk" };
 
-        public SecureRenderer()
+        private bool isDesignOrTestMode = false;
+
+        public SecureRenderer(bool isDesignOrTestMode = false)
         {
-            DeepWindowsHooks.InitializeHooks();
+            this.isDesignOrTestMode = isDesignOrTestMode;
+            if (!isDesignOrTestMode) DeepWindowsHooks.InitializeHooks();
             this.FormBorderStyle = FormBorderStyle.None;
-            this.WindowState = FormWindowState.Maximized;
+            this.WindowState = isDesignOrTestMode ? FormWindowState.Normal : FormWindowState.Maximized;
             this.BackColor = Color.FromArgb(245, 247, 251);
-            this.TopMost = true;
-            this.ShowInTaskbar = false;
+            this.TopMost = !isDesignOrTestMode;
+            this.ShowInTaskbar = isDesignOrTestMode;
             this.FormClosing += SecureRenderer_FormClosing;
 
             BuildUI();
+            this.Shown += (s, e) => ApplyDynamicSizing();
+            this.DpiChanged += (s, e) => ApplyDynamicSizing();
+
+            currentChallengeCode = OfflineTotpEngine.GenerateChallengeCode();
+            UpdateChallengeDisplay();
+            RefreshMediaDisplays();
+
+            if (isDesignOrTestMode)
+            {
+                return;
+            }
 
             floatingLockBtn = new FloatingLockButtonForm();
             floatingLockBtn.OnLockRequested = async () => {
@@ -59,9 +75,17 @@ namespace KioskLockApp.UI
                 LockScreen();
                 await SecureSupabase.ForceUpdateLockStateAsync(false);
             };
+            _ = SecureSupabase.ReportActiveMediaIdAsync(MediaManager.GetActiveMediaId());
 
-            currentChallengeCode = OfflineTotpEngine.GenerateChallengeCode();
-            UpdateChallengeDisplay();
+            posterSlideshowTimer = new System.Windows.Forms.Timer { Interval = 15000 };
+            posterSlideshowTimer.Tick += (s, e) => {
+                if (activePosterPaths.Count > 1)
+                {
+                    currentPosterIndex = (currentPosterIndex + 1) % activePosterPaths.Count;
+                    RefreshPosterImageOnly();
+                }
+            };
+            posterSlideshowTimer.Start();
 
             clockTimer = new System.Windows.Forms.Timer { Interval = 1000 };
             clockTimer.Tick += (s, e) => {
@@ -69,6 +93,11 @@ namespace KioskLockApp.UI
                 lblDate.Text = DateTime.Now.ToString("dd MMMM yyyy, dddd");
                 RefreshQrCode();
                 EnsureWatchdogIsAlive();
+
+                if (DateTime.Now.Second == 0)
+                {
+                    RefreshMediaDisplays();
+                }
             };
             clockTimer.Start();
 
@@ -80,9 +109,15 @@ namespace KioskLockApp.UI
             aggressiveSecurityTimer.Tick += AggressiveSecurityTimer_Tick;
             aggressiveSecurityTimer.Start();
 
+            // Hafif ping: Veritabanını şişirmemek için her 3 dakikada bir (180 sn) hafif ping atar
+            heartbeatTimer = new System.Windows.Forms.Timer { Interval = 180000 };
+            heartbeatTimer.Tick += async (s, e) => await SecureSupabase.SendHeartbeatAsync();
+            heartbeatTimer.Start();
+
             NetworkChange.NetworkAvailabilityChanged += async (s, e) => {
                 if (e.IsAvailable)
                 {
+                    _ = SecureSupabase.ReportStartupAndVersionAsync();
                     await SecureSupabase.SyncOfflineStatusAsync();
                     _ = InitializeRealtimeListenerAsync();
                     await CheckStatusAsync();
@@ -90,6 +125,8 @@ namespace KioskLockApp.UI
             };
 
             CoverOtherScreens();
+            // Açılışta 1 KEZ sürüm ve ilk ping raporlanır
+            _ = SecureSupabase.ReportStartupAndVersionAsync();
             CheckStatusAsync();
             _ = InitializeRealtimeListenerAsync();
             _ = UpdateManager.CheckAndApplyUpdatesAsync();
@@ -127,7 +164,46 @@ namespace KioskLockApp.UI
 
         private async System.Threading.Tasks.Task CheckStatusAsync()
         {
-            var (state, currentName, isActive) = await SecureSupabase.GetBoardStateSingleQueryAsync();
+            var (state, currentName, isActive, remoteCommand) = await SecureSupabase.GetBoardStateSingleQueryAsync();
+
+            if (!string.IsNullOrEmpty(remoteCommand) && remoteCommand.ToUpper() == "SHUTDOWN")
+            {
+                string bId = SecureSupabase.GetRegistryValue("BoardId");
+                if (!string.IsNullOrEmpty(bId)) _ = SecureSupabase.ClearRemoteCommandAsync(bId);
+                SecureSupabase.ExecuteShutdown();
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(remoteCommand) && remoteCommand.StartsWith("MEDIA_DISPATCH:"))
+            {
+                string payload = remoteCommand.Substring("MEDIA_DISPATCH:".Length);
+                string bId = SecureSupabase.GetRegistryValue("BoardId");
+                if (!string.IsNullOrEmpty(bId)) _ = SecureSupabase.ClearRemoteCommandAsync(bId);
+                _ = System.Threading.Tasks.Task.Run(async () => {
+                    bool ok = await MediaManager.ProcessDispatchAsync(payload);
+                    if (ok)
+                    {
+                        await SecureSupabase.ReportActiveMediaIdAsync(MediaManager.GetActiveMediaId());
+                        this.Invoke(new Action(() => RefreshMediaDisplays()));
+                    }
+                });
+            }
+            else if (!string.IsNullOrEmpty(remoteCommand) && remoteCommand.StartsWith("MEDIA_UPDATE_DURATION:"))
+            {
+                string payload = remoteCommand.Substring("MEDIA_UPDATE_DURATION:".Length);
+                string bId = SecureSupabase.GetRegistryValue("BoardId");
+                if (!string.IsNullOrEmpty(bId)) _ = SecureSupabase.ClearRemoteCommandAsync(bId);
+                MediaManager.UpdateDuration(payload);
+                RefreshMediaDisplays();
+            }
+            else if (!string.IsNullOrEmpty(remoteCommand) && (remoteCommand == "MEDIA_RESET" || remoteCommand == "RESET_MEDIA"))
+            {
+                string bId = SecureSupabase.GetRegistryValue("BoardId");
+                if (!string.IsNullOrEmpty(bId)) _ = SecureSupabase.ClearRemoteCommandAsync(bId);
+                MediaManager.ResetToDefault();
+                _ = SecureSupabase.ReportActiveMediaIdAsync("DEFAULT");
+                RefreshMediaDisplays();
+            }
 
             if (lblBoard != null && lblBoard.Text != currentName)
             {
@@ -186,6 +262,41 @@ namespace KioskLockApp.UI
                         if (record != null && record.Id == boardId)
                         {
                             this.Invoke(new Action(() => {
+                                if (!string.IsNullOrEmpty(record.RemoteCommand) && record.RemoteCommand.ToUpper() == "SHUTDOWN")
+                                {
+                                    _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
+                                    SecureSupabase.ExecuteShutdown();
+                                    return;
+                                }
+
+                                if (!string.IsNullOrEmpty(record.RemoteCommand) && record.RemoteCommand.StartsWith("MEDIA_DISPATCH:"))
+                                {
+                                    string payload = record.RemoteCommand.Substring("MEDIA_DISPATCH:".Length);
+                                    _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
+                                    _ = System.Threading.Tasks.Task.Run(async () => {
+                                        bool ok = await MediaManager.ProcessDispatchAsync(payload);
+                                        if (ok)
+                                        {
+                                            await SecureSupabase.ReportActiveMediaIdAsync(MediaManager.GetActiveMediaId());
+                                            this.Invoke(new Action(() => RefreshMediaDisplays()));
+                                        }
+                                    });
+                                }
+                                else if (!string.IsNullOrEmpty(record.RemoteCommand) && record.RemoteCommand.StartsWith("MEDIA_UPDATE_DURATION:"))
+                                {
+                                    string payload = record.RemoteCommand.Substring("MEDIA_UPDATE_DURATION:".Length);
+                                    _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
+                                    MediaManager.UpdateDuration(payload);
+                                    RefreshMediaDisplays();
+                                }
+                                else if (!string.IsNullOrEmpty(record.RemoteCommand) && (record.RemoteCommand == "MEDIA_RESET" || record.RemoteCommand == "RESET_MEDIA"))
+                                {
+                                    _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
+                                    MediaManager.ResetToDefault();
+                                    _ = SecureSupabase.ReportActiveMediaIdAsync("DEFAULT");
+                                    RefreshMediaDisplays();
+                                }
+
                                 if (lblBoard != null && lblBoard.Text != record.Name && !string.IsNullOrEmpty(record.Name))
                                 {
                                     lblBoard.Text = record.Name;
@@ -254,21 +365,12 @@ namespace KioskLockApp.UI
 
         private void UpdateChallengeDisplay()
         {
-            UpdateLabelTextRecursive(this, $"Çevrimdışı Kilit Açma Kodu: {currentChallengeCode}");
-        }
-
-        private void UpdateLabelTextRecursive(Control parent, string newText)
-        {
-            foreach (Control c in parent.Controls)
+            if (lblPinSub != null)
             {
-                if (c is Label lbl && (lbl.Text.Contains("Çevrimdışı") || lbl.Text.Contains("İnternet yoksa") || lbl.Text.Contains("Açma Kodu")))
-                {
-                    lbl.Text = newText;
-                    lbl.Font = new Font("Segoe UI", 10, FontStyle.Bold);
-                    lbl.ForeColor = Color.FromArgb(37, 99, 235);
-                    return;
-                }
-                if (c.HasChildren) UpdateLabelTextRecursive(c, newText);
+                lblPinSub.Text = $"Çevrimdışı Kod: {currentChallengeCode}";
+                float uniformScale = Math.Min(Math.Max(0.65f, this.ClientSize.Width / 1920f), Math.Max(0.65f, this.ClientSize.Height / 1080f));
+                lblPinSub.Font = new Font("Segoe UI", Math.Max(7.5f, 9f * uniformScale), FontStyle.Bold);
+                lblPinSub.ForeColor = ColPrimary;
             }
         }
 
@@ -406,6 +508,7 @@ namespace KioskLockApp.UI
             watchdogTimer?.Stop();
             clockTimer?.Stop();
             aggressiveSecurityTimer?.Stop();
+            heartbeatTimer?.Stop();
             DeepWindowsHooks.IsLocked = false;
             RemoveSecondaryScreens();
 
@@ -424,5 +527,6 @@ namespace KioskLockApp.UI
         [Column("is_unlocked")] public bool IsUnlocked { get; set; }
         [Column("is_active")] public bool IsActive { get; set; }
         [Column("name")] public string Name { get; set; }
+        [Column("remote_command")] public string? RemoteCommand { get; set; }
     }
 }

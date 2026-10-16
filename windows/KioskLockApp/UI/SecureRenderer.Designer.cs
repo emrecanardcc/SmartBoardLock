@@ -1,8 +1,10 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
-using System.Diagnostics;
+using KioskLockApp.Services;
 
 namespace KioskLockApp.UI
 {
@@ -17,91 +19,150 @@ namespace KioskLockApp.UI
         private readonly Color ColBorder = Color.FromArgb(229, 231, 235);
         private readonly Color ColDanger = Color.FromArgb(220, 38, 38);
 
+        // Header kontrolleri
+        private Label lblBrand;
         private Label lblTime;
         private Label lblDate;
-        private Label lblPinDisplay;
-        private PictureBox pbQrCode;
 
-        // YENİ: Sınıf seviyesine taşındılar (Hata vermemesi için)
-        private Label lblBoard;
+        // Giriş kartı kontrolleri
+        private Label lblLogo;
         private Label lblSchool;
+        private Label lblBoard;
+        private PictureBox pbQrCode;
+        private Label lblQrTitle;
+        private Label lblQrSub;
+        private Label lblVersion;
+        private Label lblPinTitle;
+        private Label lblPinDisplay;
+        private Label lblPinSub;
+
+        // Afiş ve Duyuru Kontrolleri
+        private Label lblAfisTitle;
+        private Label lblAfisSub;
+        private PictureBox pbPoster;
+        private Label lblPosterCounter;
+
+        private Label lblDuyuruTitle;
+        private Label lblDuyuruSub;
+        private FlowLayoutPanel pnlAnnouncementsList;
+        private int currentPosterIndex = 0;
+        private List<string> activePosterPaths = new List<string>();
+
+        // Layout Konteynerleri
+        private TableLayoutPanel root;
+        private TableLayoutPanel mainGrid;
+        private TableLayoutPanel loginLayout;
+        private TableLayoutPanel numpadWrapper;
+        private TableLayoutPanel numpadGrid;
+        private List<FluentButton> numpadButtons = new List<FluentButton>();
+        private FluentButton btnPower;
 
         private float DpiScale => this.DeviceDpi / 96f;
         private int S(int px) => (int)Math.Round(px * DpiScale);
 
         private void BuildUI()
         {
-            TableLayoutPanel root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
+            this.DoubleBuffered = true;
+            this.SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
+            this.UpdateStyles();
+
+            root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
+            root.GetType().GetProperty("DoubleBuffered", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.SetValue(root, true);
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 8F));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 82F));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 10F));
             this.Controls.Add(root);
 
+            // ==================== HEADER ====================
             TableLayoutPanel header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 3, Padding = new Padding(S(30), 0, S(30), 0) };
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
 
-            Label lblBrand = new Label { Text = "Sınıf360", Font = new Font("Segoe UI", 22, FontStyle.Bold), ForeColor = ColPrimary, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
+            lblBrand = new Label
+            {
+                Text = "Sınıf360",
+                Font = new Font("Segoe UI", 22, FontStyle.Bold),
+                ForeColor = ColPrimary,
+                AutoSize = false,
+                AutoEllipsis = true,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
             header.Controls.Add(lblBrand, 0, 0);
 
             TableLayoutPanel pnlDateTime = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
             pnlDateTime.RowStyles.Add(new RowStyle(SizeType.Percent, 65F));
             pnlDateTime.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));
-            lblTime = new Label { Font = new Font("Segoe UI", 24, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomCenter };
-            lblDate = new Label { Font = new Font("Segoe UI", 11, FontStyle.Regular), ForeColor = ColTextSec, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopCenter };
+            lblTime = new Label
+            {
+                Font = new Font("Segoe UI", 24, FontStyle.Bold),
+                ForeColor = ColTextMain,
+                AutoSize = false,
+                AutoEllipsis = true,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.BottomCenter
+            };
+            lblDate = new Label
+            {
+                Font = new Font("Segoe UI", 11, FontStyle.Regular),
+                ForeColor = ColTextSec,
+                AutoSize = false,
+                AutoEllipsis = true,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.TopCenter
+            };
             pnlDateTime.Controls.Add(lblTime, 0, 0);
             pnlDateTime.Controls.Add(lblDate, 0, 1);
             header.Controls.Add(pnlDateTime, 1, 0);
             root.Controls.Add(header, 0, 0);
 
-            TableLayoutPanel mainGrid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 3, Padding = new Padding(S(15), 0, S(15), 0) };
-            mainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35F));
-            mainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35F));
+            // ==================== MAIN GRID ====================
+            mainGrid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 3, Padding = new Padding(S(15), 0, S(15), 0) };
+            mainGrid.GetType().GetProperty("DoubleBuffered", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.SetValue(mainGrid, true);
+            mainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38F));
+            mainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32F));
             mainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
             root.Controls.Add(mainGrid, 0, 1);
 
-            FluentCard cardAfis = new FluentCard(S(16)) { Dock = DockStyle.Fill, Margin = new Padding(S(10)) };
-            cardAfis.Controls.Add(CreateHeaderAndEmptyState("AFİŞLER", "Etkinlikler ve bilgilendirme", "🖼️️", "Henüz afiş bulunmuyor", "Yeni afişler yayınlandığında\nburada görüntülenecektir."));
-            mainGrid.Controls.Add(cardAfis, 0, 0);
+            mainGrid.Controls.Add(BuildAfisPanel(), 0, 0);
+            mainGrid.Controls.Add(BuildDuyuruPanel(), 1, 0);
 
-            FluentCard cardDuyuru = new FluentCard(S(16)) { Dock = DockStyle.Fill, Margin = new Padding(S(10)) };
-            cardDuyuru.Controls.Add(CreateHeaderAndEmptyState("DUYURULAR", "Güncel okul duyuruları", "📢", "Henüz duyuru bulunmuyor", "Yeni bir duyuru eklendiğinde\nburada listelenecektir."));
-            mainGrid.Controls.Add(cardDuyuru, 1, 0);
-
+            // ==================== LOGIN CARD ====================
             FluentCard cardLogin = new FluentCard(S(16)) { Dock = DockStyle.Fill, Margin = new Padding(S(10)) };
-            TableLayoutPanel loginLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1, Padding = new Padding(S(5)) };
-            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 15F));
-            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 40F));
-            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 2F));
-            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 13F));
-            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 30F));
+            loginLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1, Padding = new Padding(S(6)) };
+            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 14F)); // Okul / Tahta
+            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 38F)); // QR Kodu
+            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 1.5F)); // Ayırıcı çizgi
+            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 13.5F)); // PIN Başlık / Noktalar
+            loginLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 33F)); // Numpad
             cardLogin.Controls.Add(loginLayout);
 
+            // --- Okul Bilgisi ---
             TableLayoutPanel pnlSchoolInfo = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
-            pnlSchoolInfo.RowStyles.Add(new RowStyle(SizeType.Percent, 40F));
-            pnlSchoolInfo.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));
-            pnlSchoolInfo.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
-            Label lblLogo = new Label { Text = "🏫", Font = new Font("Segoe UI", 24), AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomCenter, ForeColor = ColPrimary };
+            pnlSchoolInfo.RowStyles.Add(new RowStyle(SizeType.Percent, 38F));
+            pnlSchoolInfo.RowStyles.Add(new RowStyle(SizeType.Percent, 38F));
+            pnlSchoolInfo.RowStyles.Add(new RowStyle(SizeType.Percent, 24F));
 
-            // YENİ: Başındaki "Label" kelimeleri kaldırıldı (yukarıda tanımlandığı için)
-            lblSchool = new Label { Text = GetSavedSchoolName().ToUpper(), Font = new Font("Segoe UI", 16, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
-            lblBoard = new Label { Text = GetSavedBoardName(), Font = new Font("Segoe UI", 12, FontStyle.Bold), ForeColor = ColPrimary, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopCenter };
+            lblLogo = new Label { Text = "🏫", Font = new Font("Segoe UI", 22), AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomCenter, ForeColor = ColPrimary };
+            lblSchool = new Label { Text = GetSavedSchoolName().ToUpper(), Font = new Font("Segoe UI", 14, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
+            lblBoard = new Label { Text = GetSavedBoardName(), Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = ColPrimary, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopCenter };
 
             pnlSchoolInfo.Controls.Add(lblLogo, 0, 0);
             pnlSchoolInfo.Controls.Add(lblSchool, 0, 1);
             pnlSchoolInfo.Controls.Add(lblBoard, 0, 2);
             loginLayout.Controls.Add(pnlSchoolInfo, 0, 0);
 
+            // --- QR Alanı ---
             TableLayoutPanel pnlQrArea = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
-            pnlQrArea.RowStyles.Add(new RowStyle(SizeType.Percent, 15F));
-            pnlQrArea.RowStyles.Add(new RowStyle(SizeType.Percent, 55F));
-            pnlQrArea.RowStyles.Add(new RowStyle(SizeType.Percent, 15F));
-            pnlQrArea.RowStyles.Add(new RowStyle(SizeType.Percent, 15F));
+            pnlQrArea.RowStyles.Add(new RowStyle(SizeType.Percent, 14F));
+            pnlQrArea.RowStyles.Add(new RowStyle(SizeType.Percent, 58F));
+            pnlQrArea.RowStyles.Add(new RowStyle(SizeType.Percent, 14F));
+            pnlQrArea.RowStyles.Add(new RowStyle(SizeType.Percent, 14F));
 
-            Label lblQrTitle = new Label { Text = "Mobil uygulamaya bağlan", Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomCenter };
-            pbQrCode = new PictureBox { SizeMode = PictureBoxSizeMode.Zoom, Dock = DockStyle.Fill, Margin = new Padding(S(5)) };
-            Label lblQrSub = new Label { Text = "Uygulamadaki 'Karekod Okut' butonunu kullanın", Font = new Font("Segoe UI", 9), ForeColor = ColTextSec, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopCenter };
+            lblQrTitle = new Label { Text = "Mobil uygulamaya bağlan", Font = new Font("Segoe UI", 10.5f, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomCenter };
+            pbQrCode = new PictureBox { SizeMode = PictureBoxSizeMode.Zoom, Dock = DockStyle.Fill, Margin = new Padding(S(4)) };
+            lblQrSub = new Label { Text = "Uygulamadaki 'Karekod Okut' butonunu kullanın", Font = new Font("Segoe UI", 8.5f), ForeColor = ColTextSec, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopCenter };
 
             string appVersion = "1.0.0";
             try
@@ -111,7 +172,7 @@ namespace KioskLockApp.UI
             }
             catch { }
 
-            Label lblVersion = new Label { Text = "v" + appVersion, Font = new Font("Segoe UI", 8, FontStyle.Regular), ForeColor = ColTextSec, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
+            lblVersion = new Label { Text = "v" + appVersion, Font = new Font("Segoe UI", 7.5f, FontStyle.Regular), ForeColor = ColTextSec, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
 
             pnlQrArea.Controls.Add(lblQrTitle, 0, 0);
             pnlQrArea.Controls.Add(pbQrCode, 0, 1);
@@ -119,38 +180,55 @@ namespace KioskLockApp.UI
             pnlQrArea.Controls.Add(lblVersion, 0, 3);
             loginLayout.Controls.Add(pnlQrArea, 0, 1);
 
+            // --- Ayırıcı Çizgi ---
             Panel separator = new Panel { Dock = DockStyle.Fill };
-            separator.Paint += (s, e) => { e.Graphics.DrawLine(new Pen(ColBorder), S(40), separator.Height / 2, separator.Width - S(40), separator.Height / 2); };
+            separator.Paint += (s, e) =>
+            {
+                int pad = Math.Max(10, S(30));
+                e.Graphics.DrawLine(new Pen(ColBorder), pad, separator.Height / 2, separator.Width - pad, separator.Height / 2);
+            };
             loginLayout.Controls.Add(separator, 0, 2);
 
+            // --- PIN Gösterge Alanı ---
             TableLayoutPanel pnlPinTop = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
             pnlPinTop.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
             pnlPinTop.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
             pnlPinTop.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
-            Label lblPinTitle = new Label { Text = "PIN GİRİŞİ", Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = ColTextSec, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomCenter };
-            lblPinDisplay = new Label { Text = "○  ○  ○  ○  ○  ○", Font = new Font("Segoe UI", 20, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
-            Label lblPinSub = new Label { Text = "İnternet yoksa 'Çevrimdışı Şifre' alabilirsiniz", Font = new Font("Segoe UI", 8), ForeColor = ColTextSec, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopCenter };
+
+            lblPinTitle = new Label { Text = "PIN GİRİŞİ", Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = ColTextSec, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomCenter };
+            lblPinDisplay = new Label { Text = "○  ○  ○  ○  ○  ○", Font = new Font("Segoe UI", 18, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
+            lblPinSub = new Label { Text = "İnternet yoksa 'Çevrimdışı Şifre' alabilirsiniz", Font = new Font("Segoe UI", 8), ForeColor = ColTextSec, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopCenter };
+
             pnlPinTop.Controls.Add(lblPinTitle, 0, 0);
             pnlPinTop.Controls.Add(lblPinDisplay, 0, 1);
             pnlPinTop.Controls.Add(lblPinSub, 0, 2);
             loginLayout.Controls.Add(pnlPinTop, 0, 3);
 
-            TableLayoutPanel numpadWrapper = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 3 };
-            numpadWrapper.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 15F));
-            numpadWrapper.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70F));
-            numpadWrapper.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 15F));
+            // --- Numpad Wrapper & Grid ---
+            numpadWrapper = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 3 };
+            numpadWrapper.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 8F));
+            numpadWrapper.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 84F));
+            numpadWrapper.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 8F));
 
-            TableLayoutPanel numpadGrid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 3 };
+            numpadGrid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 3 };
             for (int i = 0; i < 3; i++) numpadGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
             for (int i = 0; i < 4; i++) numpadGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
 
-            for (int i = 1; i <= 9; i++) numpadGrid.Controls.Add(CreateNumpadButton(i.ToString()), (i - 1) % 3, (i - 1) / 3);
+            numpadButtons.Clear();
+            for (int i = 1; i <= 9; i++)
+            {
+                var btn = CreateNumpadButton(i.ToString());
+                numpadButtons.Add(btn);
+                numpadGrid.Controls.Add(btn, (i - 1) % 3, (i - 1) / 3);
+            }
 
             FluentButton btnClear = CreateNumpadButton("⌫");
             btnClear.Click -= Numpad_Click;
             btnClear.Click += (s, e) => { enteredPin = ""; UpdatePinDisplay(); };
+            numpadButtons.Add(btnClear);
 
             FluentButton btnZero = CreateNumpadButton("0");
+            numpadButtons.Add(btnZero);
 
             FluentButton btnEnter = CreateNumpadButton("✓");
             btnEnter.DefaultBackColor = ColPrimary;
@@ -158,6 +236,8 @@ namespace KioskLockApp.UI
             btnEnter.ForeColor = Color.White;
             btnEnter.HoverForeColor = Color.White;
             btnEnter.Click -= Numpad_Click;
+            btnEnter.Click += (s, e) => VerifyPinLogic();
+            numpadButtons.Add(btnEnter);
 
             numpadGrid.Controls.Add(btnClear, 0, 3);
             numpadGrid.Controls.Add(btnZero, 1, 3);
@@ -168,6 +248,7 @@ namespace KioskLockApp.UI
 
             mainGrid.Controls.Add(cardLogin, 2, 0);
 
+            // ==================== FOOTER ====================
             TableLayoutPanel footer = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 3, Padding = new Padding(S(30), 0, S(30), S(10)) };
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
@@ -176,50 +257,261 @@ namespace KioskLockApp.UI
             footer.Controls.Add(new Panel { Dock = DockStyle.Fill }, 0, 0);
 
             Panel pnlPowerWrapper = new Panel { Dock = DockStyle.Fill };
-            FluentButton btnPower = new FluentButton(S(8))
+            btnPower = new FluentButton(S(8))
             {
                 Text = "⏻ Sistemi Kapat",
-                Font = new Font("Segoe UI", 11, FontStyle.Bold),
-                Size = new Size(S(160), S(36)),
+                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+                Size = new Size(S(150), S(34)),
                 DefaultBackColor = Color.Transparent,
                 HoverBackColor = Color.FromArgb(254, 226, 226),
                 ForeColor = ColTextSec,
                 HoverForeColor = ColDanger,
-                Anchor = AnchorStyles.None
             };
-            pnlPowerWrapper.Resize += (s, e) => { btnPower.Left = (pnlPowerWrapper.Width - btnPower.Width) / 2; btnPower.Top = (pnlPowerWrapper.Height - btnPower.Height) / 2; };
+            pnlPowerWrapper.Resize += (s, e) =>
+            {
+                btnPower.Location = new Point(
+                    Math.Max(0, (pnlPowerWrapper.ClientSize.Width - btnPower.Width) / 2),
+                    Math.Max(0, (pnlPowerWrapper.ClientSize.Height - btnPower.Height) / 2)
+                );
+            };
             btnPower.Click += (s, e) => Process.Start("shutdown", "/s /f /t 0");
             pnlPowerWrapper.Controls.Add(btnPower);
             footer.Controls.Add(pnlPowerWrapper, 1, 0);
 
             root.Controls.Add(footer, 0, 2);
+
+            // Dinamik Boyutlandırma ve Düzen Olayları
+            this.Resize += (s, e) => ApplyDynamicSizing();
+            this.SizeChanged += (s, e) => ApplyDynamicSizing();
         }
 
-        private Panel CreateHeaderAndEmptyState(string title, string subtitle, string icon, string emptyTitle, string emptyDesc)
+        private Control BuildAfisPanel()
         {
-            TableLayoutPanel pnl = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(S(15)) };
-            pnl.RowStyles.Add(new RowStyle(SizeType.Percent, 15F));
-            pnl.RowStyles.Add(new RowStyle(SizeType.Absolute, S(10)));
-            pnl.RowStyles.Add(new RowStyle(SizeType.Percent, 85F));
+            FluentCard card = new FluentCard(S(16)) { Dock = DockStyle.Fill, Margin = new Padding(S(10)) };
+            TableLayoutPanel layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(S(14)) };
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, S(56)));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            TableLayoutPanel header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 2 };
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 80F));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20F));
+            header.RowStyles.Add(new RowStyle(SizeType.Percent, 60F));
+            header.RowStyles.Add(new RowStyle(SizeType.Percent, 40F));
+
+            lblAfisTitle = new Label { Text = "AFİŞLER", Font = new Font("Segoe UI", 17, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomLeft };
+            lblAfisSub = new Label { Text = "Etkinlikler ve Bilgilendirme", Font = new Font("Segoe UI", 10.5f), ForeColor = ColTextSec, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopLeft };
+
+            header.Controls.Add(lblAfisTitle, 0, 0);
+            header.Controls.Add(lblAfisSub, 0, 1);
+
+            lblPosterCounter = new Label { Text = "0/0", Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = ColPrimary, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight };
+            header.Controls.Add(lblPosterCounter, 1, 0);
+
+            layout.Controls.Add(header, 0, 0);
+
+            pbPoster = new PictureBox
+            {
+                Dock = DockStyle.Fill,
+                SizeMode = PictureBoxSizeMode.Zoom,
+                BackColor = Color.FromArgb(241, 245, 249),
+                Margin = new Padding(0, S(6), 0, 0)
+            };
+            layout.Controls.Add(pbPoster, 0, 1);
+
+            card.Controls.Add(layout);
+            return card;
+        }
+
+        private Control BuildDuyuruPanel()
+        {
+            FluentCard card = new FluentCard(S(16)) { Dock = DockStyle.Fill, Margin = new Padding(S(10)) };
+            TableLayoutPanel layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(S(14)) };
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, S(56)));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
             TableLayoutPanel header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
             header.RowStyles.Add(new RowStyle(SizeType.Percent, 60F));
             header.RowStyles.Add(new RowStyle(SizeType.Percent, 40F));
-            header.Controls.Add(new Label { Text = title, Font = new Font("Segoe UI", 18, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomLeft }, 0, 0);
-            header.Controls.Add(new Label { Text = subtitle, Font = new Font("Segoe UI", 11), ForeColor = ColTextSec, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopLeft }, 0, 1);
-            pnl.Controls.Add(header, 0, 0);
+            lblDuyuruTitle = new Label { Text = "DUYURULAR", Font = new Font("Segoe UI", 17, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomLeft };
+            lblDuyuruSub = new Label { Text = "Güncel Okul Duyuruları", Font = new Font("Segoe UI", 10.5f), ForeColor = ColTextSec, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopLeft };
+            header.Controls.Add(lblDuyuruTitle, 0, 0);
+            header.Controls.Add(lblDuyuruSub, 0, 1);
+            layout.Controls.Add(header, 0, 0);
 
-            TableLayoutPanel emptyState = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
-            emptyState.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));
-            emptyState.RowStyles.Add(new RowStyle(SizeType.Percent, 20F));
-            emptyState.RowStyles.Add(new RowStyle(SizeType.Percent, 45F));
+            pnlAnnouncementsList = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                Padding = new Padding(0, S(6), 0, 0),
+                BackColor = Color.Transparent
+            };
+            pnlAnnouncementsList.Resize += (s, e) => AdjustAnnouncementCardSizes();
+            layout.Controls.Add(pnlAnnouncementsList, 0, 1);
 
-            emptyState.Controls.Add(new Label { Text = icon, Font = new Font("Segoe UI", 42), AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomCenter }, 0, 0);
-            emptyState.Controls.Add(new Label { Text = emptyTitle, Font = new Font("Segoe UI", 14, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter }, 0, 1);
-            emptyState.Controls.Add(new Label { Text = emptyDesc, Font = new Font("Segoe UI", 11), ForeColor = ColTextSec, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopCenter }, 0, 2);
+            card.Controls.Add(layout);
+            return card;
+        }
 
-            pnl.Controls.Add(emptyState, 0, 2);
-            return pnl;
+        public void ApplyDynamicSizing(int simulatedWidth = 0, int simulatedHeight = 0)
+        {
+            int w = simulatedWidth > 0 ? simulatedWidth : this.ClientSize.Width;
+            int h = simulatedHeight > 0 ? simulatedHeight : this.ClientSize.Height;
+            if (w <= 100 || h <= 100) return;
+
+            float scaleH = Math.Max(0.65f, Math.Min(1.8f, h / 1080f));
+            float scaleW = Math.Max(0.65f, Math.Min(1.8f, w / 1920f));
+            float uniformScale = Math.Min(scaleW, scaleH);
+            float aspect = (float)w / Math.Max(1, h);
+
+            // 1. Ana Grid Sütun Oranları (Aspect Ratio ve Genişlik Uyarlaması)
+            if (mainGrid != null)
+            {
+                mainGrid.SuspendLayout();
+                if (aspect < 1.45f) // 4:3, 5:4 veya dar ekranlar
+                {
+                    mainGrid.ColumnStyles[0].Width = 34F;
+                    mainGrid.ColumnStyles[1].Width = 31F;
+                    mainGrid.ColumnStyles[2].Width = 35F; // Giriş kartı sıkışmasın
+                    if (numpadWrapper != null)
+                    {
+                        numpadWrapper.ColumnStyles[0].Width = 3F;
+                        numpadWrapper.ColumnStyles[1].Width = 94F;
+                        numpadWrapper.ColumnStyles[2].Width = 3F;
+                    }
+                }
+                else // Standart 16:9 / 16:10 geniş ekranlar
+                {
+                    mainGrid.ColumnStyles[0].Width = 38F;
+                    mainGrid.ColumnStyles[1].Width = 32F;
+                    mainGrid.ColumnStyles[2].Width = 30F;
+                    if (numpadWrapper != null)
+                    {
+                        numpadWrapper.ColumnStyles[0].Width = 8F;
+                        numpadWrapper.ColumnStyles[1].Width = 84F;
+                        numpadWrapper.ColumnStyles[2].Width = 8F;
+                    }
+                }
+                mainGrid.ResumeLayout();
+            }
+
+            // 2. Dikey Oranlar (LoginLayout)
+            if (loginLayout != null)
+            {
+                loginLayout.SuspendLayout();
+                if (h < 800) // Düşük dikey alan (768p, 720p veya %125-150 ölçek)
+                {
+                    loginLayout.RowStyles[0].Height = 13F; // Okul bilgisi
+                    loginLayout.RowStyles[1].Height = 35F; // QR Alanı
+                    loginLayout.RowStyles[2].Height = 1F;  // Ayırıcı çizgi
+                    loginLayout.RowStyles[3].Height = 14F; // PIN gösterge
+                    loginLayout.RowStyles[4].Height = 37F; // Numpad
+                }
+                else
+                {
+                    loginLayout.RowStyles[0].Height = 14F;
+                    loginLayout.RowStyles[1].Height = 38F;
+                    loginLayout.RowStyles[2].Height = 1.5F;
+                    loginLayout.RowStyles[3].Height = 13.5F;
+                    loginLayout.RowStyles[4].Height = 33F;
+                }
+                loginLayout.ResumeLayout();
+            }
+
+            // 3. Fontların Dinamik ve Güvenli Güncellenmesi
+            if (lblBrand != null) lblBrand.Font = new Font("Segoe UI", Math.Max(13f, 22f * uniformScale), FontStyle.Bold);
+            if (lblTime != null) lblTime.Font = new Font("Segoe UI", Math.Max(15f, 24f * uniformScale), FontStyle.Bold);
+            if (lblDate != null) lblDate.Font = new Font("Segoe UI", Math.Max(8f, 11f * uniformScale), FontStyle.Regular);
+
+            if (lblLogo != null) lblLogo.Font = new Font("Segoe UI", Math.Max(13f, 22f * uniformScale));
+            if (lblSchool != null) lblSchool.Font = new Font("Segoe UI", Math.Max(9f, 14f * uniformScale), FontStyle.Bold);
+            if (lblBoard != null) lblBoard.Font = new Font("Segoe UI", Math.Max(8f, 11f * uniformScale), FontStyle.Bold);
+
+            if (lblQrTitle != null) lblQrTitle.Font = new Font("Segoe UI", Math.Max(8f, 10.5f * uniformScale), FontStyle.Bold);
+            if (lblQrSub != null) lblQrSub.Font = new Font("Segoe UI", Math.Max(7f, 8.5f * uniformScale), FontStyle.Regular);
+            if (lblVersion != null) lblVersion.Font = new Font("Segoe UI", Math.Max(6.5f, 7.5f * uniformScale), FontStyle.Regular);
+
+            if (lblPinTitle != null) lblPinTitle.Font = new Font("Segoe UI", Math.Max(7.5f, 9.5f * uniformScale), FontStyle.Bold);
+            if (lblPinDisplay != null) lblPinDisplay.Font = new Font("Segoe UI", Math.Max(12f, 18f * uniformScale), FontStyle.Bold);
+            if (lblPinSub != null)
+            {
+                if (lblPinSub.Text.Contains("Çevrimdışı") || lblPinSub.Text.Contains("Kod:"))
+                    lblPinSub.Font = new Font("Segoe UI", Math.Max(7.5f, 9f * uniformScale), FontStyle.Bold);
+                else
+                    lblPinSub.Font = new Font("Segoe UI", Math.Max(7f, 8f * uniformScale), FontStyle.Regular);
+            }
+
+            if (lblAfisTitle != null) lblAfisTitle.Font = new Font("Segoe UI", Math.Max(11f, 17f * uniformScale), FontStyle.Bold);
+            if (lblAfisSub != null) lblAfisSub.Font = new Font("Segoe UI", Math.Max(8f, 10.5f * uniformScale), FontStyle.Regular);
+            if (lblPosterCounter != null) lblPosterCounter.Font = new Font("Segoe UI", Math.Max(8f, 10f * uniformScale), FontStyle.Bold);
+
+            if (lblDuyuruTitle != null) lblDuyuruTitle.Font = new Font("Segoe UI", Math.Max(11f, 17f * uniformScale), FontStyle.Bold);
+            if (lblDuyuruSub != null) lblDuyuruSub.Font = new Font("Segoe UI", Math.Max(8f, 10.5f * uniformScale), FontStyle.Regular);
+
+            // 4. Numpad Buton Fontları
+            if (numpadButtons != null && numpadButtons.Count > 0)
+            {
+                int sampleBtnH = numpadButtons[0].Height;
+                float btnFontSize = Math.Max(10f, Math.Min(19f, (sampleBtnH > 10 ? sampleBtnH : 40) * 0.40f));
+                foreach (var btn in numpadButtons)
+                {
+                    btn.Font = new Font("Segoe UI Variable Display", btnFontSize, FontStyle.Bold);
+                }
+            }
+
+            // 5. Duyuru kartları boyutlandırma
+            float col1Percent = (mainGrid != null && mainGrid.ColumnStyles.Count > 1) ? mainGrid.ColumnStyles[1].Width / 100f : 0.32f;
+            int simColWidth = (int)(w * col1Percent) - S(25);
+            AdjustAnnouncementCardSizes(simColWidth);
+        }
+
+        public void AdjustAnnouncementCardSizes(int simulatedParentWidth = 0)
+        {
+            if (pnlAnnouncementsList == null || pnlAnnouncementsList.IsDisposed) return;
+
+            int containerW = simulatedParentWidth > 0 
+                ? simulatedParentWidth 
+                : pnlAnnouncementsList.ClientSize.Width;
+
+            if (containerW <= 50 && mainGrid != null && this.ClientSize.Width > 100)
+            {
+                float colPercent = mainGrid.ColumnStyles.Count > 1 ? mainGrid.ColumnStyles[1].Width / 100f : 0.32f;
+                containerW = (int)(this.ClientSize.Width * colPercent) - S(25);
+            }
+
+            int targetWidth = containerW - S(10);
+            if (targetWidth < 50) return;
+
+            pnlAnnouncementsList.SuspendLayout();
+            int maxTextWidth = Math.Max(50, targetWidth - S(48));
+
+            foreach (Control ctrl in pnlAnnouncementsList.Controls)
+            {
+                if (ctrl is FluentCard card)
+                {
+                    card.AutoSize = false;
+                    card.Width = targetWidth;
+
+                    foreach (Control inner in card.Controls)
+                    {
+                        if (inner is TableLayoutPanel tbl)
+                        {
+                            tbl.Width = targetWidth;
+                            foreach (Control tblChild in tbl.Controls)
+                            {
+                                if (tblChild is Label lbl)
+                                {
+                                    lbl.MaximumSize = new Size(maxTextWidth, 0);
+                                }
+                            }
+                            int prefH = tbl.GetPreferredSize(new Size(targetWidth, 0)).Height;
+                            card.Height = Math.Max(S(50), prefH);
+                        }
+                    }
+                }
+            }
+            pnlAnnouncementsList.ResumeLayout();
         }
 
         private FluentButton CreateNumpadButton(string text)
@@ -228,7 +520,7 @@ namespace KioskLockApp.UI
             {
                 Text = text,
                 Dock = DockStyle.Fill,
-                Font = new Font("Segoe UI Variable Display", 18, FontStyle.Bold),
+                Font = new Font("Segoe UI Variable Display", 16, FontStyle.Bold),
                 DefaultBackColor = ColBg,
                 HoverBackColor = ColBorder,
                 ForeColor = ColTextMain,
@@ -239,29 +531,225 @@ namespace KioskLockApp.UI
             btn.Click += Numpad_Click;
             return btn;
         }
+
+        public void RefreshMediaDisplays()
+        {
+            try
+            {
+                // 1. Afişleri güncelle
+                activePosterPaths = MediaManager.GetActivePosterFilePaths();
+                currentPosterIndex = 0;
+                RefreshPosterImageOnly();
+
+                // 2. Duyuruları güncelle
+                var announcements = MediaManager.GetActiveAnnouncements();
+                if (pnlAnnouncementsList != null)
+                {
+                    pnlAnnouncementsList.SuspendLayout();
+                    pnlAnnouncementsList.Controls.Clear();
+
+                    int panelW = pnlAnnouncementsList.ClientSize.Width;
+                    if (panelW <= 50 && mainGrid != null && this.ClientSize.Width > 100)
+                    {
+                        float col1Pct = mainGrid.ColumnStyles.Count > 1 ? mainGrid.ColumnStyles[1].Width / 100f : 0.32f;
+                        panelW = (int)(this.ClientSize.Width * col1Pct) - S(25);
+                    }
+                    int itemWidth = panelW > 50 ? panelW - S(10) : S(300);
+
+                    foreach (var ann in announcements)
+                    {
+                        FluentCard itemCard = new FluentCard(S(10))
+                        {
+                            Width = itemWidth,
+                            Height = S(70),
+                            AutoSize = false,
+                            Margin = new Padding(0, 0, 0, S(10)),
+                            BackColor = Color.FromArgb(248, 250, 252)
+                        };
+
+                        TableLayoutPanel itemLayout = new TableLayoutPanel
+                        {
+                            Dock = DockStyle.Top,
+                            Width = itemWidth,
+                            MaximumSize = new Size(itemWidth, 0),
+                            AutoSize = true,
+                            RowCount = 2,
+                            ColumnCount = 2,
+                            Padding = new Padding(S(10))
+                        };
+                        itemLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, S(34)));
+                        itemLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+
+                        Label lblIcon = new Label
+                        {
+                            Text = ann.Id.StartsWith("default") ? "📢" : "📌",
+                            Font = new Font("Segoe UI", 15),
+                            AutoSize = false,
+                            Size = new Size(S(30), S(30)),
+                            TextAlign = ContentAlignment.TopCenter
+                        };
+
+                        int maxTextW = Math.Max(50, itemWidth - S(48));
+
+                        Label lblTitle = new Label
+                        {
+                            Text = ann.Title,
+                            Font = new Font("Segoe UI", 11.5f, FontStyle.Bold),
+                            ForeColor = ColTextMain,
+                            AutoSize = true,
+                            AutoEllipsis = true,
+                            MaximumSize = new Size(maxTextW, 0),
+                            Dock = DockStyle.Fill,
+                            Margin = new Padding(0, 0, 0, S(3))
+                        };
+
+                        Label lblContent = new Label
+                        {
+                            Text = ann.Content,
+                            Font = new Font("Segoe UI", 9.5f),
+                            ForeColor = ColTextSec,
+                            AutoSize = true,
+                            MaximumSize = new Size(maxTextW, 0),
+                            Dock = DockStyle.Fill
+                        };
+
+                        itemLayout.Controls.Add(lblIcon, 0, 0);
+                        itemLayout.SetRowSpan(lblIcon, 2);
+                        itemLayout.Controls.Add(lblTitle, 1, 0);
+                        itemLayout.Controls.Add(lblContent, 1, 1);
+
+                        itemCard.Controls.Add(itemLayout);
+                        pnlAnnouncementsList.Controls.Add(itemCard);
+                    }
+
+                    pnlAnnouncementsList.ResumeLayout();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"RefreshMediaDisplays error: {ex.Message}");
+            }
+        }
+
+        public void RefreshPosterImageOnly()
+        {
+            try
+            {
+                if (pbPoster == null) return;
+                if (activePosterPaths != null && activePosterPaths.Count > 0)
+                {
+                    if (currentPosterIndex >= activePosterPaths.Count) currentPosterIndex = 0;
+                    string path = activePosterPaths[currentPosterIndex];
+                    if (System.IO.File.Exists(path))
+                    {
+                        byte[] bytes = System.IO.File.ReadAllBytes(path);
+                        using (var ms = new System.IO.MemoryStream(bytes))
+                        using (var src = Image.FromStream(ms))
+                        {
+                            var newBmp = new Bitmap(src);
+                            var oldImg = pbPoster.Image;
+                            pbPoster.Image = newBmp;
+                            oldImg?.Dispose();
+                        }
+                    }
+                    if (lblPosterCounter != null)
+                    {
+                        lblPosterCounter.Text = $"{currentPosterIndex + 1}/{activePosterPaths.Count}";
+                    }
+                }
+                else
+                {
+                    pbPoster.Image = null;
+                    if (lblPosterCounter != null) lblPosterCounter.Text = "0/0";
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"RefreshPosterImageOnly error: {ex.Message}");
+            }
+        }
     }
 
     public class FluentCard : Panel
     {
         private int radius;
-        public FluentCard(int radius) { this.radius = radius; this.DoubleBuffered = true; this.BackColor = Color.White; }
-        protected override void OnPaint(PaintEventArgs e)
+        private GraphicsPath? cachedPath;
+        private Size lastSize;
+
+        public FluentCard(int radius)
         {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using (GraphicsPath path = GetPath(this.ClientRectangle, radius))
+            this.radius = radius;
+            this.DoubleBuffered = true;
+            this.SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+            this.BackColor = Color.White;
+        }
+
+        private void EnsurePath()
+        {
+            if (cachedPath == null || lastSize != this.ClientSize)
             {
-                this.Region = new Region(path);
-                using (Pen pen = new Pen(Color.FromArgb(229, 231, 235), 1.5f))
-                    e.Graphics.DrawPath(pen, path);
+                cachedPath?.Dispose();
+                lastSize = this.ClientSize;
+                cachedPath = GetPath(this.ClientRectangle, radius);
+                this.Region?.Dispose();
+                this.Region = new Region(cachedPath);
             }
         }
+
+        protected override void OnSizeChanged(EventArgs e)
+        {
+            base.OnSizeChanged(e);
+            cachedPath?.Dispose();
+            cachedPath = null;
+            Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            EnsurePath();
+            if (cachedPath == null) return;
+
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            e.Graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+
+            // Arka plan boyama
+            using (SolidBrush bgBrush = new SolidBrush(this.BackColor))
+                e.Graphics.FillPath(bgBrush, cachedPath);
+
+            // İnce zarif kenarlık boyama
+            using (Pen pen = new Pen(Color.FromArgb(229, 231, 235), 1f))
+                e.Graphics.DrawPath(pen, cachedPath);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                cachedPath?.Dispose();
+                cachedPath = null;
+            }
+            base.Dispose(disposing);
+        }
+
         private GraphicsPath GetPath(Rectangle rc, int r)
         {
             GraphicsPath path = new GraphicsPath();
-            path.AddArc(rc.X, rc.Y, r, r, 180, 90);
-            path.AddArc(rc.Width - r - 1, rc.Y, r, r, 270, 90);
-            path.AddArc(rc.Width - r - 1, rc.Height - r - 1, r, r, 0, 90);
-            path.AddArc(rc.X, rc.Height - r - 1, r, r, 90, 90);
+            if (rc.Width <= 0 || rc.Height <= 0) return path;
+
+            int safeR = Math.Min(r, Math.Min(rc.Width, rc.Height) / 2);
+            int d = safeR * 2;
+
+            if (d <= 0)
+            {
+                path.AddRectangle(rc);
+                return path;
+            }
+
+            path.AddArc(rc.X, rc.Y, d, d, 180, 90);
+            path.AddArc(rc.Right - d - 1, rc.Y, d, d, 270, 90);
+            path.AddArc(rc.Right - d - 1, rc.Bottom - d - 1, d, d, 0, 90);
+            path.AddArc(rc.X, rc.Bottom - d - 1, d, d, 90, 90);
             path.CloseFigure();
             return path;
         }
@@ -281,6 +769,7 @@ namespace KioskLockApp.UI
         {
             this.radius = radius;
             this.DoubleBuffered = true;
+            this.SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
             this.Cursor = Cursors.Hand;
         }
 
@@ -292,27 +781,40 @@ namespace KioskLockApp.UI
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
             e.Graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
 
             Color currentBg = isPressed ? ControlPaint.Dark(HoverBackColor, 0.05f) : (isHovered ? HoverBackColor : DefaultBackColor);
             Color currentFg = isHovered ? HoverForeColor : ForeColor;
 
             Rectangle rect = this.ClientRectangle;
+            if (rect.Width <= 2 || rect.Height <= 2) return;
+
             if (isPressed) { rect.Y += 1; rect.Height -= 1; }
+
+            int safeR = Math.Min(radius, Math.Min(rect.Width, rect.Height) / 2);
+            int d = safeR * 2;
 
             using (GraphicsPath path = new GraphicsPath())
             {
-                path.AddArc(rect.X, rect.Y, radius, radius, 180, 90);
-                path.AddArc(rect.Width - radius - 1, rect.Y, radius, radius, 270, 90);
-                path.AddArc(rect.Width - radius - 1, rect.Height - radius - 1, radius, radius, 0, 90);
-                path.AddArc(rect.X, rect.Height - radius - 1, radius, radius, 90, 90);
-                path.CloseFigure();
+                if (d > 0)
+                {
+                    path.AddArc(rect.X, rect.Y, d, d, 180, 90);
+                    path.AddArc(rect.Right - d - 1, rect.Y, d, d, 270, 90);
+                    path.AddArc(rect.Right - d - 1, rect.Bottom - d - 1, d, d, 0, 90);
+                    path.AddArc(rect.X, rect.Bottom - d - 1, d, d, 90, 90);
+                    path.CloseFigure();
+                }
+                else
+                {
+                    path.AddRectangle(rect);
+                }
 
                 using (SolidBrush brush = new SolidBrush(currentBg))
                     e.Graphics.FillPath(brush, path);
             }
 
-            TextRenderer.DrawText(e.Graphics, this.Text, this.Font, rect, currentFg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            TextRenderer.DrawText(e.Graphics, this.Text, this.Font, rect, currentFg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoClipping);
         }
     }
 }

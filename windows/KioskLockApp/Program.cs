@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows.Forms;
 using KioskLockApp.UI;
 using Microsoft.Win32; // Kayıt Defteri (Registry) işlemleri için gerekli kütüphane
@@ -10,6 +10,7 @@ namespace KioskLockApp
         [STAThread]
         static void Main()
         {
+            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 

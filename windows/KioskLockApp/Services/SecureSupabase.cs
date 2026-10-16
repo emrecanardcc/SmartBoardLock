@@ -1,10 +1,11 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Win32;
 using System.Reflection;
+using System.Diagnostics;
 
 namespace KioskLockApp.Services
 {
@@ -48,21 +49,150 @@ namespace KioskLockApp.Services
             catch { }
         }
 
-        public static async Task<(string state, string boardName, bool isActive)> GetBoardStateSingleQueryAsync()
+        public static string GetCurrentAppVersion()
+        {
+            try
+            {
+                var ver = Assembly.GetExecutingAssembly().GetName().Version;
+                return ver != null ? $"{ver.Major}.{ver.Minor}.{ver.Build}" : "2.0.8";
+            }
+            catch
+            {
+                return "2.0.8";
+            }
+        }
+
+        private static DateTime lastHeartbeatTime = DateTime.MinValue;
+
+        /// <summary>
+        /// Sadece tahta ilk açıldığında veya sürüm güncellendiğinde 1 KEZ çağrılır.
+        /// Hem yüklü sürümü hem de başlangıç pingini kaydeder. Veritabanını şişirmez.
+        /// </summary>
+        public static async Task ReportStartupAndVersionAsync()
+        {
+            string boardId = GetRegistryValue("BoardId");
+            if (string.IsNullOrEmpty(boardId)) return;
+
+            try
+            {
+                string version = GetCurrentAppVersion();
+                string nowUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}";
+                string jsonBody = $"{{\"app_version\": \"{version}\", \"last_ping_at\": \"{nowUtc}\"}}";
+
+                var request = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+                {
+                    Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+                };
+                request.Headers.Add("Prefer", "return=minimal");
+
+                await sharedClient.SendAsync(request);
+                lastHeartbeatTime = DateTime.UtcNow;
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Periyodik hafif heartbeat. SADECE last_ping_at günceller (app_version içermez).
+        /// En az 100 saniye geçmeden tekrar istek atmaz (DB kotasını korur).
+        /// </summary>
+        public static async Task SendHeartbeatAsync(bool force = false)
+        {
+            string boardId = GetRegistryValue("BoardId");
+            if (string.IsNullOrEmpty(boardId)) return;
+
+            // Throttle: force değilse ve son 100 saniyede atılmışsa pas geç (DB şişmesini önler)
+            if (!force && (DateTime.UtcNow - lastHeartbeatTime).TotalSeconds < 100)
+            {
+                return;
+            }
+
+            try
+            {
+                string nowUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}";
+                string jsonBody = $"{{\"last_ping_at\": \"{nowUtc}\"}}";
+
+                var request = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+                {
+                    Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+                };
+                request.Headers.Add("Prefer", "return=minimal");
+
+                await sharedClient.SendAsync(request);
+                lastHeartbeatTime = DateTime.UtcNow;
+            }
+            catch { }
+        }
+
+        public static async Task ClearRemoteCommandAsync(string boardId)
+        {
+            try
+            {
+                string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}";
+                string jsonBody = "{\"remote_command\": null}";
+
+                var request = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+                {
+                    Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+                };
+                request.Headers.Add("Prefer", "return=minimal");
+
+                await sharedClient.SendAsync(request);
+            }
+            catch { }
+        }
+
+        public static async Task ReportActiveMediaIdAsync(string mediaId)
+        {
+            string boardId = GetRegistryValue("BoardId");
+            if (string.IsNullOrEmpty(boardId)) return;
+
+            try
+            {
+                string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}";
+                string jsonBody = $"{{\"active_media_id\": \"{mediaId}\"}}";
+
+                var request = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+                {
+                    Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+                };
+                request.Headers.Add("Prefer", "return=minimal");
+
+                await sharedClient.SendAsync(request);
+            }
+            catch { }
+        }
+
+        public static void ExecuteShutdown()
+        {
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo("shutdown.exe", "/s /t 5 /f")
+                {
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+                Process.Start(psi);
+            }
+            catch { }
+        }
+
+        public static async Task<(string state, string boardName, bool isActive, string remoteCommand)> GetBoardStateSingleQueryAsync()
         {
             string boardId = GetRegistryValue("BoardId");
             string currentName = GetRegistryValue("BoardName");
             bool lastKnownActive = GetRegistryValue("LastKnownIsActive", "true") == "true";
 
-            if (string.IsNullOrEmpty(boardId)) return ("DELETED", currentName, lastKnownActive);
+            if (string.IsNullOrEmpty(boardId)) return ("DELETED", currentName, lastKnownActive, "");
 
             try
             {
-                string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=is_unlocked,is_active,name";
+                string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=is_unlocked,is_active,name,remote_command";
                 string response = await sharedClient.GetStringAsync(url);
                 string cleanResponse = response.Replace(" ", "").ToLower();
 
-                if (cleanResponse == "[]") return ("DELETED", currentName, lastKnownActive);
+                if (cleanResponse == "[]") return ("DELETED", currentName, lastKnownActive, "");
 
                 string fetchedName = ExtractJsonStringValue(response, "name");
                 if (!string.IsNullOrEmpty(fetchedName) && fetchedName != currentName)
@@ -71,17 +201,19 @@ namespace KioskLockApp.Services
                     currentName = fetchedName;
                 }
 
+                string remoteCommand = ExtractJsonStringValue(response, "remote_command");
+
                 bool isActive = cleanResponse.Contains("\"is_active\":true");
                 SetRegistryValue("LastKnownIsActive", isActive ? "true" : "false");
 
                 if (!isActive || cleanResponse.Contains("\"is_unlocked\":true"))
-                    return ("UNLOCKED", currentName, isActive);
+                    return ("UNLOCKED", currentName, isActive, remoteCommand);
 
-                return ("LOCKED", currentName, isActive);
+                return ("LOCKED", currentName, isActive, remoteCommand);
             }
             catch
             {
-                return ("ERROR", currentName, lastKnownActive);
+                return ("ERROR", currentName, lastKnownActive, "");
             }
         }
 
