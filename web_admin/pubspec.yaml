@@ -1,0 +1,42 @@
+name: web_admin
+description: Sınıf360 Web Kontrol Paneli - Müdür & Süper Admin
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Supabase
+  supabase_flutter: ^2.8.4
+
+  # Font & Icons
+  google_fonts: ^6.2.1
+
+  # Date formatting
+  intl: ^0.20.2
+
+  # Routing
+  go_router: ^14.8.1
+
+  # URL Launcher (for download_url in versions)
+  url_launcher: ^6.3.1
+
+  # State management
+  provider: ^6.1.2
+
+  # File picker for updates
+  file_picker: ^8.1.7
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
