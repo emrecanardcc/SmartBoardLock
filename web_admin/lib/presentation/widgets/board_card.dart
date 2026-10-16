@@ -13,6 +13,8 @@ class BoardCard extends StatefulWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final Future<void> Function() onRemoteShutdown;
+  final bool isSuperAdmin;
+  final Future<void> Function()? onRepairIntegrity;
 
   const BoardCard({
     super.key,
@@ -23,6 +25,8 @@ class BoardCard extends StatefulWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onRemoteShutdown,
+    this.isSuperAdmin = false,
+    this.onRepairIntegrity,
   });
 
   @override
@@ -147,6 +151,79 @@ class _BoardCardState extends State<BoardCard> {
     }
   }
 
+  Future<void> _confirmRepairIntegrity() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.build_circle_rounded,
+                  color: AppColors.warning, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Uygulama Bütünlüğünü Onar',
+                style: GoogleFonts.inter(
+                    fontSize: 17, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          '"${widget.board.name}" akıllı tahtasındaki tüm uygulama dosyaları (kilit ekranı, bekçi servisi, güncelleyici) sıfırdan indirilerek temizlenip yeniden kurulacaktır.\n\nEşleştirme ve okul ayarları kesinlikle silinmez.\n\nUzaktan onarımı başlatmak istiyor musunuz?',
+          style: GoogleFonts.inter(
+              fontSize: 14, color: AppColors.textDark, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.warning,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.build_circle_rounded, size: 16),
+            label: const Text('Bütünlüğü Onar'),
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted && widget.onRepairIntegrity != null) {
+      try {
+        await widget.onRepairIntegrity!();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('"${widget.board.name}" için onarım komutu başarıyla gönderildi.'),
+              backgroundColor: AppColors.textDark,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Hata: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final board = widget.board;
@@ -230,6 +307,7 @@ class _BoardCardState extends State<BoardCard> {
                   elevation: 8,
                   onSelected: (value) {
                     if (value == 'edit') widget.onEdit();
+                    if (value == 'repair') _confirmRepairIntegrity();
                     if (value == 'shutdown') _confirmShutdown();
                     if (value == 'delete') widget.onDelete();
                   },
@@ -246,6 +324,19 @@ class _BoardCardState extends State<BoardCard> {
                                 color: AppColors.textDark)),
                       ]),
                     ),
+                    if (widget.isSuperAdmin && board.isOnline && widget.onRepairIntegrity != null)
+                      PopupMenuItem(
+                        value: 'repair',
+                        child: Row(children: [
+                          const Icon(Icons.build_circle_rounded,
+                              color: AppColors.warning, size: 18),
+                          const SizedBox(width: 10),
+                          Text('Bütünlüğü Onar (Sıfırdan)',
+                              style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.warning)),
+                        ]),
+                      ),
                     if (board.isOnline)
                       PopupMenuItem(
                         value: 'shutdown',

@@ -278,6 +278,31 @@ class AdminRepository {
     }
   }
 
+  /// Akıllı tahtaya uzaktan uygulama bütünlüğü onarım komutu gönderir (TahtaRepair çalıştırılır)
+  Future<void> sendRepairIntegrityCommand(String boardId) async {
+    try {
+      await _db.from('boards').update({
+        'remote_command': 'REPAIR_INTEGRITY',
+      }).eq('id', boardId);
+    } catch (e) {
+      debugPrint('sendRepairIntegrityCommand error: $e');
+      rethrow;
+    }
+  }
+
+  /// Birden fazla akıllı tahtaya toplu olarak uzaktan uygulama bütünlüğü onarım komutu gönderir
+  Future<void> sendBulkRepairIntegrityCommand(List<String> boardIds) async {
+    try {
+      if (boardIds.isEmpty) return;
+      await _db.from('boards').update({
+        'remote_command': 'REPAIR_INTEGRITY',
+      }).filter('id', 'in', boardIds);
+    } catch (e) {
+      debugPrint('sendBulkRepairIntegrityCommand error: $e');
+      rethrow;
+    }
+  }
+
   /// 6 haneli eşleştirme kodu ile yeni tahta ekle (board_pairings mantığı)
   Future<void> pairBoard({
     required String pairingCode,

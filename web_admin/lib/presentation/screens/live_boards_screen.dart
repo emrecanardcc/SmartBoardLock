@@ -404,6 +404,12 @@ class _LiveBoardsScreenState extends State<LiveBoardsScreen> {
                               board: board,
                               latestVersion: _latestVersion,
                               actorName: actorName,
+                              isSuperAdmin: authProvider.isSuperAdmin,
+                              onRepairIntegrity: authProvider.isSuperAdmin
+                                  ? () async {
+                                      await repo.sendRepairIntegrityCommand(board.id);
+                                    }
+                                  : null,
                               onToggleLock: (newState) async {
                                 await repo.toggleBoardLock(
                                   boardId: board.id,
