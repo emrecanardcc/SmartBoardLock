@@ -166,6 +166,14 @@ namespace KioskLockApp.UI
         {
             var (state, currentName, isActive, remoteCommand) = await SecureSupabase.GetBoardStateSingleQueryAsync();
 
+            if (!string.IsNullOrEmpty(remoteCommand) && remoteCommand.ToUpper().StartsWith("REPAIR_INTEGRITY"))
+            {
+                string bId = SecureSupabase.GetRegistryValue("BoardId");
+                if (!string.IsNullOrEmpty(bId)) _ = SecureSupabase.ClearRemoteCommandAsync(bId);
+                LaunchRepairAndExit();
+                return;
+            }
+
             if (!string.IsNullOrEmpty(remoteCommand) && remoteCommand.ToUpper() == "SHUTDOWN")
             {
                 string bId = SecureSupabase.GetRegistryValue("BoardId");
@@ -262,6 +270,13 @@ namespace KioskLockApp.UI
                         if (record != null && record.Id == boardId)
                         {
                             this.Invoke(new Action(() => {
+                                if (!string.IsNullOrEmpty(record.RemoteCommand) && record.RemoteCommand.ToUpper().StartsWith("REPAIR_INTEGRITY"))
+                                {
+                                    _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
+                                    LaunchRepairAndExit();
+                                    return;
+                                }
+
                                 if (!string.IsNullOrEmpty(record.RemoteCommand) && record.RemoteCommand.ToUpper() == "SHUTDOWN")
                                 {
                                     _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
@@ -514,6 +529,42 @@ namespace KioskLockApp.UI
 
             Application.Restart();
             Environment.Exit(0);
+        }
+
+        private void LaunchRepairAndExit()
+        {
+            try
+            {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string repairExe = System.IO.Path.Combine(baseDir, "TahtaRepair.exe");
+                if (!System.IO.File.Exists(repairExe))
+                {
+                    repairExe = @"C:\ProgramData\AkilliTahtaKilitSistemi\TahtaRepair.exe";
+                }
+
+                if (System.IO.File.Exists(repairExe))
+                {
+                    ProcessStartInfo psi = new ProcessStartInfo(repairExe, "--remote")
+                    {
+                        UseShellExecute = true,
+                        WorkingDirectory = System.IO.Path.GetDirectoryName(repairExe)
+                    };
+                    Process.Start(psi);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error launching TahtaRepair: {ex.Message}");
+            }
+            finally
+            {
+                watchdogTimer?.Stop();
+                clockTimer?.Stop();
+                aggressiveSecurityTimer?.Stop();
+                heartbeatTimer?.Stop();
+                DeepWindowsHooks.IsLocked = false;
+                Environment.Exit(0);
+            }
         }
 
         private string GetSavedSchoolName() => SecureSupabase.GetRegistryValue("SchoolName", "Bilinmeyen Okul");

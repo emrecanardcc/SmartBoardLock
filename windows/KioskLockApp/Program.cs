@@ -14,6 +14,9 @@ namespace KioskLockApp
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
+            // Bekleyen güncellemeleri (.new dosyaları) uygula
+            ApplyPendingUpdates();
+
             // Windows başlar başlamaz çalışması için Kayıt Defterine kanca atıyoruz
             ForceStartup();
 
@@ -71,6 +74,48 @@ namespace KioskLockApp
             {
                 // Eğer bir yetki veya kısıtlama sorunu olursa uygulamanın çökmesini engelle
             }
+        }
+
+        // --- BEKLEYEN GÜNCELLEMELERİ UYGULA (.new dosyaları) ---
+        private static void ApplyPendingUpdates()
+        {
+            try
+            {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+
+                // TahtaRepair.exe.new -> TahtaRepair.exe
+                string repairNew = System.IO.Path.Combine(baseDir, "TahtaRepair.exe.new");
+                string repairTarget = System.IO.Path.Combine(baseDir, "TahtaRepair.exe");
+                if (System.IO.File.Exists(repairNew))
+                {
+                    try
+                    {
+                        if (System.IO.File.Exists(repairTarget))
+                        {
+                            System.IO.File.Delete(repairTarget);
+                        }
+                        System.IO.File.Move(repairNew, repairTarget);
+                    }
+                    catch { }
+                }
+
+                // TahtaUpdater.exe.new -> TahtaUpdater.exe
+                string updaterNew = System.IO.Path.Combine(baseDir, "TahtaUpdater.exe.new");
+                string updaterTarget = System.IO.Path.Combine(baseDir, "TahtaUpdater.exe");
+                if (System.IO.File.Exists(updaterNew))
+                {
+                    try
+                    {
+                        if (System.IO.File.Exists(updaterTarget))
+                        {
+                            System.IO.File.Delete(updaterTarget);
+                        }
+                        System.IO.File.Move(updaterNew, updaterTarget);
+                    }
+                    catch { }
+                }
+            }
+            catch { }
         }
     }
 }
