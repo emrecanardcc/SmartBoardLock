@@ -23,9 +23,95 @@ class _LicenseManageScreenState extends State<LicenseManageScreen> {
   final TextEditingController _notesController = TextEditingController();
   bool _isSaving = false;
 
+  // Gerçek Sayılarla Kurum Verileri & Realtime Dinleme
+  List<SchoolModel> _schoolsList = [];
+  SchoolModel? _schoolDetails;
+  bool _isLoading = true;
+  StreamSubscription? _realtimeSchoolsSub;
+  StreamSubscription? _realtimeSchoolSub;
+  StreamSubscription? _realtimeBoardsSub;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initData();
+    });
+  }
+
+  Future<void> _initData() async {
+    final auth = context.read<AuthProvider>();
+    final repo = context.read<AdminRepository>();
+
+    if (auth.isSuperAdmin) {
+      await _loadSuperAdminData(repo);
+      _realtimeSchoolsSub = repo.streamSchools().listen((_) {
+        _loadSuperAdminData(repo, silent: true);
+      });
+    } else {
+      final schoolId = auth.currentUser?.schoolId;
+      if (schoolId != null) {
+        await _loadSchoolAdminData(repo, schoolId);
+        _realtimeSchoolSub = repo.streamSchool(schoolId).listen((_) {
+          _loadSchoolAdminData(repo, schoolId, silent: true);
+        });
+        _realtimeBoardsSub = repo.streamBoards(schoolId).listen((_) {
+          _loadSchoolAdminData(repo, schoolId, silent: true);
+        });
+      }
+    }
+  }
+
+  Future<void> _loadSuperAdminData(AdminRepository repo, {bool silent = false}) async {
+    if (!silent) setState(() => _isLoading = true);
+    try {
+      final list = await repo.getSchools();
+      if (!mounted) return;
+      setState(() {
+        _schoolsList = list;
+        _isLoading = false;
+        if (_selectedSchoolId == null && list.isNotEmpty) {
+          _selectedSchoolId = list.first.id;
+          _notesController.text = list.first.licenseNotes ?? '';
+        } else if (_selectedSchoolId != null) {
+          final sel = list.firstWhere(
+            (s) => s.id == _selectedSchoolId,
+            orElse: () => list.first,
+          );
+          if (_notesController.text.isEmpty && sel.licenseNotes != null) {
+            _notesController.text = sel.licenseNotes!;
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint('_loadSuperAdminData error: $e');
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadSchoolAdminData(AdminRepository repo, String schoolId, {bool silent = false}) async {
+    if (!silent) setState(() => _isLoading = true);
+    try {
+      final details = await repo.getSchoolDetails(schoolId);
+      if (!mounted) return;
+      setState(() {
+        _schoolDetails = details;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('_loadSchoolAdminData error: $e');
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
+
   @override
   void dispose() {
     _notesController.dispose();
+    _realtimeSchoolsSub?.cancel();
+    _realtimeSchoolSub?.cancel();
+    _realtimeBoardsSub?.cancel();
     super.dispose();
   }
 
@@ -103,6 +189,8 @@ class _LicenseManageScreenState extends State<LicenseManageScreen> {
         licenseNotes: newNotes,
       );
 
+      await _loadSuperAdminData(repo, silent: true);
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -159,398 +247,401 @@ class _LicenseManageScreenState extends State<LicenseManageScreen> {
       );
     }
 
-    return StreamBuilder<SchoolModel?>(
-      stream: repo.streamSchool(schoolId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    if (_isLoading && _schoolDetails == null) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(60),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
 
-        final school = snapshot.data;
-        if (school == null) {
-          return Center(
-            child: Text(
-              'Kurum bilgisi yüklenemedi.',
-              style: GoogleFonts.inter(color: AppColors.textGrey, fontSize: 15),
-            ),
-          );
-        }
-
-        final expiry = school.licenseExpiresAt ?? DateTime.now();
-        final remainingDays = school.remainingLicenseDays;
-        final isActive = school.isLicenseActive;
-        final isExpiringSoon = school.isExpiringSoon;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final school = _schoolDetails;
+    if (school == null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _buildPageHeader(
-              title: 'Kurumsal Lisans Durumu',
-              subtitle: '${school.name} - ${school.city}',
-              badgeText: isActive ? (isExpiringSoon ? 'YENİLEME YAKLAŞIYOR' : 'LİSANS AKTİF') : 'SÜRESİ DOLDU',
-              badgeColor: isActive ? (isExpiringSoon ? AppColors.warning : AppColors.success) : AppColors.danger,
-            ),
-            const SizedBox(height: 24),
-
-            // Hero Sayaç Kartı
-            _buildHeroLicenseCard(
-              schoolName: school.name,
-              city: school.city,
-              isActive: isActive,
-              isExpiringSoon: isExpiringSoon,
-              remainingDays: remainingDays,
-              expiry: expiry,
-              notes: school.licenseNotes,
-            ),
-            const SizedBox(height: 24),
-
-            // Bilgi & İstatistik Kartları
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: _buildKurumInfoCard(school, expiry),
-                ),
-                const SizedBox(width: 20),
-                Expanded(
-                  flex: 2,
-                  child: _buildSupportContactCard(),
-                ),
-              ],
+            Text('Kurum bilgisi yüklenemedi.', style: GoogleFonts.inter(color: AppColors.textGrey, fontSize: 15)),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () => _loadSchoolAdminData(repo, schoolId),
+              child: const Text('Tekrar Dene'),
             ),
           ],
-        );
-      },
+        ),
+      );
+    }
+
+    final expiry = school.licenseExpiresAt ?? DateTime.now();
+    final remainingDays = school.remainingLicenseDays;
+    final isActive = school.isLicenseActive;
+    final isExpiringSoon = school.isExpiringSoon;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildPageHeader(
+          title: 'Kurumsal Lisans Durumu',
+          subtitle: '${school.name} - ${school.city}',
+          badgeText: isActive ? (isExpiringSoon ? 'YENİLEME YAKLAŞIYOR' : 'LİSANS AKTİF') : 'SÜRESİ DOLDU',
+          badgeColor: isActive ? (isExpiringSoon ? AppColors.warning : AppColors.success) : AppColors.danger,
+        ),
+        const SizedBox(height: 24),
+
+        // Hero Sayaç Kartı
+        _buildHeroLicenseCard(
+          schoolName: school.name,
+          city: school.city,
+          isActive: isActive,
+          isExpiringSoon: isExpiringSoon,
+          remainingDays: remainingDays,
+          expiry: expiry,
+          notes: school.licenseNotes,
+        ),
+        const SizedBox(height: 24),
+
+        // Bilgi & İstatistik Kartları (Gerçek Tahta ve Öğretmen Sayılarıyla)
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: _buildKurumInfoCard(school, expiry),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              flex: 2,
+              child: _buildSupportContactCard(),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
   // ===================== SİSTEM YÖNETİCİSİ GÖRÜNÜMÜ =====================
 
   Widget _buildSuperAdminView(AdminRepository repo) {
-    return StreamBuilder<List<SchoolModel>>(
-      stream: repo.streamSchools(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    if (_isLoading && _schoolsList.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(60),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
 
-        final schools = snapshot.data ?? [];
-        if (schools.isEmpty) {
-          return Center(
-            child: Text('Kayıtlı okul bulunmuyor.', style: GoogleFonts.inter(color: AppColors.textGrey)),
-          );
-        }
+    final schools = _schoolsList;
+    if (schools.isEmpty) {
+      return Center(
+        child: Text('Kayıtlı okul bulunmuyor.', style: GoogleFonts.inter(color: AppColors.textGrey)),
+      );
+    }
 
-        final currentSchoolId = _selectedSchoolId ?? schools.first.id;
-        final selectedSchool = schools.firstWhere(
-          (s) => s.id == currentSchoolId,
-          orElse: () => schools.first,
-        );
+    final currentSchoolId = _selectedSchoolId ?? schools.first.id;
+    final selectedSchool = schools.firstWhere(
+      (s) => s.id == currentSchoolId,
+      orElse: () => schools.first,
+    );
 
-        if (_notesController.text.isEmpty && selectedSchool.licenseNotes != null) {
-          _notesController.text = selectedSchool.licenseNotes!;
-        }
+    final activeExpiry = _editedExpiryDate ?? selectedSchool.licenseExpiresAt ?? DateTime.now();
+    final activeIsLicensed = _editedIsLicensed ?? selectedSchool.isLicensed;
+    final remainingDays = activeExpiry.difference(DateTime.now()).inDays;
+    final isActive = activeIsLicensed && remainingDays > 0;
+    final isExpiringSoon = isActive && remainingDays <= 15;
 
-        final activeExpiry = _editedExpiryDate ?? selectedSchool.licenseExpiresAt ?? DateTime.now();
-        final activeIsLicensed = _editedIsLicensed ?? selectedSchool.isLicensed;
-        final remainingDays = activeExpiry.difference(DateTime.now()).inDays;
-        final isActive = activeIsLicensed && remainingDays > 0;
-        final isExpiringSoon = isActive && remainingDays <= 15;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildPageHeader(
-                  title: 'Kurumsal Lisans & Yetkilendirme Paneli',
-                  subtitle: 'Tüm okulların lisans sürelerini denetleyin, uzatın ve güncelleyin.',
-                  badgeText: 'SİSTEM YÖNETİCİSİ MODU',
-                  badgeColor: AppColors.primary,
-                ),
-                // Okul Seçici Dropdown
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: selectedSchool.id,
-                      icon: const Icon(Icons.arrow_drop_down_rounded, color: AppColors.textDark),
-                      items: schools.map((s) {
-                        return DropdownMenuItem<String>(
-                          value: s.id,
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.school_rounded,
-                                size: 18,
-                                color: s.isLicenseActive ? AppColors.success : AppColors.danger,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '${s.name} (${s.city})',
-                                style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                  color: AppColors.textDark,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() {
-                            _selectedSchoolId = val;
-                            _editedExpiryDate = null;
-                            _editedIsLicensed = null;
-                            final next = schools.firstWhere((sc) => sc.id == val);
-                            _notesController.text = next.licenseNotes ?? '';
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                ),
-              ],
+            _buildPageHeader(
+              title: 'Kurumsal Lisans & Yetkilendirme Paneli',
+              subtitle: 'Tüm okulların lisans sürelerini denetleyin, uzatın ve güncelleyin.',
+              badgeText: 'SİSTEM YÖNETİCİSİ MODU',
+              badgeColor: AppColors.primary,
             ),
-            const SizedBox(height: 24),
-
-            // Hero Lisans Kartı
-            _buildHeroLicenseCard(
-              schoolName: selectedSchool.name,
-              city: selectedSchool.city,
-              isActive: isActive,
-              isExpiringSoon: isExpiringSoon,
-              remainingDays: remainingDays,
-              expiry: activeExpiry,
-              notes: selectedSchool.licenseNotes,
-            ),
-            const SizedBox(height: 24),
-
-            // Süper Admin Lisans Düzenleme Formu
+            // Okul Seçici Dropdown
             Container(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.border),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.03),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: selectedSchool.id,
+                  icon: const Icon(Icons.arrow_drop_down_rounded, color: AppColors.textDark),
+                  items: schools.map((s) {
+                    return DropdownMenuItem<String>(
+                      value: s.id,
+                      child: Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(Icons.edit_calendar_rounded, color: AppColors.primary, size: 22),
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Lisans Süresini Uzat & Değiştir',
-                                style: GoogleFonts.inter(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textDark,
-                                ),
-                              ),
-                              Text(
-                                'Aşağıdaki hızlı uzatma butonlarını veya takvim seçicisini kullanabilirsiniz.',
-                                style: GoogleFonts.inter(fontSize: 12, color: AppColors.textGrey),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      // Aktif / Pasif Switch
-                      Row(
-                        children: [
-                          Text(
-                            activeIsLicensed ? 'Lisans Yetkisi Açık' : 'Lisans Donduruldu',
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: activeIsLicensed ? AppColors.success : AppColors.danger,
-                            ),
+                          Icon(
+                            Icons.school_rounded,
+                            size: 18,
+                            color: s.isLicenseActive ? AppColors.success : AppColors.danger,
                           ),
                           const SizedBox(width: 8),
-                          Switch(
-                            value: activeIsLicensed,
-                            activeThumbColor: AppColors.success,
-                            onChanged: (val) => setState(() => _editedIsLicensed = val),
+                          Text(
+                            '${s.name} (${s.city}) - [${s.boardCount} Tahta]',
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _selectedSchoolId = val;
+                        _editedExpiryDate = null;
+                        _editedIsLicensed = null;
+                        final next = schools.firstWhere((sc) => sc.id == val);
+                        _notesController.text = next.licenseNotes ?? '';
+                      });
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // Hero Lisans Kartı
+        _buildHeroLicenseCard(
+          schoolName: selectedSchool.name,
+          city: selectedSchool.city,
+          isActive: isActive,
+          isExpiringSoon: isExpiringSoon,
+          remainingDays: remainingDays,
+          expiry: activeExpiry,
+          notes: selectedSchool.licenseNotes,
+        ),
+        const SizedBox(height: 24),
+
+        // Süper Admin Lisans Düzenleme Formu
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.edit_calendar_rounded, color: AppColors.primary, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Lisans Süresini Uzat & Değiştir',
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                          Text(
+                            'Aşağıdaki hızlı uzatma butonlarını veya takvim seçicisini kullanabilirsiniz.',
+                            style: GoogleFonts.inter(fontSize: 12, color: AppColors.textGrey),
                           ),
                         ],
                       ),
                     ],
                   ),
-                  const Divider(height: 32),
-
-                  // Hızlı Uzatma Çipleri
-                  Text(
-                    'Hızlı Süre Uzatma:',
-                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textDark),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
+                  // Aktif / Pasif Switch
+                  Row(
                     children: [
-                      _buildQuickChip(
-                        label: '+1 Ay Uzat',
-                        onTap: () {
-                          final base = activeExpiry.isAfter(DateTime.now()) ? activeExpiry : DateTime.now();
-                          setState(() {
-                            _editedExpiryDate = DateTime(base.year, base.month + 1, base.day, 23, 59, 59);
-                            _editedIsLicensed = true;
-                          });
-                        },
-                      ),
-                      _buildQuickChip(
-                        label: '+6 Ay Uzat',
-                        onTap: () {
-                          final base = activeExpiry.isAfter(DateTime.now()) ? activeExpiry : DateTime.now();
-                          setState(() {
-                            _editedExpiryDate = DateTime(base.year, base.month + 6, base.day, 23, 59, 59);
-                            _editedIsLicensed = true;
-                          });
-                        },
-                      ),
-                      _buildQuickChip(
-                        label: '+1 Yıl Uzat',
-                        isHighlighted: true,
-                        onTap: () {
-                          final base = activeExpiry.isAfter(DateTime.now()) ? activeExpiry : DateTime.now();
-                          setState(() {
-                            _editedExpiryDate = DateTime(base.year + 1, base.month, base.day, 23, 59, 59);
-                            _editedIsLicensed = true;
-                          });
-                        },
-                      ),
-                      _buildQuickChip(
-                        label: '+3 Yıl Uzat',
-                        onTap: () {
-                          final base = activeExpiry.isAfter(DateTime.now()) ? activeExpiry : DateTime.now();
-                          setState(() {
-                            _editedExpiryDate = DateTime(base.year + 3, base.month, base.day, 23, 59, 59);
-                            _editedIsLicensed = true;
-                          });
-                        },
-                      ),
-                      // Takvimden seç
-                      InkWell(
-                        onTap: () => _pickCustomDate(context, activeExpiry),
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: AppColors.bgPage,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: AppColors.primary),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.date_range_rounded, size: 16, color: AppColors.primary),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Takvimden Tarih Seç',
-                                style: GoogleFonts.inter(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
+                      Text(
+                        activeIsLicensed ? 'Lisans Yetkisi Açık' : 'Lisans Donduruldu',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: activeIsLicensed ? AppColors.success : AppColors.danger,
                         ),
+                      ),
+                      const SizedBox(width: 8),
+                      Switch(
+                        value: activeIsLicensed,
+                        activeThumbColor: AppColors.success,
+                        onChanged: (val) => setState(() => _editedIsLicensed = val),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                ],
+              ),
+              const Divider(height: 32),
 
-                  // Sözleşme Notu
-                  Text(
-                    'Lisans Sözleşme / Referans Notu:',
-                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textDark),
+              // Hızlı Uzatma Çipleri
+              Text(
+                'Hızlı Süre Uzatma:',
+                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textDark),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _buildQuickChip(
+                    label: '+1 Ay Uzat',
+                    onTap: () {
+                      final base = activeExpiry.isAfter(DateTime.now()) ? activeExpiry : DateTime.now();
+                      setState(() {
+                        _editedExpiryDate = DateTime(base.year, base.month + 1, base.day, 23, 59, 59);
+                        _editedIsLicensed = true;
+                      });
+                    },
                   ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _notesController,
-                    decoration: InputDecoration(
-                      hintText: 'Örn: MEB Protokolü 2026-2027 Eğitim Öğretim Yılı / Kurumsal Sözleşme No: 2026-TR-44',
-                      hintStyle: GoogleFonts.inter(fontSize: 12, color: AppColors.textGrey),
-                      filled: true,
-                      fillColor: AppColors.bgPage,
-                      border: OutlineInputBorder(
+                  _buildQuickChip(
+                    label: '+6 Ay Uzat',
+                    onTap: () {
+                      final base = activeExpiry.isAfter(DateTime.now()) ? activeExpiry : DateTime.now();
+                      setState(() {
+                        _editedExpiryDate = DateTime(base.year, base.month + 6, base.day, 23, 59, 59);
+                        _editedIsLicensed = true;
+                      });
+                    },
+                  ),
+                  _buildQuickChip(
+                    label: '+1 Yıl Uzat',
+                    isHighlighted: true,
+                    onTap: () {
+                      final base = activeExpiry.isAfter(DateTime.now()) ? activeExpiry : DateTime.now();
+                      setState(() {
+                        _editedExpiryDate = DateTime(base.year + 1, base.month, base.day, 23, 59, 59);
+                        _editedIsLicensed = true;
+                      });
+                    },
+                  ),
+                  _buildQuickChip(
+                    label: '+3 Yıl Uzat',
+                    onTap: () {
+                      final base = activeExpiry.isAfter(DateTime.now()) ? activeExpiry : DateTime.now();
+                      setState(() {
+                        _editedExpiryDate = DateTime(base.year + 3, base.month, base.day, 23, 59, 59);
+                        _editedIsLicensed = true;
+                      });
+                    },
+                  ),
+                  // Takvimden seç
+                  InkWell(
+                    onTap: () => _pickCustomDate(context, activeExpiry),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgPage,
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: AppColors.border),
+                        border: Border.all(color: AppColors.primary),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Kaydet Butonu
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: ElevatedButton.icon(
-                      onPressed: _isSaving ? null : () => _saveSuperAdminChanges(selectedSchool),
-                      icon: _isSaving
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.save_rounded, size: 18),
-                      label: Text(
-                        _isSaving ? 'Kaydediliyor...' : 'Lisans Değişikliklerini Kaydet',
-                        style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.date_range_rounded, size: 16, color: AppColors.primary),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Takvimden Tarih Seç',
+                            style: GoogleFonts.inter(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
-            // İstatistik ve İletişim kartı
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 3, child: _buildKurumInfoCard(selectedSchool, activeExpiry)),
-                const SizedBox(width: 20),
-                Expanded(flex: 2, child: _buildSupportContactCard()),
-              ],
-            ),
+              // Sözleşme Notu
+              Text(
+                'Lisans Sözleşme / Referans Notu:',
+                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textDark),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _notesController,
+                decoration: InputDecoration(
+                  hintText: 'Örn: MEB Protokolü 2026-2027 Eğitim Öğretim Yılı / Kurumsal Sözleşme No: 2026-TR-44',
+                  hintStyle: GoogleFonts.inter(fontSize: 12, color: AppColors.textGrey),
+                  filled: true,
+                  fillColor: AppColors.bgPage,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Kaydet Butonu
+              Align(
+                alignment: Alignment.centerRight,
+                child: ElevatedButton.icon(
+                  onPressed: _isSaving ? null : () => _saveSuperAdminChanges(selectedSchool),
+                  icon: _isSaving
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.save_rounded, size: 18),
+                  label: Text(
+                    _isSaving ? 'Kaydediliyor...' : 'Lisans Değişikliklerini Kaydet',
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // İstatistik ve İletişim kartı (Seçili Okulun Gerçek Sayılarıyla)
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(flex: 3, child: _buildKurumInfoCard(selectedSchool, activeExpiry)),
+            const SizedBox(width: 20),
+            Expanded(flex: 2, child: _buildSupportContactCard()),
           ],
-        );
-      },
+        ),
+      ],
     );
   }
 

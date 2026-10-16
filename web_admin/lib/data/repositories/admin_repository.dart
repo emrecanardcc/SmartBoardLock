@@ -246,6 +246,44 @@ class AdminRepository {
     }
   }
 
+  /// Okulun tahta ve yetkili öğretmen sayılarıyla detaylı bilgilerini çeker
+  Future<SchoolModel?> getSchoolDetails(String schoolId) async {
+    try {
+      final results = await Future.wait<dynamic>([
+        _db.from('schools').select().eq('id', schoolId).maybeSingle(),
+        _db.from('boards').select('id, is_online, is_locked').eq('school_id', schoolId),
+        _db.from('user_profiles').select('id, role').eq('school_id', schoolId),
+      ]);
+
+      if (results[0] == null) return null;
+      final schoolData = Map<String, dynamic>.from(results[0] as Map);
+      final boardsData = (results[1] as List);
+      final profilesData = (results[2] as List);
+
+      int teacherCount = 0;
+      int adminCount = 0;
+      for (final p in profilesData) {
+        final role = (p as Map)['role']?.toString();
+        if (role == 'admin') {
+          adminCount++;
+        } else {
+          teacherCount++;
+        }
+      }
+
+      final school = SchoolModel.fromMap(schoolData);
+      return school.copyWith(
+        boardCount: boardsData.length,
+        userCount: teacherCount,
+        teacherCount: teacherCount,
+        adminCount: adminCount,
+      );
+    } catch (e) {
+      debugPrint('getSchoolDetails error: $e');
+      return null;
+    }
+  }
+
   // ─────────────────────────── BOARDS ──────────────────────────────────────
 
   /// Realtime board stream — okul müdürü için school_id filtreli
