@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
@@ -9,8 +9,8 @@
 		<!-- Windows x64 -->
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 
-		<!-- SELF-CONTAINED -->
-		<SelfContained>true</SelfContained>
+		<!-- Framework-Dependent (Small footprint ~8MB) -->
+		<SelfContained>false</SelfContained>
 		<Version>2.0.8</Version>
 	</PropertyGroup>
 

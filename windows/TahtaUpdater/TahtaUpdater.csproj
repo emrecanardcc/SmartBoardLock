@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<!-- Konsol siyah ekranını tamamen iptal edip Windows formuna çevirir -->
@@ -12,9 +12,9 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 
-		<!-- SELF-CONTAINED -->
+		<!-- Framework-Dependent (Small footprint ~8MB) -->
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
-		<SelfContained>true</SelfContained>
+		<SelfContained>false</SelfContained>
 		<Version>2.0.8</Version>
 
 	</PropertyGroup>

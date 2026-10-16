@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
@@ -11,7 +11,7 @@
 		<Version>2.0.8</Version>
 
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
-		<SelfContained>true</SelfContained>
+		<SelfContained>false</SelfContained>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
 	</PropertyGroup>
 
