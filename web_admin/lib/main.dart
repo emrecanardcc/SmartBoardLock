@@ -7,10 +7,16 @@ import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'data/providers/auth_provider.dart';
 import 'data/providers/school_selector_provider.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'data/repositories/admin_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Türkçe tarih formatlama sembollerini başlat
+  try {
+    await initializeDateFormatting('tr_TR', null);
+  } catch (_) {}
 
   // Supabase başlatma
   await Supabase.initialize(

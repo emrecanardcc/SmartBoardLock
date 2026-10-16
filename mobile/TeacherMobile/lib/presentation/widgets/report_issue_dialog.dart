@@ -146,7 +146,7 @@ class _ReportIssueDialogState extends State<ReportIssueDialog> {
                 SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Sorun bildiriminiz Süper Admin teknik paneline iletildi.',
+                    'Sorun bildiriminiz Geliştirici & Teknik Destek Ekibine başarıyla iletildi.',
                     style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -239,7 +239,7 @@ class _ReportIssueDialogState extends State<ReportIssueDialog> {
                         ),
                       ),
                       Text(
-                        'Süper Admin teknik paneline doğrudan iletilir',
+                        'Geliştirici & Teknik Destek Ekibine doğrudan iletilir',
                         style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                       ),
                     ],

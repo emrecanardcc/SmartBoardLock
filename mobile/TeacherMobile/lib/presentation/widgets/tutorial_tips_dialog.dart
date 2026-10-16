@@ -193,7 +193,7 @@ class TutorialTipsDialog extends StatelessWidget {
         iconColor: const Color(0xFF8B5CF6),
         title: '5. Doğrudan Destek Talebi',
         description:
-            'Teknik destek gereken durumlarda Ayarlar menüsünden "Sorun Bildir" ekranı ile Süper Admin teknik paneline arıza kaydı bırakabilirsiniz.',
+            'Teknik destek gereken durumlarda Ayarlar menüsünden "Sorun Bildir" ekranı ile Geliştirici & Teknik Destek Ekibine arıza kaydı bırakabilirsiniz.',
       ),
     ];
   }

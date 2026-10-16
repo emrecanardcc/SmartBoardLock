@@ -749,7 +749,7 @@ class _SuperSchoolsScreenState extends State<SuperSchoolsScreen> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    'Bitiş: ${DateFormat('dd MMMM yyyy', 'tr_TR').format(licenseExpiry)} '
+                                    'Bitiş: ${_formatDateTr(licenseExpiry)} '
                                     '(${licenseExpiry.difference(DateTime.now()).inDays} gün kaldı)',
                                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                                   ),
@@ -866,6 +866,14 @@ class _SuperSchoolsScreenState extends State<SuperSchoolsScreen> {
         ),
       ),
     );
+  }
+
+  String _formatDateTr(DateTime date) {
+    const months = [
+      'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+      'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
   Widget _buildDurationChip({
