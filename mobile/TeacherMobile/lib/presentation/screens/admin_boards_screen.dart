@@ -35,6 +35,8 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
   String? _adminName;
   bool _isLoadingProfile = true;
   bool _isSchoolLicensed = true;
+  DateTime? _licenseExpiresAt;
+  int _remainingLicenseDays = 0;
 
   // Sayfalama (Lazy Loading) ve Filtreleme
   final List<Map<String, dynamic>> _boards = [];
@@ -107,6 +109,13 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
         final schoolData = await _client.from('schools').select('name, is_licensed, license_expires_at').eq('id', _schoolId!).maybeSingle();
         _schoolName = schoolData?['name'];
         _isSchoolLicensed = _evalLicense(schoolData);
+        final expStr = schoolData?['license_expires_at'] as String?;
+        if (expStr != null && expStr.isNotEmpty) {
+          _licenseExpiresAt = DateTime.tryParse(expStr);
+          if (_licenseExpiresAt != null) {
+            _remainingLicenseDays = _licenseExpiresAt!.difference(DateTime.now()).inDays;
+          }
+        }
       }
     } catch (_) {}
     setState(() => _isLoadingProfile = false);
@@ -201,6 +210,13 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
               _isSchoolLicensed = _evalLicense(payload.newRecord);
               if (payload.newRecord['name'] != null) {
                 _schoolName = payload.newRecord['name'];
+              }
+              final expStr = payload.newRecord['license_expires_at'] as String?;
+              if (expStr != null && expStr.isNotEmpty) {
+                _licenseExpiresAt = DateTime.tryParse(expStr);
+                if (_licenseExpiresAt != null) {
+                  _remainingLicenseDays = _licenseExpiresAt!.difference(DateTime.now()).inDays;
+                }
               }
             });
           }
@@ -552,9 +568,103 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 12),
+
+            // Kurumsal Lisans Kartı
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _isSchoolLicensed && _remainingLicenseDays > 0
+                    ? successGreen.withValues(alpha: 0.08)
+                    : dangerRed.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: _isSchoolLicensed && _remainingLicenseDays > 0
+                      ? successGreen.withValues(alpha: 0.3)
+                      : dangerRed.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: _isSchoolLicensed && _remainingLicenseDays > 0
+                        ? successGreen.withValues(alpha: 0.15)
+                        : dangerRed.withValues(alpha: 0.15),
+                    child: Icon(
+                      _isSchoolLicensed && _remainingLicenseDays > 0
+                          ? Icons.verified_user_rounded
+                          : Icons.gpp_bad_rounded,
+                      color: _isSchoolLicensed && _remainingLicenseDays > 0
+                          ? successGreen
+                          : dangerRed,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _isSchoolLicensed && _remainingLicenseDays > 0
+                              ? 'Kurumsal Lisans: Aktif'
+                              : 'Lisans Süresi Sona Erdi',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: _isSchoolLicensed && _remainingLicenseDays > 0
+                                ? successGreen
+                                : dangerRed,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _isSchoolLicensed && _remainingLicenseDays > 0
+                              ? '$_remainingLicenseDays gün kaldı • Bitiş: ${_formatDateTr(_licenseExpiresAt)}'
+                              : 'Lisans doldu. Destek: emrecanardc.dev@gmail.com',
+                          style: const TextStyle(fontSize: 11, color: textGrey),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: _isSchoolLicensed && _remainingLicenseDays > 0
+                          ? successGreen
+                          : dangerRed,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _isSchoolLicensed && _remainingLicenseDays > 0
+                          ? '$_remainingLicenseDays GÜN'
+                          : 'SÜRE BİTTİ',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
 
             // Seçenekler
+            _buildSettingsActionItem(
+              icon: Icons.verified_user_rounded,
+              iconColor: _isSchoolLicensed && _remainingLicenseDays > 0 ? successGreen : dangerRed,
+              title: 'Kurumsal Lisans Detayları',
+              subtitle: _isSchoolLicensed && _remainingLicenseDays > 0
+                  ? 'Kalan gün ve lisans sözleşme bilgilerini inceleyin'
+                  : 'Lisans doldu - Yenileme ve iletişim bilgileri',
+              onTap: () {
+                Navigator.pop(ctx);
+                _showLicenseDetailsModal(context);
+              },
+            ),
             _buildSettingsActionItem(
               icon: Icons.group_rounded,
               iconColor: primaryBlue,
@@ -644,6 +754,137 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
       subtitle: Text(subtitle, style: const TextStyle(color: textGrey, fontSize: 11)),
       trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: textGrey),
       onTap: onTap,
+    );
+  }
+
+  String _formatDateTr(DateTime? date) {
+    if (date == null) return '-';
+    const months = [
+      'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+      'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+
+  void _showLicenseDetailsModal(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(
+              _isSchoolLicensed && _remainingLicenseDays > 0 ? Icons.verified_user_rounded : Icons.gpp_bad_rounded,
+              color: _isSchoolLicensed && _remainingLicenseDays > 0 ? successGreen : dangerRed,
+              size: 26,
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'Kurumsal Lisans',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textDark),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: bgLight,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_schoolName ?? 'Kurum Adı', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textDark)),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Text('Lisans Durumu: ', style: TextStyle(fontSize: 12, color: textGrey)),
+                      Text(
+                        _isSchoolLicensed && _remainingLicenseDays > 0 ? 'Aktif' : 'Süresi Doldu',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: _isSchoolLicensed && _remainingLicenseDays > 0 ? successGreen : dangerRed,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Text('Kalan Süre: ', style: TextStyle(fontSize: 12, color: textGrey)),
+                      Text(
+                        _isSchoolLicensed && _remainingLicenseDays > 0 ? '$_remainingLicenseDays Gün' : '0 Gün',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textDark),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Text('Bitiş Tarihi: ', style: TextStyle(fontSize: 12, color: textGrey)),
+                      Text(
+                        _formatDateTr(_licenseExpiresAt),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textDark),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Lisans Yenileme & Destek:',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textDark),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Lisans sürenizi uzatmak veya yeni akıllı tahta lisansı tanımlamak için Teknik Destek Ekibi ile iletişime geçebilirsiniz.',
+              style: TextStyle(fontSize: 11, color: textGrey, height: 1.3),
+            ),
+            const SizedBox(height: 10),
+            InkWell(
+              onTap: () {
+                Clipboard.setData(const ClipboardData(text: 'emrecanardc.dev@gmail.com'));
+                _showModernSnackbar('Destek e-posta adresi panoya kopyalandı.', isSuccess: true, bgColor: textDark);
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: primaryBlue.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: primaryBlue.withValues(alpha: 0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.email_outlined, size: 16, color: primaryBlue),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'emrecanardc.dev@gmail.com',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: primaryBlue),
+                      ),
+                    ),
+                    Icon(Icons.copy_rounded, size: 14, color: primaryBlue),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Kapat', style: TextStyle(fontWeight: FontWeight.bold, color: textGrey)),
+          ),
+        ],
+      ),
     );
   }
 

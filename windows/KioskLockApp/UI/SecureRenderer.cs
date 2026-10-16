@@ -84,6 +84,7 @@ namespace KioskLockApp.UI
                     currentPosterIndex = (currentPosterIndex + 1) % activePosterPaths.Count;
                     RefreshPosterImageOnly();
                 }
+                RotateAnnouncementsIfNeeded();
             };
             posterSlideshowTimer.Start();
 

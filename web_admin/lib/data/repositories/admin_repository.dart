@@ -186,6 +186,29 @@ class AdminRepository {
     }
   }
 
+  Future<void> updateSchoolLicense({
+    required String schoolId,
+    required bool isLicensed,
+    required DateTime licenseExpiresAt,
+    String? licenseNotes,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        'is_licensed': isLicensed,
+        'license_expires_at': licenseExpiresAt.toIso8601String(),
+      };
+      if (licenseNotes != null) payload['license_notes'] = licenseNotes.trim();
+
+      await _db
+          .from('schools')
+          .update(payload)
+          .eq('id', schoolId);
+    } catch (e) {
+      debugPrint('updateSchoolLicense error: $e');
+      rethrow;
+    }
+  }
+
   Future<void> deleteSchool(String schoolId) async {
     try {
       await _db.from('schools').delete().eq('id', schoolId);

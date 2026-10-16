@@ -47,6 +47,8 @@ namespace KioskLockApp.UI
         private FlowLayoutPanel pnlAnnouncementsList;
         private int currentPosterIndex = 0;
         private List<string> activePosterPaths = new List<string>();
+        private int announcementPageIndex = 0;
+        private List<MediaItem> cachedAnnouncements = new List<MediaItem>();
 
         // Layout Konteynerleri
         private TableLayoutPanel root;
@@ -326,14 +328,14 @@ namespace KioskLockApp.UI
         {
             FluentCard card = new FluentCard(S(16)) { Dock = DockStyle.Fill, Margin = new Padding(S(10)) };
             TableLayoutPanel layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(S(14)) };
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, S(56)));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, S(66)));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
             TableLayoutPanel header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
-            header.RowStyles.Add(new RowStyle(SizeType.Percent, 60F));
-            header.RowStyles.Add(new RowStyle(SizeType.Percent, 40F));
-            lblDuyuruTitle = new Label { Text = "DUYURULAR", Font = new Font("Segoe UI", 17, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomLeft };
-            lblDuyuruSub = new Label { Text = "Güncel Okul Duyuruları", Font = new Font("Segoe UI", 10.5f), ForeColor = ColTextSec, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopLeft };
+            header.RowStyles.Add(new RowStyle(SizeType.Percent, 58F));
+            header.RowStyles.Add(new RowStyle(SizeType.Percent, 42F));
+            lblDuyuruTitle = new Label { Text = "DUYURULAR", Font = new Font("Segoe UI", 18, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomLeft };
+            lblDuyuruSub = new Label { Text = "Güncel Okul Duyuruları", Font = new Font("Segoe UI", 11f), ForeColor = ColTextSec, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopLeft };
             header.Controls.Add(lblDuyuruTitle, 0, 0);
             header.Controls.Add(lblDuyuruSub, 0, 1);
             layout.Controls.Add(header, 0, 0);
@@ -341,13 +343,13 @@ namespace KioskLockApp.UI
             pnlAnnouncementsList = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                AutoScroll = true,
+                AutoScroll = false, // KESİNLİKLE scrollbar / slidebar olmayacak
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
-                Padding = new Padding(0, S(6), 0, 0),
+                Padding = new Padding(0, S(4), 0, 0),
                 BackColor = Color.Transparent
             };
-            pnlAnnouncementsList.Resize += (s, e) => AdjustAnnouncementCardSizes();
+            pnlAnnouncementsList.Resize += (s, e) => RenderAnnouncementCards();
             layout.Controls.Add(pnlAnnouncementsList, 0, 1);
 
             card.Controls.Add(layout);
@@ -446,8 +448,8 @@ namespace KioskLockApp.UI
             if (lblAfisSub != null) lblAfisSub.Font = new Font("Segoe UI", Math.Max(8f, 10.5f * uniformScale), FontStyle.Regular);
             if (lblPosterCounter != null) lblPosterCounter.Font = new Font("Segoe UI", Math.Max(8f, 10f * uniformScale), FontStyle.Bold);
 
-            if (lblDuyuruTitle != null) lblDuyuruTitle.Font = new Font("Segoe UI", Math.Max(11f, 17f * uniformScale), FontStyle.Bold);
-            if (lblDuyuruSub != null) lblDuyuruSub.Font = new Font("Segoe UI", Math.Max(8f, 10.5f * uniformScale), FontStyle.Regular);
+            if (lblDuyuruTitle != null) lblDuyuruTitle.Font = new Font("Segoe UI", Math.Max(14f, 20f * uniformScale), FontStyle.Bold);
+            if (lblDuyuruSub != null) lblDuyuruSub.Font = new Font("Segoe UI", Math.Max(9.5f, 12f * uniformScale), FontStyle.Regular);
 
             // 4. Numpad Buton Fontları
             if (numpadButtons != null && numpadButtons.Count > 0)
@@ -463,54 +465,205 @@ namespace KioskLockApp.UI
             // 5. Duyuru kartları boyutlandırma
             float col1Percent = (mainGrid != null && mainGrid.ColumnStyles.Count > 1) ? mainGrid.ColumnStyles[1].Width / 100f : 0.32f;
             int simColWidth = (int)(w * col1Percent) - S(25);
-            AdjustAnnouncementCardSizes(simColWidth);
+            int simColHeight = (int)(h * 0.82f) - S(90);
+            RenderAnnouncementCards(simColWidth, simColHeight, uniformScale);
+        }
+
+        public int GetVisibleAnnouncementCount(int simulatedHeight = 0)
+        {
+            int h = simulatedHeight > 0 
+                ? simulatedHeight 
+                : (pnlAnnouncementsList != null && pnlAnnouncementsList.ClientSize.Height > 50 
+                    ? pnlAnnouncementsList.ClientSize.Height 
+                    : (int)(this.ClientSize.Height * 0.65f));
+
+            if (h < 500) return 2;
+            if (h < 950) return 2;
+            if (h < 1500) return 3;
+            return 4;
+        }
+
+        public void RotateAnnouncementsIfNeeded()
+        {
+            if (pnlAnnouncementsList == null || pnlAnnouncementsList.IsDisposed) return;
+            if (cachedAnnouncements == null || cachedAnnouncements.Count == 0) return;
+
+            int visibleCount = GetVisibleAnnouncementCount();
+            if (cachedAnnouncements.Count <= visibleCount) return;
+
+            int totalPages = (int)Math.Ceiling((double)cachedAnnouncements.Count / visibleCount);
+            announcementPageIndex = (announcementPageIndex + 1) % totalPages;
+            RenderAnnouncementCards();
         }
 
         public void AdjustAnnouncementCardSizes(int simulatedParentWidth = 0)
         {
+            RenderAnnouncementCards(simulatedParentWidth);
+        }
+
+        public void RenderAnnouncementCards(int simulatedParentWidth = 0, int simulatedParentHeight = 0, float? customScale = null)
+        {
             if (pnlAnnouncementsList == null || pnlAnnouncementsList.IsDisposed) return;
 
-            int containerW = simulatedParentWidth > 0 
-                ? simulatedParentWidth 
-                : pnlAnnouncementsList.ClientSize.Width;
-
-            if (containerW <= 50 && mainGrid != null && this.ClientSize.Width > 100)
+            int w = simulatedParentWidth > 0 ? simulatedParentWidth : pnlAnnouncementsList.ClientSize.Width;
+            if (w <= 50 && mainGrid != null && this.ClientSize.Width > 100)
             {
                 float colPercent = mainGrid.ColumnStyles.Count > 1 ? mainGrid.ColumnStyles[1].Width / 100f : 0.32f;
-                containerW = (int)(this.ClientSize.Width * colPercent) - S(25);
+                w = (int)(this.ClientSize.Width * colPercent) - S(25);
             }
+            int targetWidth = Math.Max(50, w - S(10));
 
-            int targetWidth = containerW - S(10);
-            if (targetWidth < 50) return;
+            int h = simulatedParentHeight > 0 
+                ? simulatedParentHeight 
+                : (pnlAnnouncementsList.ClientSize.Height > 50 
+                    ? pnlAnnouncementsList.ClientSize.Height 
+                    : (int)(this.ClientSize.Height * 0.65f));
+
+            float scaleH = Math.Max(0.65f, Math.Min(1.8f, this.ClientSize.Height / 1080f));
+            float scaleW = Math.Max(0.65f, Math.Min(1.8f, this.ClientSize.Width / 1920f));
+            float uniformScale = customScale ?? Math.Min(scaleW, scaleH);
 
             pnlAnnouncementsList.SuspendLayout();
-            int maxTextWidth = Math.Max(50, targetWidth - S(48));
+            pnlAnnouncementsList.Controls.Clear();
 
-            foreach (Control ctrl in pnlAnnouncementsList.Controls)
+            if (cachedAnnouncements == null || cachedAnnouncements.Count == 0)
             {
-                if (ctrl is FluentCard card)
+                FluentCard emptyCard = new FluentCard(S(12))
                 {
-                    card.AutoSize = false;
-                    card.Width = targetWidth;
+                    Width = targetWidth,
+                    Height = Math.Min(Math.Max(S(90), h - S(10)), S(180)),
+                    Margin = new Padding(0, 0, 0, S(10)),
+                    BackColor = Color.White
+                };
+                TableLayoutPanel emptyLayout = new TableLayoutPanel
+                {
+                    Dock = DockStyle.Fill,
+                    RowCount = 2,
+                    ColumnCount = 1,
+                    Padding = new Padding(S(16))
+                };
+                emptyLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 40F));
+                emptyLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 60F));
 
-                    foreach (Control inner in card.Controls)
-                    {
-                        if (inner is TableLayoutPanel tbl)
-                        {
-                            tbl.Width = targetWidth;
-                            foreach (Control tblChild in tbl.Controls)
-                            {
-                                if (tblChild is Label lbl)
-                                {
-                                    lbl.MaximumSize = new Size(maxTextWidth, 0);
-                                }
-                            }
-                            int prefH = tbl.GetPreferredSize(new Size(targetWidth, 0)).Height;
-                            card.Height = Math.Max(S(50), prefH);
-                        }
-                    }
+                Label lblEmptyTitle = new Label
+                {
+                    Text = "📢 Aktif Okul Duyurusu Yok",
+                    Font = new Font("Segoe UI", Math.Max(13f, 17f * uniformScale), FontStyle.Bold),
+                    ForeColor = ColTextMain,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleLeft
+                };
+                Label lblEmptySub = new Label
+                {
+                    Text = "Yönetim tarafından yayınlanan genel bilgilendirmeler ve duyurular bu ekranda otomatik olarak görüntülenecektir.",
+                    Font = new Font("Segoe UI", Math.Max(11f, 14f * uniformScale), FontStyle.Regular),
+                    ForeColor = Color.FromArgb(51, 65, 85),
+                    Dock = DockStyle.Fill,
+                    AutoEllipsis = true
+                };
+                emptyLayout.Controls.Add(lblEmptyTitle, 0, 0);
+                emptyLayout.Controls.Add(lblEmptySub, 0, 1);
+                emptyCard.Controls.Add(emptyLayout);
+                pnlAnnouncementsList.Controls.Add(emptyCard);
+
+                if (lblDuyuruSub != null) lblDuyuruSub.Text = "Yayında Duyuru Yok";
+                pnlAnnouncementsList.ResumeLayout();
+                return;
+            }
+
+            int visibleCount = GetVisibleAnnouncementCount(h);
+            int totalPages = (int)Math.Ceiling((double)cachedAnnouncements.Count / visibleCount);
+            if (announcementPageIndex >= totalPages) announcementPageIndex = 0;
+
+            var pageItems = new List<MediaItem>();
+            int startIndex = announcementPageIndex * visibleCount;
+            for (int i = startIndex; i < Math.Min(startIndex + visibleCount, cachedAnnouncements.Count); i++)
+            {
+                pageItems.Add(cachedAnnouncements[i]);
+            }
+
+            if (lblDuyuruSub != null)
+            {
+                if (totalPages > 1)
+                {
+                    lblDuyuruSub.Text = $"Sayfa {announcementPageIndex + 1}/{totalPages} • {cachedAnnouncements.Count} Aktif Duyuru";
+                }
+                else
+                {
+                    lblDuyuruSub.Text = "Güncel Okul Duyuruları";
                 }
             }
+
+            int totalGap = (pageItems.Count - 1) * S(12);
+            int cardH = Math.Max(S(90), (h - totalGap - S(8)) / Math.Max(1, pageItems.Count));
+            int maxTextW = Math.Max(50, targetWidth - S(32));
+
+            foreach (var ann in pageItems)
+            {
+                FluentCard card = new FluentCard(S(12))
+                {
+                    Width = targetWidth,
+                    Height = cardH,
+                    Margin = new Padding(0, 0, 0, S(12)),
+                    BackColor = Color.White
+                };
+
+                TableLayoutPanel cardLayout = new TableLayoutPanel
+                {
+                    Dock = DockStyle.Fill,
+                    RowCount = 3,
+                    ColumnCount = 1,
+                    Padding = new Padding(S(16), S(10), S(16), S(10))
+                };
+                cardLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, S(28)));
+                cardLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));
+                cardLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 65F));
+
+                Panel badgePanel = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0), BackColor = Color.Transparent };
+                Label lblBadge = new Label
+                {
+                    Text = ann.Id.StartsWith("default") ? "📢 GENEL BİLGİLENDİRME" : "📌 OKUL DUYURUSU",
+                    Font = new Font("Segoe UI", Math.Max(8.5f, 10f * uniformScale), FontStyle.Bold),
+                    ForeColor = Color.FromArgb(37, 99, 235),
+                    BackColor = Color.FromArgb(239, 246, 255),
+                    AutoSize = true,
+                    Padding = new Padding(S(8), S(2), S(8), S(2)),
+                    Location = new Point(0, 0)
+                };
+                badgePanel.Controls.Add(lblBadge);
+
+                Label lblTitle = new Label
+                {
+                    Text = ann.Title,
+                    Font = new Font("Segoe UI", Math.Max(13.5f, 17.5f * uniformScale), FontStyle.Bold),
+                    ForeColor = Color.FromArgb(15, 23, 42),
+                    Dock = DockStyle.Fill,
+                    AutoEllipsis = true,
+                    MaximumSize = new Size(maxTextW, 0),
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Margin = new Padding(0, S(2), 0, S(2))
+                };
+
+                Label lblContent = new Label
+                {
+                    Text = ann.Content,
+                    Font = new Font("Segoe UI", Math.Max(11.5f, 14.5f * uniformScale), FontStyle.Regular),
+                    ForeColor = Color.FromArgb(30, 41, 59),
+                    Dock = DockStyle.Fill,
+                    AutoEllipsis = true,
+                    MaximumSize = new Size(maxTextW, 0),
+                    TextAlign = ContentAlignment.TopLeft,
+                    Margin = new Padding(0)
+                };
+
+                cardLayout.Controls.Add(badgePanel, 0, 0);
+                cardLayout.Controls.Add(lblTitle, 0, 1);
+                cardLayout.Controls.Add(lblContent, 0, 2);
+
+                card.Controls.Add(cardLayout);
+                pnlAnnouncementsList.Controls.Add(card);
+            }
+
             pnlAnnouncementsList.ResumeLayout();
         }
 
@@ -542,88 +695,9 @@ namespace KioskLockApp.UI
                 RefreshPosterImageOnly();
 
                 // 2. Duyuruları güncelle
-                var announcements = MediaManager.GetActiveAnnouncements();
-                if (pnlAnnouncementsList != null)
-                {
-                    pnlAnnouncementsList.SuspendLayout();
-                    pnlAnnouncementsList.Controls.Clear();
-
-                    int panelW = pnlAnnouncementsList.ClientSize.Width;
-                    if (panelW <= 50 && mainGrid != null && this.ClientSize.Width > 100)
-                    {
-                        float col1Pct = mainGrid.ColumnStyles.Count > 1 ? mainGrid.ColumnStyles[1].Width / 100f : 0.32f;
-                        panelW = (int)(this.ClientSize.Width * col1Pct) - S(25);
-                    }
-                    int itemWidth = panelW > 50 ? panelW - S(10) : S(300);
-
-                    foreach (var ann in announcements)
-                    {
-                        FluentCard itemCard = new FluentCard(S(10))
-                        {
-                            Width = itemWidth,
-                            Height = S(70),
-                            AutoSize = false,
-                            Margin = new Padding(0, 0, 0, S(10)),
-                            BackColor = Color.FromArgb(248, 250, 252)
-                        };
-
-                        TableLayoutPanel itemLayout = new TableLayoutPanel
-                        {
-                            Dock = DockStyle.Top,
-                            Width = itemWidth,
-                            MaximumSize = new Size(itemWidth, 0),
-                            AutoSize = true,
-                            RowCount = 2,
-                            ColumnCount = 2,
-                            Padding = new Padding(S(10))
-                        };
-                        itemLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, S(34)));
-                        itemLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-
-                        Label lblIcon = new Label
-                        {
-                            Text = ann.Id.StartsWith("default") ? "📢" : "📌",
-                            Font = new Font("Segoe UI", 15),
-                            AutoSize = false,
-                            Size = new Size(S(30), S(30)),
-                            TextAlign = ContentAlignment.TopCenter
-                        };
-
-                        int maxTextW = Math.Max(50, itemWidth - S(48));
-
-                        Label lblTitle = new Label
-                        {
-                            Text = ann.Title,
-                            Font = new Font("Segoe UI", 11.5f, FontStyle.Bold),
-                            ForeColor = ColTextMain,
-                            AutoSize = true,
-                            AutoEllipsis = true,
-                            MaximumSize = new Size(maxTextW, 0),
-                            Dock = DockStyle.Fill,
-                            Margin = new Padding(0, 0, 0, S(3))
-                        };
-
-                        Label lblContent = new Label
-                        {
-                            Text = ann.Content,
-                            Font = new Font("Segoe UI", 9.5f),
-                            ForeColor = ColTextSec,
-                            AutoSize = true,
-                            MaximumSize = new Size(maxTextW, 0),
-                            Dock = DockStyle.Fill
-                        };
-
-                        itemLayout.Controls.Add(lblIcon, 0, 0);
-                        itemLayout.SetRowSpan(lblIcon, 2);
-                        itemLayout.Controls.Add(lblTitle, 1, 0);
-                        itemLayout.Controls.Add(lblContent, 1, 1);
-
-                        itemCard.Controls.Add(itemLayout);
-                        pnlAnnouncementsList.Controls.Add(itemCard);
-                    }
-
-                    pnlAnnouncementsList.ResumeLayout();
-                }
+                cachedAnnouncements = MediaManager.GetActiveAnnouncements();
+                announcementPageIndex = 0;
+                RenderAnnouncementCards();
             }
             catch (Exception ex)
             {

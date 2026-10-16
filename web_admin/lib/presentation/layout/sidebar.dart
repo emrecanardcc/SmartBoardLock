@@ -39,6 +39,11 @@ const List<SidebarItem> _sidebarItems = [
     route: '/teachers',
   ),
   SidebarItem(
+    label: 'Kurumsal Lisans',
+    icon: Icons.verified_user_rounded,
+    route: '/license',
+  ),
+  SidebarItem(
     label: 'Okul Yönetimi',
     icon: Icons.school_rounded,
     route: '/schools',
