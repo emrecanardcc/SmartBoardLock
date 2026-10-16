@@ -6,6 +6,7 @@ import '../../data/models/user_profile_model.dart';
 import '../../data/providers/auth_provider.dart';
 import '../../data/providers/school_selector_provider.dart';
 import '../../data/repositories/admin_repository.dart';
+import '../widgets/tips_guide_dialog.dart';
 
 class TopBar extends StatefulWidget {
   final String title;
@@ -47,6 +48,21 @@ class _TopBarState extends State<TopBar> {
           _RealtimeIndicator(connected: _isRealtimeConnected),
 
           const SizedBox(width: 16),
+
+          // İpuçları & Rehber Butonu
+          OutlinedButton.icon(
+            icon: const Icon(Icons.lightbulb_outline_rounded, size: 16, color: AppColors.primary),
+            label: const Text('Rehber & İpuçları'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: const BorderSide(color: AppColors.border),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => showTipsGuideDialog(context, isSuperAdmin: authProvider.isSuperAdmin),
+          ),
+
+          const SizedBox(width: 14),
 
           // Kullanıcı bilgisi + Çıkış
           _UserChip(user: user, onSignOut: () async {

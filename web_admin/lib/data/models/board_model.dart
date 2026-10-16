@@ -25,7 +25,7 @@ class BoardModel {
     this.schoolId,
     required this.name,
     required this.isUnlocked,
-    required this.autoLockMinutes,
+    this.autoLockMinutes = 15,
     this.lastPingAt,
     required this.createdAt,
     this.offlineSecret,

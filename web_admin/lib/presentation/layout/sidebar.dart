@@ -50,6 +50,12 @@ const List<SidebarItem> _sidebarItems = [
     route: '/versions',
     superAdminOnly: true,
   ),
+  SidebarItem(
+    label: 'Sorun Bildirimleri',
+    icon: Icons.support_agent_rounded,
+    route: '/issues',
+    superAdminOnly: true,
+  ),
 ];
 
 class AppSidebar extends StatelessWidget {

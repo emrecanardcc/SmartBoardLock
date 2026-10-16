@@ -162,7 +162,6 @@ class _BoardsManageScreenState extends State<BoardsManageScreen> {
                       required name,
                       grade,
                       branch,
-                      required autoLockMinutes,
                     }) async {
                       await repo.pairBoard(
                         pairingCode: pairingCode,
@@ -170,7 +169,6 @@ class _BoardsManageScreenState extends State<BoardsManageScreen> {
                         name: name,
                         grade: grade,
                         branch: branch,
-                        autoLockMinutes: autoLockMinutes,
                       );
                       _initBoards(schoolId);
                       if (context.mounted) {
@@ -187,7 +185,6 @@ class _BoardsManageScreenState extends State<BoardsManageScreen> {
                       required name,
                       grade,
                       branch,
-                      required autoLockMinutes,
                       required isActive,
                     }) async {},
                   ),
@@ -292,7 +289,7 @@ class _BoardsManageScreenState extends State<BoardsManageScreen> {
                                     DataColumn(label: Text('KİLİT DURUMU')),
                                     DataColumn(label: Text('CİHAZ DURUMU')),
                                     DataColumn(label: Text('SÜRÜM')),
-                                    DataColumn(label: Text('OTO KİLİT')),
+
                                     DataColumn(label: Text('İŞLEMLER')),
                                   ],
                                   rows: boards.map((board) {
@@ -317,7 +314,7 @@ class _BoardsManageScreenState extends State<BoardsManageScreen> {
                                                 : AppColors.textGrey,
                                           ),
                                         )),
-                                        DataCell(Text('${board.autoLockMinutes} dk')),
+
                                         DataCell(
                                           Row(
                                             mainAxisSize: MainAxisSize.min,
@@ -333,8 +330,6 @@ class _BoardsManageScreenState extends State<BoardsManageScreen> {
                                                     'name': board.name,
                                                     'grade': board.grade ?? '',
                                                     'branch': board.branch ?? '',
-                                                    'auto_lock_minutes':
-                                                        board.autoLockMinutes,
                                                     'is_active': board.isActive,
                                                   },
                                                   schoolId: board.schoolId ?? '',
@@ -343,14 +338,12 @@ class _BoardsManageScreenState extends State<BoardsManageScreen> {
                                                     required name,
                                                     grade,
                                                     branch,
-                                                    required autoLockMinutes,
                                                   }) async {},
                                                   onUpdate: ({
                                                     required boardId,
                                                     required name,
                                                     grade,
                                                     branch,
-                                                    required autoLockMinutes,
                                                     required isActive,
                                                   }) async {
                                                     await repo.updateBoard(
@@ -358,7 +351,6 @@ class _BoardsManageScreenState extends State<BoardsManageScreen> {
                                                       name: name,
                                                       grade: grade,
                                                       branch: branch,
-                                                      autoLockMinutes: autoLockMinutes,
                                                       isActive: isActive,
                                                     );
                                                     _initBoards(schoolId);

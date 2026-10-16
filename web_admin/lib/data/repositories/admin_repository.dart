@@ -8,6 +8,7 @@ import '../models/board_model.dart';
 import '../models/user_profile_model.dart';
 import '../models/app_version_model.dart';
 import '../models/broadcast_package_model.dart';
+import '../models/support_ticket_model.dart';
 import '../../core/constants/app_constants.dart';
 
 class AdminRepository {
@@ -250,16 +251,19 @@ class AdminRepository {
     required String name,
     String? grade,
     String? branch,
-    required int autoLockMinutes,
+    int? autoLockMinutes,
     required bool isActive,
   }) async {
-    await _db.from('boards').update({
+    final data = <String, dynamic>{
       'name': name.trim(),
       'grade': grade?.trim() ?? '',
       'branch': branch?.trim() ?? '',
-      'auto_lock_minutes': autoLockMinutes,
       'is_active': isActive,
-    }).eq('id', boardId);
+    };
+    if (autoLockMinutes != null) {
+      data['auto_lock_minutes'] = autoLockMinutes;
+    }
+    await _db.from('boards').update(data).eq('id', boardId);
   }
 
   Future<void> deleteBoard(String boardId) async {
@@ -274,6 +278,19 @@ class AdminRepository {
       }).eq('id', boardId);
     } catch (e) {
       debugPrint('sendRemoteShutdown error: $e');
+      rethrow;
+    }
+  }
+
+  /// Birden fazla akıllı tahtayı toplu olarak uzaktan kapatma komutu gönderir
+  Future<void> sendBulkRemoteShutdown(List<String> boardIds) async {
+    try {
+      if (boardIds.isEmpty) return;
+      await _db.from('boards').update({
+        'remote_command': 'SHUTDOWN',
+      }).filter('id', 'in', boardIds);
+    } catch (e) {
+      debugPrint('sendBulkRemoteShutdown error: $e');
       rethrow;
     }
   }
@@ -310,7 +327,7 @@ class AdminRepository {
     required String name,
     String? grade,
     String? branch,
-    required int autoLockMinutes,
+    int? autoLockMinutes,
   }) async {
     // 1. Pairing kaydını bul
     final pairingData = await _client
@@ -328,18 +345,22 @@ class AdminRepository {
     final offlineSecret = _generateOfflineSecret();
 
     // 3. Boards tablosuna ekle
+    final insertData = <String, dynamic>{
+      'school_id': schoolId,
+      'name': name.trim(),
+      'grade': grade?.trim() ?? '',
+      'branch': branch?.trim() ?? '',
+      'is_active': true,
+      'is_unlocked': false,
+      'offline_secret': offlineSecret,
+    };
+    if (autoLockMinutes != null) {
+      insertData['auto_lock_minutes'] = autoLockMinutes;
+    }
+
     final boardResponse = await _client
         .from('boards')
-        .insert({
-          'school_id': schoolId,
-          'name': name.trim(),
-          'grade': grade?.trim() ?? '',
-          'branch': branch?.trim() ?? '',
-          'is_active': true,
-          'is_unlocked': false,
-          'auto_lock_minutes': autoLockMinutes,
-          'offline_secret': offlineSecret,
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -1224,5 +1245,63 @@ class AdminRepository {
       debugPrint('cleanupTemporaryMediaFiles hatası: $e');
       return 0;
     }
+  }
+
+  // ────────────────────────── SUPPORT TICKETS ───────────────────────────
+
+  /// Tüm sorun bildirimlerini (destek biletlerini) getirir
+  Future<List<SupportTicketModel>> getSupportTickets({
+    String? status,
+    String? schoolId,
+  }) async {
+    try {
+      var query = _db.from('support_tickets').select();
+      if (status != null && status != 'Tümü') {
+        query = query.eq('status', status);
+      }
+      if (schoolId != null) {
+        query = query.eq('school_id', schoolId);
+      }
+      final response = await query.order('created_at', ascending: false);
+      final list = (response as List).map((m) {
+        return SupportTicketModel.fromMap(m as Map<String, dynamic>);
+      }).toList();
+      return list;
+    } catch (e) {
+      debugPrint('getSupportTickets error: $e');
+      return [];
+    }
+  }
+
+  /// Sorun bildirimleri akışını dinler (realtime)
+  Stream<List<SupportTicketModel>> streamSupportTickets() {
+    return _client
+        .from('support_tickets')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false)
+        .map((rows) => rows
+            .map((m) => SupportTicketModel.fromMap(m))
+            .toList());
+  }
+
+  /// Sorun durumunu günceller ('pending', 'in_progress', 'resolved', 'rejected')
+  Future<void> updateTicketStatus({
+    required String ticketId,
+    required String status,
+    String? adminNotes,
+  }) async {
+    final updateData = <String, dynamic>{
+      'status': status,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    if (adminNotes != null) {
+      updateData['admin_notes'] = adminNotes.trim();
+    }
+    await _db.from('support_tickets').update(updateData).eq('id', ticketId);
+  }
+
+  /// Destek talebini siler
+  Future<void> deleteSupportTicket(String ticketId) async {
+    await _db.from('support_tickets').delete().eq('id', ticketId);
   }
 }

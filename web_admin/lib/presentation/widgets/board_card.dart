@@ -27,7 +27,14 @@ class BoardCard extends StatefulWidget {
     required this.onRemoteShutdown,
     this.isSuperAdmin = false,
     this.onRepairIntegrity,
+    this.isSelectable = false,
+    this.isSelected = false,
+    this.onSelectChanged,
   });
+
+  final bool isSelectable;
+  final bool isSelected;
+  final ValueChanged<bool?>? onSelectChanged;
 
   @override
   State<BoardCard> createState() => _BoardCardState();
@@ -254,6 +261,20 @@ class _BoardCardState extends State<BoardCard> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Çoklu seçim kutucuğu (Seçim modu aktifse)
+                if (widget.isSelectable)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Checkbox(
+                      value: widget.isSelected,
+                      onChanged: widget.onSelectChanged,
+                      activeColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+
                 // Durum ikonu
                 Container(
                   padding: const EdgeInsets.all(10),
@@ -496,13 +517,6 @@ class _BoardCardState extends State<BoardCard> {
                       ? (board.lastUnlockedBy ?? 'Öğretmen')
                       : (board.lastLockedBy ?? 'Yönetici'),
                   color: board.isUnlocked ? AppColors.success : AppColors.danger,
-                ),
-                const SizedBox(height: 4),
-                _InfoRow(
-                  icon: Icons.timer_outlined,
-                  label: 'Oto Kilit',
-                  value: '${board.autoLockMinutes} dakika',
-                  color: AppColors.textGrey,
                 ),
                 const SizedBox(height: 4),
                 _InfoRow(

@@ -11,6 +11,7 @@ import '../../presentation/screens/live_boards_screen.dart';
 import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/super_schools_screen.dart';
 import '../../presentation/screens/super_versions_screen.dart';
+import '../../presentation/screens/super_issues_screen.dart';
 import '../../presentation/screens/teachers_manage_screen.dart';
 import '../../presentation/screens/media_manage_screen.dart';
 
@@ -37,7 +38,8 @@ class AppRouter {
         // Süper admin olmayan biri süper admin sayfasına giremesin
         if (!authProvider.isSuperAdmin) {
           if (state.uri.path == '/schools' ||
-              state.uri.path == '/versions') {
+              state.uri.path == '/versions' ||
+              state.uri.path == '/issues') {
             return '/dashboard';
           }
         }
@@ -78,6 +80,8 @@ class AppRouter {
               title = 'Okul Yönetimi';
             } else if (path == '/versions') {
               title = 'Sürüm & Güncelleme';
+            } else if (path == '/issues') {
+              title = 'Sorun Bildirimleri';
             } else {
               title = 'Sınıf360';
             }
@@ -118,6 +122,11 @@ class AppRouter {
               path: '/versions',
               name: 'versions',
               builder: (context, state) => const SuperVersionsScreen(),
+            ),
+            GoRoute(
+              path: '/issues',
+              name: 'issues',
+              builder: (context, state) => const SuperIssuesScreen(),
             ),
           ],
         ),

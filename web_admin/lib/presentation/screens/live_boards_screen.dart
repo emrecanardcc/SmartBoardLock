@@ -31,8 +31,25 @@ class _LiveBoardsScreenState extends State<LiveBoardsScreen> {
   StreamSubscription<List<BoardModel>>? _boardsSub;
   String? _lastLoadedSchoolId;
   bool _isInit = false;
+  bool _isSelectMode = false;
+  final Set<String> _selectedBoardIds = {};
 
-  final List<String> _gradeOptions = ['Tümü', '9', '10', '11', '12', 'Diğer'];
+  final List<String> _gradeOptions = [
+    'Tümü',
+    '1',
+    '2',
+    '3',
+    '4',
+    '5',
+    '6',
+    '7',
+    '8',
+    '9',
+    '10',
+    '11',
+    '12',
+    'Diğer'
+  ];
 
   @override
   void initState() {
@@ -152,7 +169,7 @@ class _LiveBoardsScreenState extends State<LiveBoardsScreen> {
         if (_gradeFilter == 'Diğer') {
           return b.grade == null ||
               b.grade!.isEmpty ||
-              !['9', '10', '11', '12'].contains(b.grade);
+              !['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'].contains(b.grade);
         }
         return b.grade == _gradeFilter;
       }).toList();
@@ -319,6 +336,86 @@ class _LiveBoardsScreenState extends State<LiveBoardsScreen> {
                     }
                   },
                 ),
+                const SizedBox(width: 8),
+                _BulkActionButton(
+                  label: 'Bilgisayarları Kapat',
+                  icon: Icons.power_settings_new_rounded,
+                  color: const Color(0xFFDC2626),
+                  onPressed: () async {
+                    final onlineBoards = _allBoards.where((b) => b.isOnline).toList();
+                    if (onlineBoards.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Şu an açık olan tahta bilgisayarı bulunmuyor.'),
+                          backgroundColor: AppColors.warning,
+                        ),
+                      );
+                      return;
+                    }
+
+                    final confirmed = await showConfirmDialog(
+                      context,
+                      title: 'Tüm Açık Bilgisayarları Kapat',
+                      content:
+                          'Okulda o an açık çalışan ${onlineBoards.length} adet akıllı tahta bilgisayarı uzaktan kapatılacaktır.\n\nBu işlem Windows işletim sistemini güvenli şekilde kapatır. Onaylıyor musunuz?',
+                      confirmLabel: 'Hepsini Kapat (${onlineBoards.length})',
+                      confirmColor: AppColors.danger,
+                      icon: Icons.power_settings_new_rounded,
+                    );
+                    if (confirmed && context.mounted) {
+                      try {
+                        await repo.sendBulkRemoteShutdown(
+                            onlineBoards.map((b) => b.id).toList());
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  '${onlineBoards.length} akıllı tahtaya uzaktan kapatma komutu iletildi.'),
+                              backgroundColor: AppColors.success,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Kapatma hatası: $e'),
+                              backgroundColor: AppColors.danger,
+                            ),
+                          );
+                        }
+                      }
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  icon: Icon(
+                      _isSelectMode
+                          ? Icons.close_rounded
+                          : Icons.checklist_rounded,
+                      size: 16),
+                  label: Text(_isSelectMode ? 'Seçimi Kapat' : 'Çoklu Seçim'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _isSelectMode
+                        ? AppColors.danger
+                        : AppColors.primary,
+                    side: BorderSide(
+                        color: _isSelectMode
+                            ? AppColors.danger
+                            : AppColors.primary),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _isSelectMode = !_isSelectMode;
+                      if (!_isSelectMode) _selectedBoardIds.clear();
+                    });
+                  },
+                ),
               ],
             ],
           ),
@@ -352,6 +449,169 @@ class _LiveBoardsScreenState extends State<LiveBoardsScreen> {
             onGradeChanged: (v) => setState(() => _gradeFilter = v),
           ),
         ),
+
+        // Çoklu Seçim Aksiyon Çubuğu
+        if (_isSelectMode) ...[
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+              ),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                alignment: WrapAlignment.spaceBetween,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Checkbox(
+                        value: filteredBoards.isNotEmpty &&
+                            filteredBoards.every((b) => _selectedBoardIds.contains(b.id)),
+                        onChanged: (val) {
+                          setState(() {
+                            if (val == true) {
+                              _selectedBoardIds.addAll(filteredBoards.map((b) => b.id));
+                            } else {
+                              _selectedBoardIds.removeAll(filteredBoards.map((b) => b.id));
+                            }
+                          });
+                        },
+                        activeColor: AppColors.primary,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4)),
+                      ),
+                      Text(
+                        '${_selectedBoardIds.length} / ${filteredBoards.length} tahta seçildi',
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      // Seçilenleri Kapat
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.power_settings_new_rounded, size: 15),
+                        label: Text('Kapat (${_allBoards.where((b) => _selectedBoardIds.contains(b.id) && b.isOnline).length})'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFDC2626),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        onPressed: _selectedBoardIds.isEmpty
+                            ? null
+                            : () async {
+                                final selectedOnline = _allBoards
+                                    .where((b) => _selectedBoardIds.contains(b.id) && b.isOnline)
+                                    .map((b) => b.id)
+                                    .toList();
+                                if (selectedOnline.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Seçilen tahtalardan hiçbiri şu an açık değil.'),
+                                      backgroundColor: AppColors.warning,
+                                    ),
+                                  );
+                                  return;
+                                }
+                                final confirmed = await showConfirmDialog(
+                                  context,
+                                  title: 'Seçilen Bilgisayarları Kapat',
+                                  content:
+                                      '${selectedOnline.length} adet akıllı tahta bilgisayarı uzaktan kapatılacaktır. Onaylıyor musunuz?',
+                                  confirmLabel: 'Kapat (${selectedOnline.length})',
+                                  confirmColor: AppColors.danger,
+                                  icon: Icons.power_settings_new_rounded,
+                                );
+                                if (confirmed && context.mounted) {
+                                  await repo.sendBulkRemoteShutdown(selectedOnline);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                            '${selectedOnline.length} bilgisayara kapatma komutu iletildi.'),
+                                        backgroundColor: AppColors.success,
+                                      ),
+                                    );
+                                    setState(() => _selectedBoardIds.clear());
+                                  }
+                                }
+                              },
+                      ),
+                      // Seçilenleri Kilitle
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.lock_rounded, size: 15),
+                        label: Text('Kilitle (${_selectedBoardIds.length})'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.textDark,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        onPressed: _selectedBoardIds.isEmpty
+                            ? null
+                            : () async {
+                                for (final id in _selectedBoardIds) {
+                                  await repo.toggleBoardLock(boardId: id, newUnlocked: false, actorName: actorName);
+                                }
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Seçilen tahtalar kilitlendi.'),
+                                      backgroundColor: AppColors.success,
+                                    ),
+                                  );
+                                  setState(() => _selectedBoardIds.clear());
+                                }
+                              },
+                      ),
+                      // Seçilenleri Aç
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.lock_open_rounded, size: 15),
+                        label: Text('Aç (${_selectedBoardIds.length})'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.success,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        onPressed: _selectedBoardIds.isEmpty
+                            ? null
+                            : () async {
+                                for (final id in _selectedBoardIds) {
+                                  await repo.toggleBoardLock(boardId: id, newUnlocked: true, actorName: actorName);
+                                }
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Seçilen tahtalar kullanıma açıldı.'),
+                                      backgroundColor: AppColors.success,
+                                    ),
+                                  );
+                                  setState(() => _selectedBoardIds.clear());
+                                }
+                              },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
 
         const SizedBox(height: 16),
 
@@ -405,6 +665,17 @@ class _LiveBoardsScreenState extends State<LiveBoardsScreen> {
                               latestVersion: _latestVersion,
                               actorName: actorName,
                               isSuperAdmin: authProvider.isSuperAdmin,
+                              isSelectable: _isSelectMode,
+                              isSelected: _selectedBoardIds.contains(board.id),
+                              onSelectChanged: (val) {
+                                setState(() {
+                                  if (val == true) {
+                                    _selectedBoardIds.add(board.id);
+                                  } else {
+                                    _selectedBoardIds.remove(board.id);
+                                  }
+                                });
+                              },
                               onRepairIntegrity: authProvider.isSuperAdmin
                                   ? () async {
                                       await repo.sendRepairIntegrityCommand(board.id);
@@ -427,7 +698,6 @@ class _LiveBoardsScreenState extends State<LiveBoardsScreen> {
                                   'name': board.name,
                                   'grade': board.grade,
                                   'branch': board.branch,
-                                  'auto_lock_minutes': board.autoLockMinutes,
                                   'is_active': board.isActive,
                                 },
                                 schoolId: board.schoolId ?? '',
@@ -436,14 +706,12 @@ class _LiveBoardsScreenState extends State<LiveBoardsScreen> {
                                   required name,
                                   grade,
                                   branch,
-                                  required autoLockMinutes,
                                 }) async {},
                                 onUpdate: ({
                                   required boardId,
                                   required name,
                                   grade,
                                   branch,
-                                  required autoLockMinutes,
                                   required isActive,
                                 }) async {
                                   await repo.updateBoard(
@@ -451,7 +719,6 @@ class _LiveBoardsScreenState extends State<LiveBoardsScreen> {
                                     name: name,
                                     grade: grade,
                                     branch: branch,
-                                    autoLockMinutes: autoLockMinutes,
                                     isActive: isActive,
                                   );
                                 },

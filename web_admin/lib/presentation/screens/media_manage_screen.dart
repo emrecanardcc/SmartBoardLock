@@ -856,34 +856,55 @@ class _MediaManageScreenState extends State<MediaManageScreen> {
   Widget _buildDefaultModeBanner() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 700;
+        final isNarrow = constraints.maxWidth < 760;
 
         final infoWidget = Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 60,
-              height: 60,
+              width: 52,
+              height: 52,
               decoration: BoxDecoration(
-                color: AppColors.danger.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
+                color: AppColors.danger.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
               ),
               child: const Center(
-                child: Text('🇹🇷', style: TextStyle(fontSize: 30)),
+                child: Text('🇹🇷', style: TextStyle(fontSize: 26)),
               ),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 14),
             Flexible(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Şu an akıllı tahtalarda varsayılan eğitim ve milli afişler görüntülenmektedir.',
-                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textDark),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      Text(
+                        'Varsayılan Profesyonel Yayın Modu Aktif',
+                        style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textDark),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          'Sürüm 2.0.8 HD Vektör',
+                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.success),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Şanlı Türk Bayrağı, Gazi Mustafa Kemal Atatürk portresi ve MEB Sınıf & Tahta Kullanım Kuralları kilit ekranında slayt olarak döner.',
-                    style: GoogleFonts.inter(fontSize: 12, color: AppColors.textGrey),
+                    'Özel yayın paketi atanmadığında tahtalarda 1080x1440 HD çözünürlüklü Atatürk & Bilim ve Şanlı Bayrak & Sınıf Kuralları afişleri 30 sn aralıklarla kilit ekranında döner.',
+                    style: GoogleFonts.inter(fontSize: 12, color: AppColors.textGrey, height: 1.4),
                   ),
                 ],
               ),
@@ -891,32 +912,550 @@ class _MediaManageScreenState extends State<MediaManageScreen> {
           ],
         );
 
-        final actionButton = ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
-          icon: const Icon(Icons.campaign_rounded, size: 18),
-          label: const Text('Yeni Paket Yayınla'),
-          onPressed: () => _openPackageDialog(),
+        final actionButtons = Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              ),
+              icon: const Icon(Icons.remove_red_eye_rounded, size: 18),
+              label: const Text('Varsayılan Afişleri İncele'),
+              onPressed: () => _showDefaultPostersDialog(),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+              icon: const Icon(Icons.campaign_rounded, size: 18),
+              label: const Text('Yeni Paket Yayınla'),
+              onPressed: () => _openPackageDialog(),
+            ),
+          ],
         );
 
-        if (isNarrow) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              infoWidget,
-              const SizedBox(height: 14),
-              actionButton,
-            ],
-          );
-        }
-
-        return Row(
+        final posterCards = Row(
           children: [
-            Expanded(child: infoWidget),
-            const SizedBox(width: 16),
-            actionButton,
+            Expanded(
+              child: _buildDefaultPosterCard(
+                title: 'Atatürk & Bilim ve Teknoloji',
+                subtitle: 'İstikbal Göklerdedir • Hayatta en hakiki mürşit ilimdir',
+                badgeText: 'Milli Eğitim & Vizyon',
+                primaryColor: const Color(0xFF0B192C),
+                secondaryColor: const Color(0xFF1E3E62),
+                accentColor: const Color(0xFFDAA520),
+                icon: Icons.auto_awesome_rounded,
+                onTap: () => _showDefaultPostersDialog(initialIndex: 0),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: _buildDefaultPosterCard(
+                title: 'Türk Bayrağı & Sınıf Kuralları',
+                subtitle: 'Türkiye Yüzyılı • Saygı, Güvenlik, Zaman, Temizlik, Birlik',
+                badgeText: 'Milli Bayrak & Disiplin',
+                primaryColor: const Color(0xFF8B0000),
+                secondaryColor: const Color(0xFF1A0A0A),
+                accentColor: const Color(0xFFFFD700),
+                icon: Icons.flag_rounded,
+                onTap: () => _showDefaultPostersDialog(initialIndex: 1),
+              ),
+            ),
+          ],
+        );
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isNarrow) ...[
+              infoWidget,
+              const SizedBox(height: 12),
+              actionButtons,
+            ] else ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: infoWidget),
+                  const SizedBox(width: 16),
+                  actionButtons,
+                ],
+              ),
+            ],
+            const SizedBox(height: 16),
+            isNarrow
+                ? Column(
+                    children: [
+                      _buildDefaultPosterCard(
+                        title: 'Atatürk & Bilim ve Teknoloji',
+                        subtitle: 'İstikbal Göklerdedir • Hayatta en hakiki mürşit ilimdir',
+                        badgeText: 'Milli Eğitim & Vizyon',
+                        primaryColor: const Color(0xFF0B192C),
+                        secondaryColor: const Color(0xFF1E3E62),
+                        accentColor: const Color(0xFFDAA520),
+                        icon: Icons.auto_awesome_rounded,
+                        onTap: () => _showDefaultPostersDialog(initialIndex: 0),
+                      ),
+                      const SizedBox(height: 10),
+                      _buildDefaultPosterCard(
+                        title: 'Türk Bayrağı & Sınıf Kuralları',
+                        subtitle: 'Türkiye Yüzyılı • Saygı, Güvenlik, Zaman, Temizlik, Birlik',
+                        badgeText: 'Milli Bayrak & Disiplin',
+                        primaryColor: const Color(0xFF8B0000),
+                        secondaryColor: const Color(0xFF1A0A0A),
+                        accentColor: const Color(0xFFFFD700),
+                        icon: Icons.flag_rounded,
+                        onTap: () => _showDefaultPostersDialog(initialIndex: 1),
+                      ),
+                    ],
+                  )
+                : posterCards,
           ],
         );
       },
+    );
+  }
+
+  Widget _buildDefaultPosterCard({
+    required String title,
+    required String subtitle,
+    required String badgeText,
+    required Color primaryColor,
+    required Color secondaryColor,
+    required Color accentColor,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [primaryColor, secondaryColor],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: accentColor.withValues(alpha: 0.4)),
+          boxShadow: [
+            BoxShadow(
+              color: primaryColor.withValues(alpha: 0.25),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: accentColor.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+                border: Border.all(color: accentColor.withValues(alpha: 0.5)),
+              ),
+              child: Icon(icon, color: accentColor, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          badgeText,
+                          style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w700, color: accentColor),
+                        ),
+                      ),
+                      const Spacer(),
+                      const Icon(Icons.open_in_new_rounded, size: 14, color: Colors.white70),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    title,
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.inter(fontSize: 11, color: Colors.white70),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDefaultPostersDialog({int initialIndex = 0}) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return DefaultTabController(
+          length: 2,
+          initialIndex: initialIndex,
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.all(24),
+            child: Container(
+              width: 860,
+              constraints: const BoxConstraints(maxHeight: 720),
+              decoration: BoxDecoration(
+                color: AppColors.bgCard,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.border),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black26, blurRadius: 20, offset: Offset(0, 10)),
+                ],
+              ),
+              child: Column(
+                children: [
+                  // Dialog Header
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    decoration: const BoxDecoration(
+                      border: Border(bottom: BorderSide(color: AppColors.border)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.verified_rounded, color: AppColors.primary, size: 24),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Sınıf360 Profesyonel Varsayılan Afişler (Sürüm 2.0.8)',
+                              style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textDark),
+                            ),
+                            Text(
+                              'Özel paket olmadığında tahtalarda gösterilen 1080x1440 HD vektörel tasarımlar',
+                              style: GoogleFonts.inter(fontSize: 12, color: AppColors.textGrey),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Tabs
+                  Container(
+                    color: AppColors.bgPage,
+                    child: TabBar(
+                      indicatorColor: AppColors.primary,
+                      labelColor: AppColors.primary,
+                      unselectedLabelColor: AppColors.textGrey,
+                      labelStyle: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700),
+                      tabs: const [
+                        Tab(icon: Icon(Icons.auto_awesome_rounded, size: 18), text: '1. İstikbal Göklerdedir (Atatürk & Bilim)'),
+                        Tab(icon: Icon(Icons.flag_rounded, size: 18), text: '2. Türkiye Yüzyılı & Sınıf Kuralları'),
+                      ],
+                    ),
+                  ),
+                  // Tab Views
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        _buildDefaultPoster1Detail(),
+                        _buildDefaultPoster2Detail(),
+                      ],
+                    ),
+                  ),
+                  // Footer
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: const BoxDecoration(
+                      border: Border(top: BorderSide(color: AppColors.border)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline_rounded, size: 16, color: AppColors.textGrey),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Bu afişler tahtada GDI+ motoruyla piksel kaybı olmadan 1080x1440 çözünürlükte matematiksel olarak çizilir.',
+                            style: GoogleFonts.inter(fontSize: 11, color: AppColors.textGrey),
+                          ),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Anladım'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDefaultPoster1Detail() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: Container(
+          width: 440,
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 36),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF0B192C), Color(0xFF1E3E62)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFDAA520), width: 2),
+            boxShadow: const [
+              BoxShadow(color: Colors.black45, blurRadius: 16, offset: Offset(0, 8)),
+            ],
+          ),
+          child: Column(
+            children: [
+              // Top Emblem Mockup
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFDAA520), width: 2),
+                  color: Colors.white.withValues(alpha: 0.05),
+                ),
+                child: const Icon(Icons.school_rounded, color: Color(0xFFDAA520), size: 30),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'TÜRKİYE CUMHURİYETİ\nMİLLÎ EĞİTİM BAKANLIĞI',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFFDAA520),
+                  letterSpacing: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Divider(color: Color(0xFFDAA520), thickness: 1, indent: 40, endIndent: 40),
+              const SizedBox(height: 24),
+              Text(
+                'İSTİKBAL GÖKLERDEDİR',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.cinzel(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Text(
+                  '“Hayatta en hakiki mürşit ilimdir, fendir. İlim ve fenden başka yol gösterici aramak gaflettir, cehalettir, delalettir.”',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.merriweather(
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.white.withValues(alpha: 0.9),
+                    height: 1.6,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Gazi Mustafa Kemal Atatürk',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFFDAA520),
+                ),
+              ),
+              const SizedBox(height: 28),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.security_rounded, size: 14, color: Colors.white70),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Sınıf360 Akıllı Tahta Güvenlik ve Kilit Sistemi',
+                      style: GoogleFonts.inter(fontSize: 10, color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDefaultPoster2Detail() {
+    final rules = [
+      {'title': '1. SAYGI VE ÖZEN', 'desc': 'Akıllı tahta yalnızca eğitim ve ders amaçlı kullanılır.'},
+      {'title': '2. GÜVENLİK VE ŞİFRE', 'desc': 'Kilit sistemi zorlanamaz, yetkisiz erişim yapılamaz.'},
+      {'title': '3. ZAMAN VE VERİMLİLİK', 'desc': 'Ders bitiminde oturum kapatılır, enerji korunur.'},
+      {'title': '4. TEMİZLİK VE DÜZEN', 'desc': 'Ekran dokunmatiği temiz tutulur, sıvı yaklaştırılmaz.'},
+      {'title': '5. BİRLİKTE BAŞARI', 'desc': 'Kurallara uymak geleceğimiz için ortak sorumluluktur.'},
+    ];
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: Container(
+          width: 440,
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 36),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF8B0000), Color(0xFF1A0A0A)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFFFD700), width: 2),
+            boxShadow: const [
+              BoxShadow(color: Colors.black45, blurRadius: 16, offset: Offset(0, 8)),
+            ],
+          ),
+          child: Column(
+            children: [
+              // Crescent & Star badge
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFFFD700), width: 2),
+                  color: Colors.white.withValues(alpha: 0.1),
+                ),
+                child: const Center(
+                  child: Text('🇹🇷', style: TextStyle(fontSize: 30)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'TÜRKİYE YÜZYILI',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.cinzel(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: const Color(0xFFFFD700),
+                  letterSpacing: 2,
+                ),
+              ),
+              Text(
+                'AKILLI TAHTA & SINIF KURALLARI',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white70,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ...rules.map((rule) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.check_circle_rounded, size: 16, color: Color(0xFFFFD700)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              rule['title']!,
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFFFFD700),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              rule['desc']!,
+                              style: GoogleFonts.inter(fontSize: 10, color: Colors.white),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.favorite_rounded, size: 14, color: Color(0xFFFFD700)),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Geleceğimiz Çocuklarımız İçin',
+                      style: GoogleFonts.inter(fontSize: 10, color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

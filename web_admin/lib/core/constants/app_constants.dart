@@ -19,9 +19,6 @@ class AppConstants {
   // Tahta durum sabitleri
   static const int offlineThresholdMinutes = 5;
 
-  // Otomatik kilit süreleri
-  static const List<int> autoLockOptions = [5, 10, 15, 20, 30, 45, 60, 90, 120];
-
   // Uygulama adı
   static const String appName = 'Sınıf360 Web Paneli';
 }

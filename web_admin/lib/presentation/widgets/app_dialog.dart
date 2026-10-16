@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../core/constants/app_constants.dart';
+
 import '../../core/theme/app_colors.dart';
 
 /// Genel onay diyaloğu
@@ -58,14 +58,12 @@ Future<void> showBoardDialog(
     required String name,
     String? grade,
     String? branch,
-    required int autoLockMinutes,
   }) onPair,
   required Future<void> Function({
     required String boardId,
     required String name,
     String? grade,
     String? branch,
-    required int autoLockMinutes,
     required bool isActive,
   }) onUpdate,
 }) async {
@@ -73,7 +71,6 @@ Future<void> showBoardDialog(
   final nameController = TextEditingController(text: board?['name'] ?? '');
   final gradeController = TextEditingController(text: board?['grade'] ?? '');
   final branchController = TextEditingController(text: board?['branch'] ?? '');
-  int autoLockMinutes = board?['auto_lock_minutes'] as int? ?? 15;
   bool isActive = board?['is_active'] as bool? ?? true;
   String pairingCode = '';
   bool isSaving = false;
@@ -137,21 +134,6 @@ Future<void> showBoardDialog(
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Otomatik kilit süresi
-                  DropdownButtonFormField<int>(
-                    initialValue: autoLockMinutes,
-                    decoration: const InputDecoration(
-                      labelText: 'Otomatik Kilit Süresi',
-                      prefixIcon: Icon(Icons.timer_rounded, color: AppColors.textGrey),
-                    ),
-                    items: AppConstants.autoLockOptions.map((v) => DropdownMenuItem(
-                      value: v,
-                      child: Text('$v dakika'),
-                    )).toList(),
-                    onChanged: (v) => setDialogState(() => autoLockMinutes = v ?? 15),
                   ),
                   const SizedBox(height: 12),
 
@@ -251,7 +233,6 @@ Future<void> showBoardDialog(
                                       name: nameController.text,
                                       grade: gradeController.text,
                                       branch: branchController.text,
-                                      autoLockMinutes: autoLockMinutes,
                                       isActive: isActive,
                                     );
                                   } else {
@@ -260,7 +241,6 @@ Future<void> showBoardDialog(
                                       name: nameController.text,
                                       grade: gradeController.text,
                                       branch: branchController.text,
-                                      autoLockMinutes: autoLockMinutes,
                                     );
                                   }
                                   if (context.mounted) Navigator.pop(context);

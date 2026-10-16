@@ -62,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AuthGate()));
-    } on AuthException catch (e) {
+    } on AuthException catch (_) {
       if (!mounted) return;
       _showModernSnackbar('Giriş Başarısız: E-posta veya şifre hatalı.', isSuccess: false, bgColor: dangerRed);
     } catch (e) {

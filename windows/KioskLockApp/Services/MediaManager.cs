@@ -156,72 +156,138 @@ namespace KioskLockApp.Services
         /// İlk kurulumda veya varsayılan klasör boşsa yüksek çözünürlüklü şık eğitim afişleri üretir.
         /// İnternet bağlantısı veya veritabanı olmadan tahta her zaman estetik ve dolu görünür.
         /// </summary>
+        /// <summary>
+        /// İlk kurulumda veya varsayılan klasör boşsa yüksek çözünürlüklü şık eğitim afişleri üretir.
+        /// İnternet bağlantısı veya veritabanı olmadan tahta her zaman estetik ve dolu görünür.
+        /// </summary>
         private static void EnsureDefaultAssets()
         {
             try
             {
+                string v2Flag = Path.Combine(DefaultDir, ".v2_pro_assets");
                 string poster1 = Path.Combine(DefaultDir, "default_poster_1.jpg");
+                string poster2 = Path.Combine(DefaultDir, "default_poster_2.jpg");
+
+                // Eğer v2 bayrağı yoksa eski basit emojili posterleri temizle ve yenilerini üret
+                if (!File.Exists(v2Flag))
+                {
+                    try { if (File.Exists(poster1)) File.Delete(poster1); } catch { }
+                    try { if (File.Exists(poster2)) File.Delete(poster2); } catch { }
+                }
+
+                // ─────────────────────────────────────────────────────────────
+                // AFİŞ 1: GAZİ MUSTAFA KEMAL ATATÜRK & MİLLÎ EĞİTİM VİZYONU
+                // ─────────────────────────────────────────────────────────────
                 if (!File.Exists(poster1))
                 {
-                    using (Bitmap bmp = new Bitmap(900, 1200))
+                    using (Bitmap bmp = new Bitmap(1080, 1440))
                     using (Graphics g = Graphics.FromImage(bmp))
                     {
                         g.SmoothingMode = SmoothingMode.AntiAlias;
+                        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
                         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
 
-                        // Şık arka plan gradyanı (Lacivert - Mavi)
+                        // Gece Mavisi - Koyu Lacivert Gradyan Arka Plan
                         using (LinearGradientBrush bg = new LinearGradientBrush(
-                            new Rectangle(0, 0, 900, 1200),
-                            Color.FromArgb(15, 23, 42),
-                            Color.FromArgb(30, 58, 138),
+                            new Rectangle(0, 0, 1080, 1440),
+                            Color.FromArgb(10, 18, 38),
+                            Color.FromArgb(24, 48, 98),
                             LinearGradientMode.Vertical))
                         {
-                            g.FillRectangle(bg, 0, 0, 900, 1200);
+                            g.FillRectangle(bg, 0, 0, 1080, 1440);
                         }
 
-                        // Üst Logo / Başlık
-                        using (Font fontLogo = new Font("Segoe UI", 36, FontStyle.Bold))
+                        // Üst Kurumsal Rozet & Başlık
+                        using (Font fontMeb = new Font("Segoe UI", 16, FontStyle.Bold))
+                        using (Brush brushSky = new SolidBrush(Color.FromArgb(147, 197, 253)))
+                        using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                        {
+                            g.DrawString("T.C. MİLLÎ EĞİTİM BAKANLIĞI", fontMeb, brushSky, new RectangleF(0, 80, 1080, 40), sfCenter);
+                        }
+
+                        using (Font fontLogo = new Font("Segoe UI", 42, FontStyle.Bold))
                         using (Brush brushWhite = new SolidBrush(Color.White))
                         using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                         {
-                            g.DrawString("SINIF 360", fontLogo, brushWhite, new RectangleF(0, 100, 900, 80), sfCenter);
+                            g.DrawString("SINIF 360", fontLogo, brushWhite, new RectangleF(0, 125, 1080, 65), sfCenter);
                         }
 
-                        using (Font fontSub = new Font("Segoe UI", 18, FontStyle.Regular))
+                        using (Font fontSub = new Font("Segoe UI", 17, FontStyle.Regular))
                         using (Brush brushLight = new SolidBrush(Color.FromArgb(191, 219, 254)))
                         using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                         {
-                            g.DrawString("Akıllı Tahta Yönetim ve Güvenlik Sistemi", fontSub, brushLight, new RectangleF(0, 180, 900, 50), sfCenter);
+                            g.DrawString("Akıllı Tahta Güvenlik ve Millî Eğitim Teknolojileri Altyapısı", fontSub, brushLight, new RectangleF(0, 195, 1080, 40), sfCenter);
                         }
 
-                        // Ortadaki İllüstrasyon / Kart
-                        Rectangle cardRect = new Rectangle(100, 280, 700, 600);
-                        using (Brush cardBg = new SolidBrush(Color.FromArgb(40, 255, 255, 255)))
-                        using (Pen cardBorder = new Pen(Color.FromArgb(80, 255, 255, 255), 2))
+                        // Üst Ayırıcı Çizgi
+                        using (Pen penGold = new Pen(Color.FromArgb(120, 253, 224, 71), 2))
+                        {
+                            g.DrawLine(penGold, 300, 245, 780, 245);
+                        }
+
+                        // Ortadaki Buzlu Cam (Glassmorphism) Kart
+                        Rectangle cardRect = new Rectangle(90, 290, 900, 840);
+                        using (Brush cardBg = new SolidBrush(Color.FromArgb(32, 255, 255, 255)))
+                        using (Pen cardBorder = new Pen(Color.FromArgb(70, 255, 255, 255), 2))
                         {
                             g.FillRectangle(cardBg, cardRect);
                             g.DrawRectangle(cardBorder, cardRect);
                         }
 
-                        using (Font fontIcon = new Font("Segoe UI", 72))
+                        // Dekoratif İlim & Başarı Amblemi (Vector Çizim)
+                        DrawEmblemVector(g, 540, 390, Color.FromArgb(253, 224, 71));
+
+                        // Başlık: İLİM VE FEN VİZYONU
+                        using (Font fontEmblem = new Font("Segoe UI", 15, FontStyle.Bold))
+                        using (Brush brushGold = new SolidBrush(Color.FromArgb(253, 224, 71)))
+                        using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                        {
+                            g.DrawString("TÜRKİYE YÜZYILI EĞİTİM VİZYONU", fontEmblem, brushGold, new RectangleF(90, 465, 900, 35), sfCenter);
+                        }
+
+                        // Büyük Tırnak İşareti
+                        using (Font fontQuoteMark = new Font("Georgia", 64, FontStyle.Bold))
+                        using (Brush brushGold = new SolidBrush(Color.FromArgb(160, 253, 224, 71)))
+                        using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                        {
+                            g.DrawString("“", fontQuoteMark, brushGold, new RectangleF(90, 520, 900, 70), sfCenter);
+                        }
+
+                        // Ana Vecize
+                        using (Font fontQuote = new Font("Segoe UI", 30, FontStyle.Bold))
                         using (Brush brushWhite = new SolidBrush(Color.White))
                         using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                         {
-                            g.DrawString("🎓", fontIcon, brushWhite, new RectangleF(100, 340, 700, 120), sfCenter);
+                            g.DrawString("Hayatta en hakiki mürşit ilimdir, fendir.", fontQuote, brushWhite, new RectangleF(130, 600, 820, 100), sfCenter);
                         }
 
-                        using (Font fontQuote = new Font("Segoe UI", 24, FontStyle.Bold))
-                        using (Brush brushYellow = new SolidBrush(Color.FromArgb(253, 224, 71)))
+                        // Alt Açıklama
+                        using (Font fontDesc = new Font("Segoe UI", 18, FontStyle.Regular))
+                        using (Brush brushMuted = new SolidBrush(Color.FromArgb(224, 231, 255)))
                         using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                         {
-                            g.DrawString("\"Hayatta en hakiki mürşit ilimdir, fendir.\"", fontQuote, brushYellow, new RectangleF(120, 500, 660, 100), sfCenter);
+                            g.DrawString("İlim ve fennin dışında kılavuz aramak gaflettir, cehalettir, doğru yoldan sapmaktır.", fontDesc, brushMuted, new RectangleF(140, 710, 800, 80), sfCenter);
                         }
 
-                        using (Font fontAuthor = new Font("Segoe UI", 18, FontStyle.Italic))
-                        using (Brush brushWhite = new SolidBrush(Color.White))
+                        // Ayırıcı Küçük Çizgi
+                        using (Pen penWhite = new Pen(Color.FromArgb(80, 255, 255, 255), 1))
+                        {
+                            g.DrawLine(penWhite, 420, 810, 660, 810);
+                        }
+
+                        // İmza
+                        using (Font fontAuthor = new Font("Segoe UI", 24, FontStyle.Bold | FontStyle.Italic))
+                        using (Brush brushGold = new SolidBrush(Color.FromArgb(253, 224, 71)))
                         using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                         {
-                            g.DrawString("Gazi Mustafa Kemal ATATÜRK", fontAuthor, brushWhite, new RectangleF(120, 620, 660, 50), sfCenter);
+                            g.DrawString("Gazi Mustafa Kemal ATATÜRK", fontAuthor, brushGold, new RectangleF(90, 835, 900, 50), sfCenter);
+                        }
+
+                        using (Font fontFounder = new Font("Segoe UI", 15, FontStyle.Regular))
+                        using (Brush brushSky = new SolidBrush(Color.FromArgb(191, 219, 254)))
+                        using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                        {
+                            g.DrawString("Türkiye Cumhuriyeti'nin Kurucusu ve Başöğretmen", fontFounder, brushSky, new RectangleF(90, 890, 900, 35), sfCenter);
                         }
 
                         // Alt Bilgilendirme
@@ -229,75 +295,200 @@ namespace KioskLockApp.Services
                         using (Brush brushGray = new SolidBrush(Color.FromArgb(203, 213, 225)))
                         using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                         {
-                            g.DrawString("Tüm öğretmen ve öğrencilerimize başarılı, verimli bir ders dileriz.", fontFooter, brushGray, new RectangleF(50, 950, 800, 60), sfCenter);
+                            g.DrawString("Tüm öğretmen ve öğrencilerimize başarılı, verimli ve aydınlık bir ders dileriz.", fontFooter, brushGray, new RectangleF(60, 1260, 960, 60), sfCenter);
                         }
 
                         bmp.Save(poster1, ImageFormat.Jpeg);
                     }
                 }
 
-                string poster2 = Path.Combine(DefaultDir, "default_poster_2.jpg");
+                // ─────────────────────────────────────────────────────────────
+                // AFİŞ 2: ŞANLI TÜRK BAYRAĞI & SINIF VE TAHTA KULLANIM KURALLARI
+                // ─────────────────────────────────────────────────────────────
                 if (!File.Exists(poster2))
                 {
-                    using (Bitmap bmp = new Bitmap(900, 1200))
+                    using (Bitmap bmp = new Bitmap(1080, 1440))
                     using (Graphics g = Graphics.FromImage(bmp))
                     {
                         g.SmoothingMode = SmoothingMode.AntiAlias;
+                        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
                         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
 
+                        // Asil Türk Bayrağı Kırmızısı Gradyan Arka Plan
                         using (LinearGradientBrush bg = new LinearGradientBrush(
-                            new Rectangle(0, 0, 900, 1200),
-                            Color.FromArgb(185, 28, 28),
-                            Color.FromArgb(127, 29, 29),
+                            new Rectangle(0, 0, 1080, 1440),
+                            Color.FromArgb(195, 20, 20),
+                            Color.FromArgb(125, 12, 12),
                             LinearGradientMode.Vertical))
                         {
-                            g.FillRectangle(bg, 0, 0, 900, 1200);
+                            g.FillRectangle(bg, 0, 0, 1080, 1440);
                         }
 
-                        using (Font fontIcon = new Font("Segoe UI", 90))
+                        // Kusursuz Vektörel Ay-Yıldız Çizimi (Hilal ve 5 Köşeli Yıldız)
+                        DrawTurkishFlagVector(g, 540, 160, 1.4f);
+
+                        // Başlık
+                        using (Font fontTitle = new Font("Segoe UI", 36, FontStyle.Bold))
                         using (Brush brushWhite = new SolidBrush(Color.White))
                         using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                         {
-                            g.DrawString("🇹🇷", fontIcon, brushWhite, new RectangleF(0, 140, 900, 150), sfCenter);
+                            g.DrawString("TÜRKİYE YÜZYILI", fontTitle, brushWhite, new RectangleF(0, 275, 1080, 65), sfCenter);
                         }
 
-                        using (Font fontTitle = new Font("Segoe UI", 32, FontStyle.Bold))
-                        using (Brush brushWhite = new SolidBrush(Color.White))
-                        using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                        {
-                            g.DrawString("TÜRKİYE YÜZYILI", fontTitle, brushWhite, new RectangleF(0, 320, 900, 80), sfCenter);
-                        }
-
-                        using (Font fontSub = new Font("Segoe UI", 20, FontStyle.Regular))
+                        using (Font fontSub = new Font("Segoe UI", 18, FontStyle.Regular))
                         using (Brush brushLight = new SolidBrush(Color.FromArgb(254, 202, 202)))
                         using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                         {
-                            g.DrawString("Eğitimde ve Bilimde İleriye!", fontSub, brushLight, new RectangleF(0, 410, 900, 50), sfCenter);
+                            g.DrawString("Eğitimde, Bilimde ve Teknolojide Geleceğe!", fontSub, brushLight, new RectangleF(0, 340, 1080, 40), sfCenter);
                         }
 
-                        // Kural / İpucu Kartı
-                        Rectangle tipRect = new Rectangle(100, 520, 700, 420);
-                        using (Brush cardBg = new SolidBrush(Color.FromArgb(40, 0, 0, 0)))
-                        using (Pen cardBorder = new Pen(Color.FromArgb(80, 255, 255, 255), 2))
+                        // Kural Kartı (Frosted Glass)
+                        Rectangle tipRect = new Rectangle(90, 405, 900, 830);
+                        using (Brush cardBg = new SolidBrush(Color.FromArgb(45, 0, 0, 0)))
+                        using (Pen cardBorder = new Pen(Color.FromArgb(70, 255, 255, 255), 2))
                         {
                             g.FillRectangle(cardBg, tipRect);
                             g.DrawRectangle(cardBorder, tipRect);
                         }
 
-                        using (Font fontRuleTitle = new Font("Segoe UI", 22, FontStyle.Bold))
-                        using (Font fontRuleText = new Font("Segoe UI", 16, FontStyle.Regular))
+                        // Kural Kartı Başlığı
+                        using (Font fontRuleTitle = new Font("Segoe UI", 24, FontStyle.Bold))
                         using (Brush brushWhite = new SolidBrush(Color.White))
-                        using (Brush brushLight = new SolidBrush(Color.FromArgb(254, 226, 226)))
+                        using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                         {
-                            g.DrawString("📌 Sınıf ve Tahta Kuralları", fontRuleTitle, brushWhite, new PointF(130, 550));
-                            g.DrawString("1. Ders zili çaldığında sınıfta yerimizi alalım.\n2. Tahtayı sadece ders amaçlı ve temiz kullanalım.\n3. Nöbetçi öğretmen ve görevli uyarılarına uyalım.\n4. Ders bitiminde tahtanın kilitlendiğinden emin olalım.", fontRuleText, brushLight, new RectangleF(130, 620, 640, 300));
+                            g.DrawString("AKILLI TAHTA & SINIF KULLANIM KURALLARI", fontRuleTitle, brushWhite, new RectangleF(90, 435, 900, 50), sfCenter);
+                        }
+
+                        using (Pen penUnderline = new Pen(Color.FromArgb(253, 224, 71), 2))
+                        {
+                            g.DrawLine(penUnderline, 320, 495, 760, 495);
+                        }
+
+                        // 4 Temel Kural Maddesi
+                        DrawRuleRow(g, 130, 530, "1", "Ders Zili ve Hazırlık",
+                            "Ders zili çaldığında sınıfta yerimizi alalım, ders araç ve gereçlerimizi eksiksiz hazırlayalım.");
+
+                        DrawRuleRow(g, 130, 675, "2", "Özenli ve Temiz Kullanım",
+                            "Akıllı tahtayı sadece ders ve eğitim amaçlı kullanalım; ekrana sivri veya sert cisimlerle dokunmayalım.");
+
+                        DrawRuleRow(g, 130, 820, "3", "Güvenlik ve Yetkilendirme",
+                            "Tahta kilidini yalnızca ders öğretmenimiz açabilir; teneffüslerde ve ders bitiminde kilitli kalmasına dikkat edelim.");
+
+                        DrawRuleRow(g, 130, 965, "4", "Ortak Teknoloji Bilinci",
+                            "Sınıfımızdaki tüm teknolojik donanımları koruyarak temiz, sağlam ve çalışır halde gelecek nesillere aktaralım.");
+
+                        // Kural Kartı Altı Güvence Notu
+                        using (Font fontFooter = new Font("Segoe UI", 15, FontStyle.Regular))
+                        using (Brush brushPink = new SolidBrush(Color.FromArgb(254, 226, 226)))
+                        using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                        {
+                            g.DrawString("Sınıf360 Akıllı Tahta Güvenlik ve Yönetim Sistemi okul ağınızda aktiftir.", fontFooter, brushPink, new RectangleF(60, 1265, 960, 50), sfCenter);
                         }
 
                         bmp.Save(poster2, ImageFormat.Jpeg);
                     }
                 }
+
+                // Başarılı v2 bayrağını oluştur
+                try { File.WriteAllText(v2Flag, DateTime.UtcNow.ToString("o")); } catch { }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EnsureDefaultAssets error: {ex.Message}");
+            }
+        }
+
+        private static void DrawEmblemVector(Graphics g, float cx, float cy, Color color)
+        {
+            using (Pen pen = new Pen(color, 3))
+            {
+                g.DrawEllipse(pen, cx - 45, cy - 45, 90, 90);
+                using (Pen penDotted = new Pen(Color.FromArgb(160, color), 1.5f) { DashStyle = DashStyle.Dash })
+                {
+                    g.DrawEllipse(penDotted, cx - 38, cy - 38, 76, 76);
+                }
+            }
+            // Ortada 8 köşeli yıldız sembolü
+            PointF[] starPoints = new PointF[16];
+            for (int i = 0; i < 16; i++)
+            {
+                float r = (i % 2 == 0) ? 26 : 12;
+                double angle = (i * 22.5 - 90) * Math.PI / 180.0;
+                starPoints[i] = new PointF(cx + (float)(r * Math.Cos(angle)), cy + (float)(r * Math.Sin(angle)));
+            }
+            using (SolidBrush brush = new SolidBrush(color))
+            {
+                g.FillPolygon(brush, starPoints);
+            }
+        }
+
+        private static void DrawTurkishFlagVector(Graphics g, float cx, float cy, float scale)
+        {
+            // Hilal (Crescent)
+            float outerR = 52 * scale;
+            float innerR = 41.6f * scale;
+            float shift = 13 * scale;
+
+            using (GraphicsPath outerPath = new GraphicsPath())
+            {
+                outerPath.AddEllipse(cx - outerR - 15 * scale, cy - outerR, outerR * 2, outerR * 2);
+                using (GraphicsPath innerPath = new GraphicsPath())
+                {
+                    innerPath.AddEllipse(cx - innerR - 15 * scale + shift, cy - innerR, innerR * 2, innerR * 2);
+                    using (Region reg = new Region(outerPath))
+                    {
+                        reg.Exclude(innerPath);
+                        using (SolidBrush brushWhite = new SolidBrush(Color.White))
+                        {
+                            g.FillRegion(brushWhite, reg);
+                        }
+                    }
+                }
+            }
+
+            // 5 Köşeli Yıldız
+            float starCx = cx + 38 * scale;
+            float starCy = cy;
+            float rOuter = 21 * scale;
+            float rInner = 8.5f * scale;
+            PointF[] star = new PointF[10];
+            for (int i = 0; i < 10; i++)
+            {
+                float r = (i % 2 == 0) ? rOuter : rInner;
+                double angle = (i * 36 - 90) * Math.PI / 180.0;
+                star[i] = new PointF(starCx + (float)(r * Math.Cos(angle)), starCy + (float)(r * Math.Sin(angle)));
+            }
+            using (SolidBrush brushWhite = new SolidBrush(Color.White))
+            {
+                g.FillPolygon(brushWhite, star);
+            }
+        }
+
+        private static void DrawRuleRow(Graphics g, float x, float y, string num, string title, string text)
+        {
+            // Numara Rozeti (Daire)
+            using (Brush badgeBg = new SolidBrush(Color.FromArgb(253, 224, 71)))
+            using (Font fontNum = new Font("Segoe UI", 16, FontStyle.Bold))
+            using (Brush brushDark = new SolidBrush(Color.FromArgb(15, 23, 42)))
+            using (StringFormat sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+            {
+                g.FillEllipse(badgeBg, x, y, 42, 42);
+                g.DrawString(num, fontNum, brushDark, new RectangleF(x, y, 42, 42), sfCenter);
+            }
+
+            // Başlık
+            using (Font fontRuleTitle = new Font("Segoe UI", 18, FontStyle.Bold))
+            using (Brush brushWhite = new SolidBrush(Color.White))
+            {
+                g.DrawString(title, fontRuleTitle, brushWhite, new PointF(x + 56, y));
+            }
+
+            // Metin
+            using (Font fontRuleText = new Font("Segoe UI", 15, FontStyle.Regular))
+            using (Brush brushLight = new SolidBrush(Color.FromArgb(254, 226, 226)))
+            {
+                g.DrawString(text, fontRuleText, brushLight, new RectangleF(x + 56, y + 30, 760, 75));
+            }
         }
 
         /// <summary>

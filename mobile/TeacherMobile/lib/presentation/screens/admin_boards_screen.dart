@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_screen.dart';
 import 'admin_teachers_screen.dart';
+import '../widgets/report_issue_dialog.dart';
+import '../widgets/tutorial_tips_dialog.dart';
 
 // --- RENK PALETİ ---
 const Color bgLight = Color(0xFFF1F5F9);
@@ -38,8 +40,18 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
   bool _isLoadingMore = false;
   bool _hasMore = true;
 
+  // Kademe ve 1-12 Sınıf Filtreleri
+  String _selectedKademe = 'Tümü';
+  final List<String> _kademeOptions = ['Tümü', 'İlkokul (1-4)', 'Ortaokul (5-8)', 'Lise (9-12)', 'Diğer'];
+
   String _selectedGrade = 'Tümü';
-  final List<String> _gradeOptions = ['Tümü', '9', '10', '11', '12', 'Diğer'];
+  final List<String> _gradeOptions = [
+    'Tümü',
+    '1', '2', '3', '4',
+    '5', '6', '7', '8',
+    '9', '10', '11', '12',
+    'Diğer',
+  ];
 
   @override
   void initState() {
@@ -84,6 +96,19 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
     setState(() => _isLoadingProfile = false);
   }
 
+  List<String> _getFilteredGradesForCurrentKademe() {
+    if (_selectedKademe == 'İlkokul (1-4)') {
+      return ['Tümü', '1', '2', '3', '4'];
+    } else if (_selectedKademe == 'Ortaokul (5-8)') {
+      return ['Tümü', '5', '6', '7', '8'];
+    } else if (_selectedKademe == 'Lise (9-12)') {
+      return ['Tümü', '9', '10', '11', '12'];
+    } else if (_selectedKademe == 'Diğer') {
+      return ['Tümü', 'Diğer'];
+    }
+    return _gradeOptions;
+  }
+
   // --- LAZY LOADING SORGUSU ---
   Future<void> _fetchBoards({bool refresh = false}) async {
     if (refresh) {
@@ -98,8 +123,17 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
       // Müdür tüm tahtaları (aktif ve pasif) görür
       var query = _client.from('boards').select().eq('school_id', _schoolId!);
 
+      // Sınıf veya Kademe Filtresi
       if (_selectedGrade != 'Tümü') {
         query = query.eq('grade', _selectedGrade);
+      } else if (_selectedKademe == 'İlkokul (1-4)') {
+        query = query.inFilter('grade', ['1', '2', '3', '4']);
+      } else if (_selectedKademe == 'Ortaokul (5-8)') {
+        query = query.inFilter('grade', ['5', '6', '7', '8']);
+      } else if (_selectedKademe == 'Lise (9-12)') {
+        query = query.inFilter('grade', ['9', '10', '11', '12']);
+      } else if (_selectedKademe == 'Diğer') {
+        query = query.or('grade.eq.Diğer,grade.is.null');
       }
 
       final from = _boards.length;
@@ -137,7 +171,7 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
             _boards.removeWhere((b) => b['id'] == payload.oldRecord['id']);
           }
         });
-      }
+      },
     ).subscribe();
   }
 
@@ -158,12 +192,12 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
             Expanded(child: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
           ],
         ),
-        backgroundColor: bgColor, 
+        backgroundColor: bgColor,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 3),
-      )
+      ),
     );
   }
 
@@ -173,7 +207,7 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
       if (!currentStatus) {
         updateData['last_unlocked_by'] = _adminName;
       } else {
-        updateData['last_locked_by'] = _adminName; 
+        updateData['last_locked_by'] = _adminName;
       }
       await _client.from('boards').update(updateData).eq('id', boardId);
     } catch (e) {
@@ -187,7 +221,7 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('Tümünü Kilitle', style: TextStyle(color: textDark, fontWeight: FontWeight.bold)),
-        content: const Text('Okuldaki tüm akıllı tahtaları kilitmek istediğinize emin misiniz?'),
+        content: const Text('Okuldaki tüm akıllı tahtaları kilitlemek istediğinize emin misiniz?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('İptal')),
           ElevatedButton(
@@ -242,14 +276,14 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
     final gradeController = TextEditingController(text: board?['grade'] ?? '');
     final branchController = TextEditingController(text: board?['branch'] ?? '');
     bool isActive = board?['is_active'] ?? true;
-    String pairingCode = ""; 
+    String pairingCode = "";
     bool isSaving = false;
-    
+
     await showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) {
           return AlertDialog(
             backgroundColor: cardColor,
             insetPadding: const EdgeInsets.symmetric(horizontal: 20),
@@ -264,25 +298,51 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
                   children: [
                     TextField(
                       controller: nameController,
-                      decoration: InputDecoration(labelText: 'Görünen Ad (Örn: Sınıf 1)', enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: primaryBlue, width: 2))),
+                      decoration: InputDecoration(
+                        labelText: 'Görünen Ad (Örn: Sınıf 1)',
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: primaryBlue, width: 2)),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(child: TextField(controller: gradeController, decoration: InputDecoration(labelText: 'Sınıf (Örn: 11)', enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: primaryBlue, width: 2))))),
+                        Expanded(
+                          child: TextField(
+                            controller: gradeController,
+                            decoration: InputDecoration(
+                              labelText: 'Sınıf (1-12)',
+                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: primaryBlue, width: 2)),
+                            ),
+                          ),
+                        ),
                         const SizedBox(width: 12),
-                        Expanded(child: TextField(controller: branchController, decoration: InputDecoration(labelText: 'Şube (Örn: A)', enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: primaryBlue, width: 2))))),
+                        Expanded(
+                          child: TextField(
+                            controller: branchController,
+                            decoration: InputDecoration(
+                              labelText: 'Şube (Örn: A)',
+                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: primaryBlue, width: 2)),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(color: isActive ? successGreen.withOpacity(0.1) : dangerRed.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: isActive ? successGreen.withOpacity(0.3) : dangerRed.withOpacity(0.3))),
+                      decoration: BoxDecoration(
+                        color: isActive ? successGreen.withValues(alpha: 0.1) : dangerRed.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: isActive ? successGreen.withValues(alpha: 0.3) : dangerRed.withValues(alpha: 0.3)),
+                      ),
                       child: SwitchListTile(
                         value: isActive,
                         onChanged: (val) => setDialogState(() => isActive = val),
                         title: Text('Durum: ${isActive ? 'Aktif' : 'Pasif'}', style: TextStyle(fontWeight: FontWeight.bold, color: isActive ? successGreen : dangerRed)),
-                        activeColor: successGreen,
+                        activeThumbColor: successGreen,
                         contentPadding: EdgeInsets.zero,
                       ),
                     ),
@@ -291,7 +351,7 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
                       const Text('6 Haneli Kod', style: TextStyle(color: textGrey, fontSize: 13, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       OtpInputBoxes(onCodeChanged: (code) => pairingCode = code),
-                    ]
+                    ],
                   ],
                 ),
               ),
@@ -306,15 +366,18 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
                     return;
                   }
                   setDialogState(() => isSaving = true);
-                  
+
                   try {
                     if (isEditing) {
                       await _client.from('boards').update({
-                        'name': nameController.text.trim(), 'grade': gradeController.text.trim(), 'branch': branchController.text.trim(), 'is_active': isActive
+                        'name': nameController.text.trim(),
+                        'grade': gradeController.text.trim(),
+                        'branch': branchController.text.trim(),
+                        'is_active': isActive,
                       }).eq('id', board['id']);
-                      if (mounted) {
+                      if (dialogCtx.mounted) {
                         _showModernSnackbar('Tahta güncellendi.', isSuccess: true, bgColor: successGreen);
-                        Navigator.pop(context);
+                        Navigator.pop(dialogCtx);
                       }
                     } else {
                       final pairingData = await _client.from('board_pairings').select().eq('pairing_code', pairingCode).eq('status', 'pending').maybeSingle();
@@ -325,12 +388,22 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
                       }
                       final offlineSecret = _generateOfflineSecret();
                       final boardResponse = await _client.from('boards').insert({
-                        'school_id': _schoolId, 'name': nameController.text.trim(), 'grade': gradeController.text.trim(), 'branch': branchController.text.trim(), 'is_active': isActive, 'is_unlocked': false, 'auto_lock_minutes': 15, 'offline_secret': offlineSecret,
+                        'school_id': _schoolId,
+                        'name': nameController.text.trim(),
+                        'grade': gradeController.text.trim(),
+                        'branch': branchController.text.trim(),
+                        'is_active': isActive,
+                        'is_unlocked': false,
+                        'offline_secret': offlineSecret,
                       }).select().single();
-                      await _client.from('board_pairings').update({'board_id': boardResponse['id'], 'offline_secret': offlineSecret, 'status': 'completed'}).eq('pairing_code', pairingCode);
-                      if (mounted) {
+                      await _client.from('board_pairings').update({
+                        'board_id': boardResponse['id'],
+                        'offline_secret': offlineSecret,
+                        'status': 'completed',
+                      }).eq('pairing_code', pairingCode);
+                      if (dialogCtx.mounted) {
                         _showModernSnackbar('Tahta eşleştirildi!', isSuccess: true, bgColor: successGreen);
-                        Navigator.pop(context);
+                        Navigator.pop(dialogCtx);
                       }
                     }
                   } catch (e) {
@@ -338,12 +411,198 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
                     _showModernSnackbar('Hata: $e', isSuccess: false, bgColor: dangerRed);
                   }
                 },
-                child: isSaving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : Text(isEditing ? 'Güncelle' : 'Eşleştir', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                child: isSaving
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : Text(isEditing ? 'Güncelle' : 'Eşleştir', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
             ],
           );
-        }
+        },
       ),
+    );
+  }
+
+  void _showSettingsSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            // Profil Kartı
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: bgLight,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 26,
+                    backgroundColor: const Color(0xFF0D9488).withValues(alpha: 0.15),
+                    child: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFF0D9488), size: 28),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _adminName ?? 'Yönetici',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: textDark,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0D9488).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'Okul Müdürü',
+                                style: TextStyle(
+                                  color: Color(0xFF0D9488),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _schoolName ?? '',
+                                style: const TextStyle(fontSize: 12, color: textGrey),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Seçenekler
+            _buildSettingsActionItem(
+              icon: Icons.group_rounded,
+              iconColor: primaryBlue,
+              title: 'Öğretmen Yetkilendirme',
+              subtitle: 'Öğretmen hesaplarını onayla veya yönet',
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminTeachersScreen()));
+              },
+            ),
+            _buildSettingsActionItem(
+              icon: Icons.bug_report_rounded,
+              iconColor: dangerRed,
+              title: 'Sorun / Arıza Bildir',
+              subtitle: 'Süper Admin teknik paneline arıza kaydı gönder',
+              onTap: () {
+                Navigator.pop(ctx);
+                ReportIssueDialog.show(
+                  context,
+                  schoolId: _schoolId ?? '',
+                  availableBoards: _boards,
+                  userRole: 'school_admin',
+                  userName: _adminName ?? 'Okul Müdürü',
+                );
+              },
+            ),
+            _buildSettingsActionItem(
+              icon: Icons.lightbulb_rounded,
+              iconColor: warningOrange,
+              title: 'Yönetici Rehberi & İpuçları',
+              subtitle: 'Toplu kilit, kademe ve eşleştirme yöntemleri',
+              onTap: () {
+                Navigator.pop(ctx);
+                TutorialTipsDialog.show(context, userRole: 'school_admin');
+              },
+            ),
+            const Divider(height: 16),
+            _buildSettingsActionItem(
+              icon: Icons.logout_rounded,
+              iconColor: dangerRed,
+              title: 'Çıkış Yap',
+              subtitle: 'Yönetici oturumunu güvenle sonlandır',
+              textColor: dangerRed,
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _client.auth.signOut();
+                if (!context.mounted) return;
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (route) => false,
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsActionItem({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    Color? textColor,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      leading: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: iconColor.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: iconColor, size: 22),
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: textColor ?? textDark,
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+        ),
+      ),
+      subtitle: Text(subtitle, style: const TextStyle(color: textGrey, fontSize: 11)),
+      trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: textGrey),
+      onTap: onTap,
     );
   }
 
@@ -351,21 +610,37 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
   Widget build(BuildContext context) {
     if (_isLoadingProfile) return const Scaffold(backgroundColor: bgLight, body: Center(child: CircularProgressIndicator(color: primaryBlue)));
 
+    final visibleGrades = _getFilteredGradesForCurrentKademe();
+
     return Scaffold(
       backgroundColor: bgLight,
       appBar: AppBar(
         elevation: 0,
         backgroundColor: bgLight,
-        title: FittedBox(fit: BoxFit.scaleDown, child: Text(_schoolName ?? 'Yükleniyor...', style: const TextStyle(color: textDark, fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: -0.5))),
+        title: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            _schoolName ?? 'Yükleniyor...',
+            style: const TextStyle(color: textDark, fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: -0.5),
+          ),
+        ),
         centerTitle: false,
         actions: [
-          IconButton(icon: const Icon(Icons.shield_rounded, color: textDark), tooltip: 'Tümünü Kilitle', onPressed: _lockAllBoards),
-          IconButton(icon: const Icon(Icons.group_rounded, color: primaryBlue), tooltip: 'Öğretmenler', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminTeachersScreen()))),
-          IconButton(icon: const Icon(Icons.logout_rounded, color: dangerRed), tooltip: 'Çıkış Yap', onPressed: () async {
-            await _client.auth.signOut();
-            if (!context.mounted) return;
-            Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginScreen()), (route) => false);
-          }),
+          IconButton(
+            icon: const Icon(Icons.shield_rounded, color: dangerRed),
+            tooltip: 'Tümünü Kilitle',
+            onPressed: _lockAllBoards,
+          ),
+          IconButton(
+            icon: const Icon(Icons.help_outline_rounded, color: textGrey),
+            tooltip: 'İpuçları & Rehber',
+            onPressed: () => TutorialTipsDialog.show(context, userRole: 'school_admin'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings_rounded, color: textGrey),
+            tooltip: 'Ayarlar ve Yönetim',
+            onPressed: () => _showSettingsSheet(context),
+          ),
           const SizedBox(width: 8),
         ],
       ),
@@ -373,198 +648,239 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Merhaba $_adminName,', style: const TextStyle(color: textGrey, fontSize: 16, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 4),
-                const Text('Yönetim Paneli', style: TextStyle(color: primaryBlue, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+                Text('Merhaba $_adminName,', style: const TextStyle(color: textGrey, fontSize: 15, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                const Text('Yönetim Paneli', style: TextStyle(color: primaryBlue, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
               ],
             ),
           ),
 
-          // --- YATAY SINIF FİLTRESİ ---
+          // --- 1. SEVİYE: KADEME SEÇİCİ ÇUBUĞU ---
           SizedBox(
-            height: 50,
+            height: 44,
             child: ListView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              children: _gradeOptions.map((grade) {
-                final isSelected = _selectedGrade == grade;
-                final displayText = grade == 'Tümü' ? 'Tüm Sınıflar' : (grade == 'Diğer' ? 'Diğer' : '$grade. Sınıf');
+              children: _kademeOptions.map((kademe) {
+                final isSelected = _selectedKademe == kademe;
                 return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
+                  padding: const EdgeInsets.only(right: 6.0),
                   child: ChoiceChip(
-                    label: Text(displayText),
+                    label: Text(kademe, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : textDark, fontWeight: FontWeight.bold)),
                     selected: isSelected,
                     showCheckmark: false,
+                    backgroundColor: Colors.white,
+                    selectedColor: primaryBlue,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: isSelected ? primaryBlue : Colors.grey.shade300),
+                    ),
                     onSelected: (selected) {
-                      setState(() => _selectedGrade = grade);
+                      setState(() {
+                        _selectedKademe = kademe;
+                        _selectedGrade = 'Tümü';
+                      });
                       _fetchBoards(refresh: true);
                     },
-                    backgroundColor: Colors.white,
-                    selectedColor: primaryBlue.withOpacity(0.15),
-                    labelStyle: TextStyle(color: isSelected ? primaryBlue : textGrey, fontWeight: FontWeight.bold),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isSelected ? primaryBlue : Colors.grey.shade300)),
                   ),
                 );
               }).toList(),
             ),
           ),
-          const SizedBox(height: 12),
-          
-          Expanded(
-            child: _boards.isEmpty && !_isLoadingMore
-              ? const Center(child: Text('Kriterlere uygun tahta bulunamadı.', style: TextStyle(color: textGrey, fontWeight: FontWeight.w600)))
-              : RefreshIndicator(
-                  color: primaryBlue,
-                  backgroundColor: Colors.white,
-                  onRefresh: () => _fetchBoards(refresh: true),
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    physics: const AlwaysScrollableScrollPhysics(), 
-                    padding: const EdgeInsets.only(bottom: 100), 
-                    itemCount: _boards.length + (_hasMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == _boards.length) {
-                        return const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator(color: primaryBlue)));
-                      }
 
-                      final board = _boards[index];
-                      final isUnlocked = board['is_unlocked'] ?? false;
-                      final isActive = board['is_active'] ?? true;
-                      final lastUnlockedBy = board['last_unlocked_by'] ?? '-';
-                      final lastLockedBy = board['last_locked_by'] ?? '-';
-                      final gradeText = board['grade'] != null && board['grade'].toString().isNotEmpty ? "${board['grade']}. Sınıf " : "";
-                      final branchText = board['branch'] != null && board['branch'].toString().isNotEmpty ? board['branch'] : "";
-                      
-                      return Card(
-                        elevation: 0,
-                        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: BorderSide(color: Colors.grey.withOpacity(0.15), width: 1)),
-                        color: cardColor,
-                        child: Padding(
-                          padding: const EdgeInsets.all(20.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(10),
-                                          decoration: BoxDecoration(color: isUnlocked ? successGreen.withOpacity(0.15) : Colors.grey.shade100, borderRadius: BorderRadius.circular(16)),
-                                          child: Icon(isUnlocked ? Icons.wifi_tethering_rounded : Icons.desktop_windows_rounded, color: isUnlocked ? successGreen : textGrey, size: 24),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(board['name'], style: const TextStyle(color: textDark, fontWeight: FontWeight.w900, fontSize: 20, letterSpacing: -0.5), overflow: TextOverflow.ellipsis),
-                                              if (gradeText.isNotEmpty || branchText.isNotEmpty)
-                                                Text('$gradeText$branchText', style: const TextStyle(color: primaryBlue, fontSize: 12, fontWeight: FontWeight.bold)),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  PopupMenuButton<String>(
-                                    icon: const Icon(Icons.more_vert_rounded, color: textGrey),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                    color: Colors.white,
-                                    onSelected: (value) {
-                                      if (value == 'edit') _showAddEditBoardDialog(board: board);
-                                      if (value == 'unpair') _unpairBoard(board['id'], board['name']);
-                                    },
-                                    itemBuilder: (context) => [
-                                      const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_rounded, color: primaryBlue, size: 20), SizedBox(width: 12), Text('Düzenle', style: TextStyle(color: textDark, fontWeight: FontWeight.bold))])),
-                                      const PopupMenuItem(value: 'unpair', child: Row(children: [Icon(Icons.link_off_rounded, color: dangerRed, size: 20), SizedBox(width: 12), Text('Eşleşmeyi Kaldır', style: TextStyle(color: dangerRed, fontWeight: FontWeight.bold))])),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              
-                              const Padding(padding: EdgeInsets.symmetric(vertical: 12.0), child: Divider(height: 1, color: Color(0xFFF1F5F9))),
-                              
-                              Row(
-                                children: [
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                        decoration: BoxDecoration(color: isUnlocked ? successGreen.withOpacity(0.1) : textDark.withOpacity(0.05), borderRadius: BorderRadius.circular(8)),
-                                        child: Text(isUnlocked ? 'AÇIK' : 'KİLİTLİ', style: TextStyle(color: isUnlocked ? successGreen : textGrey, fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 0.5)),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                        decoration: BoxDecoration(color: isActive ? primaryBlue.withOpacity(0.1) : dangerRed.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                                        child: Text(isActive ? 'AKTİF' : 'PASİF', style: TextStyle(color: isActive ? primaryBlue : dangerRed, fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 0.5)),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text('Açan: $lastUnlockedBy', style: const TextStyle(color: textGrey, fontSize: 12, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                        Text('Kapatan: $lastLockedBy', style: const TextStyle(color: textGrey, fontSize: 12, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              
-                              const SizedBox(height: 20),
-                              
-                              SizedBox(
-                                width: double.infinity, height: 52, 
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: !isActive ? Colors.grey.shade300 : (isUnlocked ? textDark : successGreen),
-                                    foregroundColor: !isActive ? textGrey : Colors.white,
-                                    elevation: 0,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                  ),
-                                  icon: Icon(!isActive ? Icons.block_rounded : (isUnlocked ? Icons.lock_rounded : Icons.lock_open_rounded), size: 24),
-                                  label: Text(
-                                    !isActive ? 'Tahta Pasif Durumda' : (isUnlocked ? 'Tahtayı Kilitle' : 'Kilidi Aç'),
-                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 0.5),
-                                  ),
-                                  onPressed: !isActive ? null : () => _toggleBoardLock(board['id'], isUnlocked),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
+          const SizedBox(height: 6),
+
+          // --- 2. SEVİYE: 1-12 SINIF SEÇİCİ ÇUBUĞU ---
+          SizedBox(
+            height: 38,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              children: visibleGrades.map((grade) {
+                final isSelected = _selectedGrade == grade;
+                final displayText = grade == 'Tümü' ? 'Tüm Sınıflar' : (grade == 'Diğer' ? 'Diğer' : '$grade. Sınıf');
+
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6.0),
+                  child: ChoiceChip(
+                    label: Text(displayText, style: TextStyle(fontSize: 11, color: isSelected ? primaryBlue : textGrey, fontWeight: FontWeight.bold)),
+                    selected: isSelected,
+                    showCheckmark: false,
+                    backgroundColor: Colors.white,
+                    selectedColor: primaryBlue.withValues(alpha: 0.15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      side: BorderSide(color: isSelected ? primaryBlue : Colors.grey.shade200),
+                    ),
+                    onSelected: (selected) {
+                      setState(() {
+                        _selectedGrade = grade;
+                      });
+                      _fetchBoards(refresh: true);
                     },
                   ),
-                ),
+                );
+              }).toList(),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          Expanded(
+            child: _boards.isEmpty && !_isLoadingMore
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.search_off_rounded, size: 48, color: textGrey),
+                        const SizedBox(height: 12),
+                        const Text('Kriterlere uygun tahta bulunamadı.', style: TextStyle(color: textGrey, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 12),
+                        if (_selectedGrade != 'Tümü' || _selectedKademe != 'Tümü')
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _selectedGrade = 'Tümü';
+                                _selectedKademe = 'Tümü';
+                              });
+                              _fetchBoards(refresh: true);
+                            },
+                            child: const Text('Filtreleri Sıfırla'),
+                          ),
+                      ],
+                    ),
+                  )
+                : RefreshIndicator(
+                    color: primaryBlue,
+                    backgroundColor: Colors.white,
+                    onRefresh: () => _fetchBoards(refresh: true),
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.only(bottom: 100),
+                      itemCount: _boards.length + (_hasMore ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == _boards.length) {
+                          return const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator(color: primaryBlue)));
+                        }
+
+                        final board = _boards[index];
+                        final isUnlocked = board['is_unlocked'] ?? false;
+                        final isActive = board['is_active'] ?? true;
+                        final lastUnlockedBy = board['last_unlocked_by'] ?? '-';
+                        final lastLockedBy = board['last_locked_by'] ?? '-';
+                        final gradeText = board['grade'] != null && board['grade'].toString().isNotEmpty ? "${board['grade']}. Sınıf " : "";
+                        final branchText = board['branch'] != null && board['branch'].toString().isNotEmpty ? board['branch'] : "";
+
+                        return Card(
+                          elevation: 0,
+                          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: BorderSide(color: Colors.grey.withValues(alpha: 0.15), width: 1)),
+                          color: cardColor,
+                          child: Padding(
+                            padding: const EdgeInsets.all(20.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(color: isUnlocked ? successGreen.withValues(alpha: 0.15) : Colors.grey.shade100, borderRadius: BorderRadius.circular(16)),
+                                            child: Icon(isUnlocked ? Icons.lock_open_rounded : Icons.lock_rounded, color: isUnlocked ? successGreen : textGrey, size: 24),
+                                          ),
+                                          const SizedBox(width: 14),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(board['name'] ?? 'İsimsiz Tahta', style: const TextStyle(color: textDark, fontWeight: FontWeight.bold, fontSize: 18), overflow: TextOverflow.ellipsis),
+                                                if (gradeText.isNotEmpty || branchText.isNotEmpty)
+                                                  Padding(
+                                                    padding: const EdgeInsets.only(top: 2),
+                                                    child: Text('$gradeText$branchText'.trim(), style: const TextStyle(color: primaryBlue, fontSize: 13, fontWeight: FontWeight.w600)),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Row(
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.edit_rounded, color: textGrey),
+                                          tooltip: 'Düzenle',
+                                          onPressed: () => _showAddEditBoardDialog(board: board),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.link_off_rounded, color: dangerRed),
+                                          tooltip: 'Eşleşmeyi Kaldır',
+                                          onPressed: () => _unpairBoard(board['id'], board['name'] ?? 'Tahta'),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const Divider(height: 24),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(isUnlocked ? 'Son Açan: $lastUnlockedBy' : 'Son Kilitleyen: $lastLockedBy', style: const TextStyle(color: textGrey, fontSize: 12)),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Container(width: 8, height: 8, decoration: BoxDecoration(color: isActive ? successGreen : dangerRed, shape: BoxShape.circle)),
+                                            const SizedBox(width: 6),
+                                            Text(isActive ? 'Sistemde Aktif' : 'Pasife Alındı', style: TextStyle(color: isActive ? successGreen : dangerRed, fontSize: 12, fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: isUnlocked ? dangerRed : successGreen,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        elevation: 0,
+                                      ),
+                                      icon: Icon(isUnlocked ? Icons.lock_outline_rounded : Icons.lock_open_rounded, size: 18, color: Colors.white),
+                                      label: Text(isUnlocked ? 'Kilitle' : 'Aç', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                                      onPressed: () => _toggleBoardLock(board['id'], isUnlocked),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddEditBoardDialog(),
         backgroundColor: primaryBlue,
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        icon: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
-        label: const Text('Yeni Tahta', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
+        icon: const Icon(Icons.add_rounded, color: Colors.white),
+        label: const Text('Yeni Tahta Eşle', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        onPressed: () => _showAddEditBoardDialog(),
       ),
     );
   }
 }
 
-// --- OTP KUTUCUKLARI WIDGET'I ---
 class OtpInputBoxes extends StatefulWidget {
   final Function(String) onCodeChanged;
   const OtpInputBoxes({super.key, required this.onCodeChanged});
@@ -578,8 +894,12 @@ class _OtpInputBoxesState extends State<OtpInputBoxes> {
 
   @override
   void dispose() {
-    for (var node in _focusNodes) node.dispose();
-    for (var controller in _controllers) controller.dispose();
+    for (var node in _focusNodes) {
+      node.dispose();
+    }
+    for (var controller in _controllers) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -587,24 +907,36 @@ class _OtpInputBoxesState extends State<OtpInputBoxes> {
     String fullCode = _controllers.map((e) => e.text).join();
     widget.onCodeChanged(fullCode);
     if (value.isNotEmpty) {
-      if (index < 5) _focusNodes[index + 1].requestFocus();
-      else _focusNodes[index].unfocus(); 
+      if (index < 5) {
+        _focusNodes[index + 1].requestFocus();
+      } else {
+        _focusNodes[index].unfocus();
+      }
     } else {
-      if (index > 0) _focusNodes[index - 1].requestFocus();
+      if (index > 0) {
+        _focusNodes[index - 1].requestFocus();
+      }
     }
   }
 
   Widget _buildBox(int index) {
     return SizedBox(
-      width: 35, height: 52,
+      width: 35,
+      height: 52,
       child: TextField(
-        controller: _controllers[index], focusNode: _focusNodes[index],
-        textAlign: TextAlign.center, textAlignVertical: TextAlignVertical.center,
-        keyboardType: TextInputType.number, maxLength: 1,
+        controller: _controllers[index],
+        focusNode: _focusNodes[index],
+        textAlign: TextAlign.center,
+        textAlignVertical: TextAlignVertical.center,
+        keyboardType: TextInputType.number,
+        maxLength: 1,
         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: primaryBlue),
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         decoration: InputDecoration(
-          counterText: "", contentPadding: EdgeInsets.zero, filled: true, fillColor: Colors.grey.shade50,
+          counterText: "",
+          contentPadding: EdgeInsets.zero,
+          filled: true,
+          fillColor: Colors.grey.shade50,
           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300, width: 2)),
           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: primaryBlue, width: 2)),
         ),
@@ -618,9 +950,13 @@ class _OtpInputBoxesState extends State<OtpInputBoxes> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _buildBox(0), _buildBox(1), _buildBox(2),
+        _buildBox(0),
+        _buildBox(1),
+        _buildBox(2),
         const Text('-', style: TextStyle(fontSize: 24, color: textGrey, fontWeight: FontWeight.w900)),
-        _buildBox(3), _buildBox(4), _buildBox(5),
+        _buildBox(3),
+        _buildBox(4),
+        _buildBox(5),
       ],
     );
   }
