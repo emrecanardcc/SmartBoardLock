@@ -484,13 +484,17 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
                                 );
                                 if (confirmed && context.mounted) {
                                   try {
-                                    await repo.deleteAppVersion(version.id);
+                                    await repo.deleteAppVersion(
+                                      version.id,
+                                      downloadUrl: version.downloadUrl,
+                                      versionNumber: version.versionNumber,
+                                    );
                                     if (context.mounted) {
                                       _refresh();
                                       ScaffoldMessenger.of(context)
                                           .showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Sürüm kaydı silindi.'),
+                                        SnackBar(
+                                          content: Text('v${version.versionNumber} sürüm kaydı ve paketi silindi.'),
                                           backgroundColor:
                                               AppColors.textDark,
                                         ),

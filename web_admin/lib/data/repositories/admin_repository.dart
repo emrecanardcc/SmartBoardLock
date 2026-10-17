@@ -712,7 +712,7 @@ class AdminRepository {
 
   Future<List<AppVersionModel>> getAppVersions() async {
     try {
-      final data = await _client
+      final data = await _db
           .from('app_versions')
           .select()
           .order('created_at', ascending: false);
@@ -729,7 +729,7 @@ class AdminRepository {
     required String versionNumber,
     required String downloadUrl,
   }) async {
-    await _client.from('app_versions').insert({
+    await _db.from('app_versions').insert({
       'version_number': versionNumber.trim(),
       'download_url': downloadUrl.trim(),
     });
@@ -740,20 +740,51 @@ class AdminRepository {
     required String versionNumber,
     required String downloadUrl,
   }) async {
-    await _client.from('app_versions').update({
+    await _db.from('app_versions').update({
       'version_number': versionNumber.trim(),
       'download_url': downloadUrl.trim(),
     }).eq('id', id);
   }
 
-  Future<void> deleteAppVersion(String id) async {
-    await _client.from('app_versions').delete().eq('id', id);
+  /// Sürümü veritabanından (Service-Role) ve ilişkili Storage dosyasından temizler
+  Future<void> deleteAppVersion(
+    String id, {
+    String? downloadUrl,
+    String? versionNumber,
+  }) async {
+    try {
+      // 1. Storage'daki ilişkili güncelleme paketini temizle
+      if (downloadUrl != null && downloadUrl.isNotEmpty) {
+        try {
+          final uri = Uri.tryParse(downloadUrl);
+          if (uri != null) {
+            final segments = uri.pathSegments;
+            final updatesIndex = segments.indexOf('updates');
+            if (updatesIndex != -1 && updatesIndex < segments.length - 1) {
+              final fileName = segments.sublist(updatesIndex + 1).join('/');
+              if (fileName.isNotEmpty) {
+                await _storage.from('updates').remove([fileName]);
+                debugPrint('Storage paketi silindi: $fileName');
+              }
+            }
+          }
+        } catch (storageErr) {
+          debugPrint('Storage dosya silme uyarısı: $storageErr');
+        }
+      }
+
+      // 2. Veritabanından kesin olarak sil (Service-Role ile RLS kısıtlamalarını aşar)
+      await _db.from('app_versions').delete().eq('id', id);
+    } catch (e) {
+      debugPrint('deleteAppVersion error: $e');
+      rethrow;
+    }
   }
 
-  /// En güncel sürüm numarasını çeker (örn: '2.0.8')
+  /// En güncel sürüm numarasını çeker (en son yayınlanan sürüm neyse o)
   Future<String?> getLatestVersionNumber() async {
     try {
-      final data = await _client
+      final data = await _db
           .from('app_versions')
           .select('version_number')
           .order('created_at', ascending: false)
