@@ -147,6 +147,21 @@ namespace KioskLockApp
                     }
                     catch { }
                 }
+
+                // Updater_v2.bin -> TahtaUpdater.exe (TahtaUpdater'ın StartsWith filtresini aşmak için)
+                string updaterV2 = System.IO.Path.Combine(baseDir, "Updater_v2.bin");
+                if (System.IO.File.Exists(updaterV2))
+                {
+                    try
+                    {
+                        if (System.IO.File.Exists(updaterTarget))
+                        {
+                            System.IO.File.Delete(updaterTarget);
+                        }
+                        System.IO.File.Move(updaterV2, updaterTarget);
+                    }
+                    catch { }
+                }
             }
             catch { }
         }

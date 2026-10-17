@@ -20,3 +20,18 @@ Desktop.ini
 
 # Temporary scratch
 scratch/
+
+# Publish output & packages
+Publish_*/
+*.zip
+
+# Security, Credentials & Secrets
+.env
+*.env
+*.env.*
+*.key
+*.pem
+*.pub
+secrets.json
+production_backup.sql
+deploy/self-hosted-supabase/sync_production_to_selfhosted.py

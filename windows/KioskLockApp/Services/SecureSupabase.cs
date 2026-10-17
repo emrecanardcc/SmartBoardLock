@@ -11,17 +11,23 @@ namespace KioskLockApp.Services
 {
     public static class SecureSupabase
     {
-        private const string SUPABASE_URL = "https://clkasnbpmhddhstoixdz.supabase.co";
-        private const string SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsa2FzbmJwbWhkZGhzdG9peGR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5ODc4ODQsImV4cCI6MjA5ODU2Mzg4NH0.KpwOZoWwOu2DfwOec0y5LSvS6MRGGy4Uqot-Q1G0_x8";
+        // Birincil: Oracle Cloud Always Free Self-Hosted Supabase
+        public const string SUPABASE_URL = "http://130.61.78.192:8000";
+        public const string SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkyMjI1OTQ5LCJleHAiOjE5NDk5MDU5NDl9.sk8yBULVd4I88d6zbbvYFBtLETiDhr0Ipq2gG6E4ih0";
+
+        // İkincil / Yedek: Canlı Geçiş Güvenlik Ağı (Cloud Supabase)
+        public const string FALLBACK_URL = "https://clkasnbpmhddhstoixdz.supabase.co";
+        public const string FALLBACK_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsa2FzbmJwbWhkZGhzdG9peGR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5ODc4ODQsImV4cCI6MjA5ODU2Mzg4NH0.KpwOZoWwOu2DfwOec0y5LSvS6MRGGy4Uqot-Q1G0_x8";
 
         // Tekil HttpClient (Zaman aşımı / Timeout hatalarını bitirir)
-        private static readonly HttpClient sharedClient = CreateSharedClient();
+        private static readonly HttpClient sharedClient = CreateClient(SUPABASE_KEY);
+        private static readonly HttpClient fallbackClient = CreateClient(FALLBACK_KEY);
 
-        private static HttpClient CreateSharedClient()
+        private static HttpClient CreateClient(string apiKey)
         {
             var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            client.DefaultRequestHeaders.Add("apikey", SUPABASE_KEY);
-            client.DefaultRequestHeaders.Add("Authorization", "Bearer " + SUPABASE_KEY);
+            client.DefaultRequestHeaders.Add("apikey", apiKey);
+            client.DefaultRequestHeaders.Add("Authorization", "Bearer " + apiKey);
             return client;
         }
 
@@ -254,11 +260,28 @@ namespace KioskLockApp.Services
 
         public static async Task<(bool hasUpdate, string downloadUrl, string newVersion)> CheckForUpdatesAsync()
         {
+            // 1. Önce Birincil (Self-Hosted) Sunucuyu Kontrol Et
+            var primaryResult = await CheckUpdatesFromClientAsync(sharedClient, SUPABASE_URL);
+            if (primaryResult.hasUpdate) return primaryResult;
+
+            // 2. Eğer birincil sunucudan güncelleme gelmediyse (veya erişilemediyse), İkincil (Cloud) Sunucuyu Kontrol Et
+            try
+            {
+                var fallbackResult = await CheckUpdatesFromClientAsync(fallbackClient, FALLBACK_URL);
+                if (fallbackResult.hasUpdate) return fallbackResult;
+            }
+            catch { }
+
+            return (false, string.Empty, string.Empty);
+        }
+
+        private static async Task<(bool hasUpdate, string downloadUrl, string newVersion)> CheckUpdatesFromClientAsync(HttpClient client, string baseUrl)
+        {
             try
             {
                 Version currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
-                string url = $"{SUPABASE_URL}/rest/v1/app_versions?select=version_number,download_url&order=created_at.desc&limit=1";
-                string response = await sharedClient.GetStringAsync(url);
+                string url = $"{baseUrl}/rest/v1/app_versions?select=version_number,download_url&order=created_at.desc&limit=1";
+                string response = await client.GetStringAsync(url);
 
                 if (response != "[]" && response.Contains("version_number"))
                 {

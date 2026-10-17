@@ -25,22 +25,25 @@ class AdminRepository {
   late final SupabaseStorageClient _storage;
 
   AdminRepository() {
+    final effectiveKey = AppConstants.supabaseServiceRoleKey.isNotEmpty
+        ? AppConstants.supabaseServiceRoleKey
+        : AppConstants.supabaseAnonKey;
     _adminClient = SupabaseClient(
       AppConstants.supabaseUrl,
-      AppConstants.supabaseServiceRoleKey,
+      effectiveKey,
     );
     _db = PostgrestClient(
       '${AppConstants.supabaseUrl}/rest/v1',
       headers: {
-        'apikey': AppConstants.supabaseServiceRoleKey,
-        'Authorization': 'Bearer ${AppConstants.supabaseServiceRoleKey}',
+        'apikey': effectiveKey,
+        'Authorization': 'Bearer $effectiveKey',
       },
     );
     _storage = SupabaseStorageClient(
       '${AppConstants.supabaseUrl}/storage/v1',
       {
-        'apikey': AppConstants.supabaseServiceRoleKey,
-        'Authorization': 'Bearer ${AppConstants.supabaseServiceRoleKey}',
+        'apikey': effectiveKey,
+        'Authorization': 'Bearer $effectiveKey',
       },
     );
   }

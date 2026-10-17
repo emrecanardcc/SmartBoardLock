@@ -265,8 +265,8 @@ namespace KioskLockApp.UI
                     try { boardChannel?.Unsubscribe(); realtimeClient.Realtime.Disconnect(); } catch { }
                 }
 
-                string url = "https://clkasnbpmhddhstoixdz.supabase.co";
-                string key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsa2FzbmJwbWhkZGhzdG9peGR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5ODc4ODQsImV4cCI6MjA5ODU2Mzg4NH0.KpwOZoWwOu2DfwOec0y5LSvS6MRGGy4Uqot-Q1G0_x8";
+                string url = SecureSupabase.SUPABASE_URL;
+                string key = SecureSupabase.SUPABASE_KEY;
 
                 var options = new Supabase.SupabaseOptions { AutoConnectRealtime = true };
                 realtimeClient = new Supabase.Client(url, key, options);

@@ -28,15 +28,14 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   late final SupabaseClient _adminClient;
-  final String _fallbackUrl = 'https://clkasnbpmhddhstoixdz.supabase.co';
-  final String _fallbackServiceRoleKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsa2FzbmJwbWhkZGhzdG9peGR6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4Mjk4Nzg4NCwiZXhwIjoyMDk4NTYzODg0fQ.Pe4I_qm_qr3HfGNoPFTbbEoQbP1ZD0-KOVZfpI1OJ8c';
+  final String _fallbackUrl = 'http://130.61.78.192:8000';
+  final String _fallbackServiceRoleKey = '';
 
   @override
   void initState() {
     super.initState();
     final url = dotenv.env['SUPABASE_URL'] ?? _fallbackUrl;
-    final key = dotenv.env['SUPABASE_SERVICE_ROLE_KEY'] ?? _fallbackServiceRoleKey;
+    final key = dotenv.env['SUPABASE_SERVICE_ROLE_KEY'] ?? dotenv.env['SUPABASE_ANON_KEY'] ?? _client.supabaseKey;
     _adminClient = SupabaseClient(url, key);
     _loadAdminData();
   }
