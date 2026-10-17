@@ -38,3 +38,4 @@ dist/
 secrets.json
 production_backup.sql
 deploy/self-hosted-supabase/sync_production_to_selfhosted.py
+.wrangler/

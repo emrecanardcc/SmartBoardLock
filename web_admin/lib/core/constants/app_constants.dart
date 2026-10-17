@@ -13,6 +13,19 @@ class AppConstants {
   static String get supabaseUrl {
     const envUrl = String.fromEnvironment('SUPABASE_URL');
     if (envUrl.trim().isNotEmpty) return envUrl.trim();
+
+    // Web tarayıcısında çalışırken:
+    // Eğer HTTPS üzerinden açıldıysa (örn: https://panel-sinif360.pages.dev veya https://panel.sinif360.app)
+    // Mixed Content hatasını önlemek için doğrudan aynı origin üzerindeki /backend proxy'sini kullanır.
+    if (Uri.base.scheme == 'https') {
+      return '${Uri.base.origin}/backend';
+    }
+
+    // Eğer doğrudan IP üzerinden açıldıysa (örn: http://130.61.78.192/admin/)
+    if (Uri.base.host.isNotEmpty && Uri.base.host != 'localhost') {
+      return 'http://${Uri.base.host}/backend';
+    }
+
     return _defaultUrl;
   }
 
