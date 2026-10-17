@@ -1,10 +1,10 @@
 ; =====================================================================
 ; Sınıf360 / Akıllı Tahta Kilit Sistemi - Profesyonel Kurulum Scripti
-; Sürüm: 2.0.8 | Yayıncı: Emre Can ARDIÇ
+; Sürüm: 2.1.1 | Yayıncı: Emre Can ARDIÇ
 ; =====================================================================
 
 #define MyAppName "Sınıf360 Akıllı Tahta Kilit Sistemi"
-#define MyAppVersion "2.0.8"
+#define MyAppVersion "2.1.1"
 #define MyAppPublisher "Emre Can ARDIÇ"
 #define MyAppExeName "KioskLockApp.exe"
 #define MyWatchdogExeName "WatchdogService.exe"
@@ -35,7 +35,7 @@ DisableFinishedPage=yes
 ; ProgramData'ya yazabilmek ve başlangıç kancası atabilmek için yönetici izni gereklidir
 PrivilegesRequired=admin
 OutputDir=userdocs:Inno Setup Output Files
-OutputBaseFilename=Sinif360_Setup_v2.0.8
+OutputBaseFilename=Sinif360_v2.1.1_Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -46,9 +46,11 @@ UninstallDisplayName={#MyAppName} Kaldır
 [Languages]
 Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
 
+[Dirs]
+Name: "{app}"; Permissions: users-full
+
 [Files]
-; Derlenen yayın klasöründeki tüm dosyalar (KioskLockApp, WatchdogService, TahtaRepair, TahtaUpdater ve tüm sistem DLL'leri)
-Source: "C:\Users\ardce\OneDrive\Desktop\ATS\TahtaUpdate_2.0.8\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "C:\Projeler\AkilliTahtaSistemi\dist\v2.1.1_publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-full
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -192,6 +194,16 @@ begin
     end;
   finally
     PassForm.Free;
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /grant *S-1-5-32-545:(OI)(CI)F /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;
 
