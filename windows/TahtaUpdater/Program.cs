@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -14,17 +14,20 @@ namespace TahtaUpdater
         [STAThread]
         static void Main(string[] args)
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
+            // Watchdog'un güncelleme sırasında Kiosk'u yeniden başlatmasını engelle
+            using (Mutex updateMutex = new Mutex(true, @"Global\TahtaGuncelleniyor", out bool createdNew))
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
 
-            if (args.Length < 2) return;
+                if (args.Length < 2) return;
 
-            string zipPath = args[0].Replace("\"", "");
-            string targetFolder = args[1].Replace("\"", "");
+                string zipPath = args[0].Replace("\"", "");
+                string targetFolder = args[1].Replace("\"", "");
 
-            string logPath = Path.Combine(Path.GetTempPath(), "updater_log.txt");
-            File.WriteAllText(logPath, "Updater (UI) basladi...\n");
-            File.AppendAllText(logPath, $"Hedef Klasör: {targetFolder}\n");
+                string logPath = Path.Combine(Path.GetTempPath(), "updater_log.txt");
+                File.WriteAllText(logPath, "Updater (UI) basladi...\n");
+                File.AppendAllText(logPath, $"Hedef Klasör: {targetFolder}\n");
 
             // --- MODERN GÜNCELLEME EKRANI (FLUENT DESIGN) ---
             Form updateForm = new Form
@@ -65,7 +68,8 @@ namespace TahtaUpdater
                 Application.Exit();
             };
 
-            Application.Run(updateForm);
+                Application.Run(updateForm);
+            }
         }
 
         static void PerformUpdate(string zipPath, string targetFolder, string logPath)

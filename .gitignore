@@ -23,6 +23,8 @@ scratch/
 
 # Publish output & packages
 Publish_*/
+publish/
+**/publish/
 *.zip
 
 # Security, Credentials & Secrets
