@@ -181,14 +181,21 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
 
   // --- REALTIME DİNLEYİCİ ---
   void _setupRealtime() {
-    _boardChannel = _client.channel('admin_realtime').onPostgresChanges(
+    if (_schoolId == null) return;
+
+    _boardChannel = _client.channel('admin_realtime:$_schoolId').onPostgresChanges(
       event: PostgresChangeEvent.all,
       schema: 'public',
       table: 'boards',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'school_id',
+        value: _schoolId!,
+      ),
       callback: (payload) {
         setState(() {
           if (payload.eventType == PostgresChangeEvent.insert) {
-            if (payload.newRecord['school_id'] == _schoolId) _boards.insert(0, payload.newRecord);
+            _boards.insert(0, payload.newRecord);
           } else if (payload.eventType == PostgresChangeEvent.update) {
             final idx = _boards.indexWhere((b) => b['id'] == payload.newRecord['id']);
             if (idx != -1) _boards[idx] = payload.newRecord;

@@ -125,6 +125,7 @@ namespace KioskLockApp.UI
             mainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38F));
             mainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32F));
             mainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
+            mainGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             root.Controls.Add(mainGrid, 0, 1);
 
             mainGrid.Controls.Add(BuildAfisPanel(), 0, 0);

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Win32;
@@ -20,29 +20,34 @@ namespace KioskLockApp.Services
             catch { return ""; }
         }
 
-        // Ekranda öğretmene gösterilecek 4 haneli rastgele Meydan Okuma (Challenge) kodunu üretir
+        // Ekranda öğretmene gösterilecek 4 haneli rastgele Meydan Okuma (Challenge) kodunu üretir (Kriptografik Güvenli)
         public static string GenerateChallengeCode()
         {
-            Random rnd = new Random();
-            return rnd.Next(1000, 9999).ToString();
+            return RandomNumberGenerator.GetInt32(1000, 10000).ToString();
         }
 
-        // Kod ve tahtanın gizli anahtarını harmanlayarak 6 haneli Kilit Açma PIN'ini üretir
-        private static string CalculateResponsePin(string challengeCode)
+        // Kod ve tahtanın gizli anahtarını harmanlayarak 6 haneli Kilit Açma PIN'ini üretir (Registry tabanlı)
+        public static string CalculateResponsePin(string challengeCode)
         {
-            string boardId = GetRegistryValue("BoardId");
             string offlineSecret = GetRegistryValue("OfflineSecret");
+            return CalculateResponsePin(challengeCode, offlineSecret);
+        }
 
-            if (string.IsNullOrEmpty(boardId) || string.IsNullOrEmpty(offlineSecret) || string.IsNullOrEmpty(challengeCode))
-                return "000000";
+        // Test edilebilir ve açık gizli anahtar alan hesaplama metodu (RFC 4226 Dinamik Kırpma)
+        public static string CalculateResponsePin(string challengeCode, string offlineSecret)
+        {
+            if (string.IsNullOrWhiteSpace(challengeCode) || string.IsNullOrWhiteSpace(offlineSecret))
+            {
+                return string.Empty; // Güvenlik Kalkanı: Boş secret durumunda asla '000000' veya geçerli PIN üretme!
+            }
 
             string rawData = challengeCode.Trim() + "-" + offlineSecret.Trim();
 
-            using (HMACSHA256 hmac = new HMACSHA256(Encoding.UTF8.GetBytes(offlineSecret)))
+            using (HMACSHA256 hmac = new HMACSHA256(Encoding.UTF8.GetBytes(offlineSecret.Trim())))
             {
                 byte[] hashBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(rawData));
 
-                // Güvenli hash dönüşümü
+                // RFC 4226 Uyumlu Güvenli Dinamik Kırpma (Dynamic Truncation)
                 int offset = hashBytes[hashBytes.Length - 1] & 0x0F;
                 int binary =
                     ((hashBytes[offset] & 0x7f) << 24) |
@@ -58,10 +63,23 @@ namespace KioskLockApp.Services
         // Girilen PIN'in doğru olup olmadığını kontrol eder
         public static bool VerifyPin(string enteredPin, string currentChallengeCode)
         {
-            if (string.IsNullOrEmpty(enteredPin) || enteredPin.Length != 6)
+            string offlineSecret = GetRegistryValue("OfflineSecret");
+            return VerifyPin(enteredPin, currentChallengeCode, offlineSecret);
+        }
+
+        // Test edilebilir parametreli PIN doğrulama metodu
+        public static bool VerifyPin(string enteredPin, string currentChallengeCode, string offlineSecret)
+        {
+            if (string.IsNullOrWhiteSpace(enteredPin) || enteredPin.Length != 6)
                 return false;
 
-            string expectedPin = CalculateResponsePin(currentChallengeCode);
+            if (string.IsNullOrWhiteSpace(offlineSecret))
+                return false; // Boş anahtar ile doğrulama yapılamaz
+
+            string expectedPin = CalculateResponsePin(currentChallengeCode, offlineSecret);
+            if (string.IsNullOrEmpty(expectedPin))
+                return false;
+
             return enteredPin == expectedPin;
         }
     }

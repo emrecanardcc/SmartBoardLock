@@ -1,8 +1,7 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../data/datasources/supabase_datasource.dart';
+import '../../data/services/qr_validator.dart';
 
 // --- YEPYENİ CANLI VE PROFESYONEL RENK PALETİ ---
 const Color bgLight = Color(0xFFF1F5F9);      // Açık Arduvaz
@@ -68,40 +67,15 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
   Future<void> _verifyAndUnlock(String scannedData) async {
     try {
-      // Veriyi parçala: "ID | ZAMAN | İMZA"
-      final parts = scannedData.split('|');
-      if (parts.length != 3) throw Exception("Hatalı Okutma: Geçersiz QR Formatı");
+      final validation = QrValidator.validatePayload(
+        scannedData: scannedData,
+        expectedBoardId: widget.expectedBoardId,
+        expectedOfflineSecret: widget.expectedOfflineSecret,
+      );
 
-      final scannedBoardId = parts[0];
-      final scannedTime = parts[1];
-      final scannedSignature = parts[2];
-
-      // 1. SIKI GÜVENLİK: ID KONTROLÜ
-      if (scannedBoardId != widget.expectedBoardId) {
-         throw Exception("Geçersiz İşlem: Hedef Kimlik Uyuşmazlığı\n(Seçilen: ${widget.boardName})");
+      if (!validation.isValid) {
+        throw Exception(validation.errorMessage ?? "Geçersiz QR Kod");
       }
-
-      // 2. Zaman Damgası Kontrolü
-      final now = DateTime.now().toUtc();
-      final currentMinute = "${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}";
-      
-      if (int.parse(currentMinute) - int.parse(scannedTime) > 1) {
-         throw Exception("Geçersiz İşlem: Süresi Dolmuş QR Kod");
-      }
-
-      // 3. Kriptografik İmza Kontrolü
-      final rawData = scannedBoardId + widget.expectedOfflineSecret + scannedTime;
-      final bytes = utf8.encode(rawData);
-      final digest = sha256.convert(bytes);
-      final hashBytes = digest.bytes;
-      
-      String expectedSignature = "";
-      for (int i = 0; i < hashBytes.length; i++) {
-        expectedSignature += hashBytes[i].toRadixString(16).padLeft(2, '0').toUpperCase();
-      }
-      expectedSignature = expectedSignature.substring(0, 16);
-
-      if (scannedSignature != expectedSignature) throw Exception("Güvenlik İhlali: Geçersiz İmza");
 
       // --- HER ŞEY DOĞRUYSA KİLİDİ AÇ ---
       await _datasource.updateLockStatus(

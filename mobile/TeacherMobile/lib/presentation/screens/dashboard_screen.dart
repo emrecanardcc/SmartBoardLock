@@ -203,10 +203,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _setupRealtime() {
-    _boardChannel = _client.channel('public:boards').onPostgresChanges(
+    if (_schoolId == null) return;
+
+    _boardChannel = _client.channel('public:boards:$_schoolId').onPostgresChanges(
       event: PostgresChangeEvent.update,
       schema: 'public',
       table: 'boards',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'school_id',
+        value: _schoolId!,
+      ),
       callback: (payload) {
         final updatedBoard = payload.newRecord;
         final index = _boards.indexWhere((b) => b['id'] == updatedBoard['id']);

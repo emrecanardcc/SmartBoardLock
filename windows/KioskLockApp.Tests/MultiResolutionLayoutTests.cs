@@ -62,19 +62,24 @@ namespace KioskLockApp.Tests
                 {
                     using (var form = new SecureRenderer(isDesignOrTestMode: true))
                     {
-                        form.Size = res;
+                        form.ClientSize = res;
+                        _ = form.Handle; // HWND oluşturulmasını ve WinForms mesaj kuyruğunda düzen hesaplamasını zorlar
                         form.ApplyDynamicSizing(res.Width, res.Height);
 
                         TableLayoutPanel? root = form.Controls.OfType<TableLayoutPanel>().FirstOrDefault();
                         Assert.IsNotNull(root, $"Root TableLayoutPanel bulunamadı: {res}");
 
-                        // Header (Row 0), MainGrid (Row 1), Footer (Row 2) sınır kontrolü
-                        Assert.IsTrue(root.RowCount >= 3, $"Root satır sayısı yetersiz: {res}");
-                        Assert.AreEqual(DockStyle.Fill, root.Dock);
-
                         TableLayoutPanel? mainGrid = FindControlByName<TableLayoutPanel>(root, "mainGrid") 
                             ?? root.Controls.OfType<TableLayoutPanel>().FirstOrDefault(c => c.ColumnCount == 3);
                         Assert.IsNotNull(mainGrid, $"mainGrid bulunamadı: {res}");
+
+                        form.PerformLayout();
+                        root.PerformLayout();
+                        mainGrid.PerformLayout();
+
+                        // Header (Row 0), MainGrid (Row 1), Footer (Row 2) sınır kontrolü
+                        Assert.IsTrue(root.RowCount >= 3, $"Root satır sayısı yetersiz: {res}");
+                        Assert.AreEqual(DockStyle.Fill, root.Dock);
 
                         // Sütunların pozitif genişlikte ve form sınırları içinde olduğunu doğrula
                         for (int col = 0; col < mainGrid.ColumnCount; col++)
