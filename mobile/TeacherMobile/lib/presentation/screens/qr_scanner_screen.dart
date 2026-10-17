@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/datasources/supabase_datasource.dart';
 import '../../data/services/qr_validator.dart';
 
@@ -77,10 +78,20 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         throw Exception(validation.errorMessage ?? "Geçersiz QR Kod");
       }
 
+      String? teacherName;
+      try {
+        final user = Supabase.instance.client.auth.currentUser;
+        if (user != null) {
+          final profile = await Supabase.instance.client.from('user_profiles').select('full_name').eq('id', user.id).maybeSingle();
+          teacherName = profile?['full_name'];
+        }
+      } catch (_) {}
+
       // --- HER ŞEY DOĞRUYSA KİLİDİ AÇ ---
       await _datasource.updateLockStatus(
         boardId: widget.expectedBoardId,
         isUnlocked: true,
+        unlockedBy: teacherName ?? 'Öğretmen',
       );
       
       if (!mounted) return;

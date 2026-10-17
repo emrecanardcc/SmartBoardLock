@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/services/totp_service.dart';
 import 'qr_scanner_screen.dart';
+import '../../data/datasources/supabase_datasource.dart';
 
 // --- CANLI VE PROFESYONEL RENK PALETİ ---
 const Color bgLight = Color(0xFFF1F5F9);      
@@ -35,6 +37,7 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
   
   bool _isOfflineModeVisible = false;
   final TextEditingController _challengeController = TextEditingController();
+  final FocusNode _challengeFocusNode = FocusNode();
   String _generatedPin = '';
   String? _adminName; 
 
@@ -47,6 +50,7 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
   @override
   void dispose() {
     _challengeController.dispose();
+    _challengeFocusNode.dispose();
     super.dispose();
   }
 
@@ -61,11 +65,15 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
   }
 
   void _calculateOfflinePin(String challenge) {
-    if (challenge.length == 4) {
+    final clean = challenge.trim();
+    if (clean.length == 4) {
+      _challengeFocusNode.unfocus();
+      FocusScope.of(context).unfocus();
+      SystemChannels.textInput.invokeMethod('TextInput.hide');
       setState(() {
         _generatedPin = TotpService.generateResponse(
           offlineSecret: widget.offlineSecret,
-          challengeCode: challenge,
+          challengeCode: clean,
         );
       });
     } else {
@@ -82,10 +90,13 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
     }
 
     try {
-      await _client.from('boards').update({
-        'is_unlocked': false,
-        'last_locked_by': _adminName ?? 'Öğretmen/Yetkili'
-      }).eq('id', widget.boardId);
+      await SupabaseDatasource.syncBoardPatch(
+        boardId: widget.boardId,
+        patchData: {
+          'is_unlocked': false,
+          'last_locked_by': _adminName ?? 'Öğretmen/Yetkili'
+        },
+      );
       
       if (mounted) {
         _showModernSnackbar('Tahta başarıyla kilitlendi.', isSuccess: true, bgColor: textDark);
@@ -117,19 +128,26 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: bgLight,
-      appBar: AppBar(
-        title: Text(
-          widget.boardName, 
-          style: const TextStyle(color: textDark, fontWeight: FontWeight.w900, fontSize: 20)
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        _challengeFocusNode.unfocus();
+        FocusScope.of(context).unfocus();
+        SystemChannels.textInput.invokeMethod('TextInput.hide');
+      },
+      child: Scaffold(
+        backgroundColor: bgLight,
+        appBar: AppBar(
+          title: Text(
+            widget.boardName, 
+            style: const TextStyle(color: textDark, fontWeight: FontWeight.w900, fontSize: 20)
+          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          iconTheme: const IconThemeData(color: textDark),
         ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        iconTheme: const IconThemeData(color: textDark),
-      ),
-      body: StreamBuilder<List<Map<String, dynamic>>>(
+        body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: _client.from('boards').stream(primaryKey: ['id']).eq('id', widget.boardId),
         builder: (context, snapshot) {
           bool isUnlocked = false;
@@ -254,6 +272,7 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
                         const SizedBox(height: 16),
                         TextField(
                           controller: _challengeController,
+                          focusNode: _challengeFocusNode,
                           keyboardType: TextInputType.number,
                           maxLength: 4,
                           textAlign: TextAlign.center,
@@ -269,8 +288,32 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(color: primaryBlue, width: 2),
                             ),
+                            suffixIcon: _challengeController.text.isNotEmpty
+                                ? IconButton(
+                                    tooltip: 'Klavyeyi Kapat',
+                                    icon: const Icon(Icons.keyboard_hide_rounded, color: textGrey),
+                                    onPressed: () {
+                                      _challengeFocusNode.unfocus();
+                                      FocusScope.of(context).unfocus();
+                                      SystemChannels.textInput.invokeMethod('TextInput.hide');
+                                    },
+                                  )
+                                : null,
                           ),
                           onChanged: _calculateOfflinePin,
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: () {
+                            _challengeFocusNode.unfocus();
+                            FocusScope.of(context).unfocus();
+                            SystemChannels.textInput.invokeMethod('TextInput.hide');
+                          },
+                          icon: const Icon(Icons.keyboard_hide_rounded, size: 18, color: textGrey),
+                          label: const Text(
+                            'Klavyeyi Kapat',
+                            style: TextStyle(color: textGrey, fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
                         ),
                         if (_generatedPin.isNotEmpty) ...[
                           const SizedBox(height: 20),
@@ -365,6 +408,7 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
           );
         },
       ),
-    );
-  }
+    ),
+  );
+}
 }

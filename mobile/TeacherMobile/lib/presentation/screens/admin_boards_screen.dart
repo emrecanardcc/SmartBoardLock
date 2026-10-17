@@ -6,6 +6,7 @@ import 'login_screen.dart';
 import 'admin_teachers_screen.dart';
 import '../widgets/report_issue_dialog.dart';
 import '../widgets/tutorial_tips_dialog.dart';
+import '../../data/datasources/supabase_datasource.dart';
 
 // --- RENK PALETİ ---
 const Color bgLight = Color(0xFFF1F5F9);
@@ -270,7 +271,7 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
       } else {
         updateData['last_locked_by'] = _adminName;
       }
-      await _client.from('boards').update(updateData).eq('id', boardId);
+      await SupabaseDatasource.syncBoardPatch(boardId: boardId, patchData: updateData);
     } catch (e) {
       _showModernSnackbar('Hata: $e', isSuccess: false, bgColor: dangerRed);
     }
@@ -435,12 +436,15 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
 
                   try {
                     if (isEditing) {
-                      await _client.from('boards').update({
-                        'name': nameController.text.trim(),
-                        'grade': gradeController.text.trim(),
-                        'branch': branchController.text.trim(),
-                        'is_active': isActive,
-                      }).eq('id', board['id']);
+                      await SupabaseDatasource.syncBoardPatch(
+                        boardId: board['id'],
+                        patchData: {
+                          'name': nameController.text.trim(),
+                          'grade': gradeController.text.trim(),
+                          'branch': branchController.text.trim(),
+                          'is_active': isActive,
+                        },
+                      );
                       if (dialogCtx.mounted) {
                         _showModernSnackbar('Tahta güncellendi.', isSuccess: true, bgColor: successGreen);
                         Navigator.pop(dialogCtx);

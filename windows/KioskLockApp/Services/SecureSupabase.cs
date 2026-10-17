@@ -133,18 +133,31 @@ namespace KioskLockApp.Services
 
         public static async Task ClearRemoteCommandAsync(string boardId)
         {
+            // 1. Birincil (Oracle VM)
             try
             {
                 string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}";
                 string jsonBody = "{\"remote_command\": null}";
-
                 var request = new HttpRequestMessage(new HttpMethod("PATCH"), url)
                 {
                     Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
                 };
                 request.Headers.Add("Prefer", "return=minimal");
-
                 await sharedClient.SendAsync(request);
+            }
+            catch { }
+
+            // 2. İkincil (Cloud Supabase)
+            try
+            {
+                string fallbackUrl = $"{FALLBACK_URL}/rest/v1/boards?id=eq.{boardId}";
+                string jsonBody = "{\"remote_command\": null}";
+                var request = new HttpRequestMessage(new HttpMethod("PATCH"), fallbackUrl)
+                {
+                    Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+                };
+                request.Headers.Add("Prefer", "return=minimal");
+                await fallbackClient.SendAsync(request);
             }
             catch { }
         }
@@ -192,58 +205,146 @@ namespace KioskLockApp.Services
 
             if (string.IsNullOrEmpty(boardId)) return ("DELETED", currentName, lastKnownActive, "");
 
+            string primaryResponse = "";
+            string fallbackResponse = "";
+
+            // 1. Birincil Sunucu (Oracle Cloud Supabase)
             try
             {
                 string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=is_unlocked,is_active,name,remote_command";
-                string response = await sharedClient.GetStringAsync(url);
-                string cleanResponse = response.Replace(" ", "").ToLower();
-
-                if (cleanResponse == "[]")
-                {
-                    // Birincil sunucuda bulunamadıysa hemen silindi sayma; Fallback (Cloud Supabase) üzerinde var mı kontrol et
-                    try
-                    {
-                        string fallbackUrl = $"{FALLBACK_URL}/rest/v1/boards?id=eq.{boardId}&select=is_unlocked,is_active,name,remote_command";
-                        string fallbackResp = await fallbackClient.GetStringAsync(fallbackUrl);
-                        string cleanFallback = fallbackResp.Replace(" ", "").ToLower();
-                        if (cleanFallback != "[]")
-                        {
-                            _ = SyncBoardFromCloudToOracleAsync(boardId);
-                            response = fallbackResp;
-                            cleanResponse = cleanFallback;
-                        }
-                        else
-                        {
-                            return ("DELETED", currentName, lastKnownActive, "");
-                        }
-                    }
-                    catch
-                    {
-                        return ("DELETED", currentName, lastKnownActive, "");
-                    }
-                }
-
-                string fetchedName = ExtractJsonStringValue(response, "name");
-                if (!string.IsNullOrEmpty(fetchedName) && fetchedName != currentName)
-                {
-                    SetRegistryValue("BoardName", fetchedName);
-                    currentName = fetchedName;
-                }
-
-                string remoteCommand = ExtractJsonStringValue(response, "remote_command");
-
-                bool isActive = cleanResponse.Contains("\"is_active\":true");
-                SetRegistryValue("LastKnownIsActive", isActive ? "true" : "false");
-
-                if (!isActive || cleanResponse.Contains("\"is_unlocked\":true"))
-                    return ("UNLOCKED", currentName, isActive, remoteCommand);
-
-                return ("LOCKED", currentName, isActive, remoteCommand);
+                primaryResponse = await sharedClient.GetStringAsync(url);
             }
-            catch
+            catch { }
+
+            // 2. İkincil Sunucu (Cloud Supabase - Canlı Güvenlik Ağı)
+            try
             {
-                return ("ERROR", currentName, lastKnownActive, "");
+                string fallbackUrl = $"{FALLBACK_URL}/rest/v1/boards?id=eq.{boardId}&select=is_unlocked,is_active,name,remote_command";
+                fallbackResponse = await fallbackClient.GetStringAsync(fallbackUrl);
             }
+            catch { }
+
+            string cleanPrimary = (primaryResponse ?? "").Replace(" ", "").ToLower();
+            string cleanFallback = (fallbackResponse ?? "").Replace(" ", "").ToLower();
+
+            // İki sunucuda da kayıt yoksa silinmiştir
+            if (cleanPrimary == "[]" && cleanFallback == "[]")
+            {
+                return ("DELETED", currentName, lastKnownActive, "");
+            }
+
+            // Birincil sunucuda eksikse Fallback'ten Oracle VM'e otomatik taşı
+            if (cleanPrimary == "[]" && cleanFallback != "[]" && !string.IsNullOrEmpty(fallbackResponse))
+            {
+                _ = SyncBoardFromCloudToOracleAsync(boardId);
+            }
+
+            // İsim Eşitleme: Hangisinde güncel/farklı isim varsa al ve iki tarafa da yaz
+            string primaryName = ExtractJsonStringValue(primaryResponse ?? "", "name");
+            string fallbackName = ExtractJsonStringValue(fallbackResponse ?? "", "name");
+
+            string latestName = currentName;
+            if (!string.IsNullOrEmpty(fallbackName) && fallbackName != currentName)
+            {
+                latestName = fallbackName;
+            }
+            else if (!string.IsNullOrEmpty(primaryName) && primaryName != currentName)
+            {
+                latestName = primaryName;
+            }
+
+            if (!string.IsNullOrEmpty(latestName) && latestName != currentName)
+            {
+                SetRegistryValue("BoardName", latestName);
+                currentName = latestName;
+                _ = SyncBoardNameAsync(boardId, latestName);
+            }
+
+            // Remote Command: Herhangi bir sunucuda bekleyen komut var mı?
+            string remoteCommand = ExtractJsonStringValue(primaryResponse, "remote_command");
+            if (string.IsNullOrEmpty(remoteCommand))
+            {
+                remoteCommand = ExtractJsonStringValue(fallbackResponse, "remote_command");
+            }
+
+            // Aktiflik kontrolü
+            bool isActivePrimary = cleanPrimary.Contains("\"is_active\":true") || (!cleanPrimary.Contains("\"is_active\":false") && lastKnownActive);
+            bool isActiveFallback = cleanFallback.Contains("\"is_active\":true") || (!cleanFallback.Contains("\"is_active\":false") && lastKnownActive);
+            bool isActive = isActivePrimary && isActiveFallback;
+            SetRegistryValue("LastKnownIsActive", isActive ? "true" : "false");
+
+            // Kilit durumu: İKİ SUNUCUDAN BİRİNDE BİLE KİLİT AÇILDIYSA TAHTA AÇILMALIDIR!
+            bool primaryUnlocked = cleanPrimary.Contains("\"is_unlocked\":true");
+            bool fallbackUnlocked = cleanFallback.Contains("\"is_unlocked\":true");
+
+            if (!isActive || primaryUnlocked || fallbackUnlocked)
+            {
+                // Eğer birinde açık diğeri kapalıysa ikisini anında eşitle
+                if (primaryUnlocked != fallbackUnlocked)
+                {
+                    _ = SyncUnlockStatusAcrossServersAsync(boardId, true);
+                }
+                return ("UNLOCKED", currentName, isActive, remoteCommand);
+            }
+
+            return ("LOCKED", currentName, isActive, remoteCommand);
+        }
+
+        public static async Task SyncUnlockStatusAcrossServersAsync(string boardId, bool isUnlocked)
+        {
+            string jsonBody = $"{{\"is_unlocked\": {isUnlocked.ToString().ToLower()}}}";
+            try
+            {
+                string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}";
+                var req = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+                {
+                    Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+                };
+                req.Headers.Add("Prefer", "return=minimal");
+                await sharedClient.SendAsync(req);
+            }
+            catch { }
+
+            try
+            {
+                string fallbackUrl = $"{FALLBACK_URL}/rest/v1/boards?id=eq.{boardId}";
+                var req = new HttpRequestMessage(new HttpMethod("PATCH"), fallbackUrl)
+                {
+                    Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+                };
+                req.Headers.Add("Prefer", "return=minimal");
+                await fallbackClient.SendAsync(req);
+            }
+            catch { }
+        }
+
+        public static async Task SyncBoardNameAsync(string boardId, string newName)
+        {
+            if (string.IsNullOrEmpty(newName)) return;
+            string jsonBody = $"{{\"name\": \"{newName}\"}}";
+            try
+            {
+                string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}";
+                var req = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+                {
+                    Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+                };
+                req.Headers.Add("Prefer", "return=minimal");
+                await sharedClient.SendAsync(req);
+            }
+            catch { }
+
+            try
+            {
+                string fallbackUrl = $"{FALLBACK_URL}/rest/v1/boards?id=eq.{boardId}";
+                var req = new HttpRequestMessage(new HttpMethod("PATCH"), fallbackUrl)
+                {
+                    Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+                };
+                req.Headers.Add("Prefer", "return=minimal");
+                await fallbackClient.SendAsync(req);
+            }
+            catch { }
         }
 
         public static async Task SyncOfflineStatusAsync()
@@ -257,20 +358,35 @@ namespace KioskLockApp.Services
             try
             {
                 bool targetUnlockState = (pendingAction == "UNLOCK");
-                string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}";
                 string jsonBody = $"{{\"is_unlocked\": {targetUnlockState.ToString().ToLower()}, \"last_locked_by\": \"Tahta (Çevrimdışı)\"}}";
 
-                var request = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+                // 1. Birincil (Oracle VM)
+                try
                 {
-                    Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
-                };
-                request.Headers.Add("Prefer", "return=minimal");
-
-                var response = await sharedClient.SendAsync(request);
-                if (response.IsSuccessStatusCode)
-                {
-                    SetRegistryValue("PendingOfflineSync", "");
+                    string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}";
+                    var request = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+                    {
+                        Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+                    };
+                    request.Headers.Add("Prefer", "return=minimal");
+                    await sharedClient.SendAsync(request);
                 }
+                catch { }
+
+                // 2. İkincil (Cloud Supabase)
+                try
+                {
+                    string fallbackUrl = $"{FALLBACK_URL}/rest/v1/boards?id=eq.{boardId}";
+                    var request = new HttpRequestMessage(new HttpMethod("PATCH"), fallbackUrl)
+                    {
+                        Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+                    };
+                    request.Headers.Add("Prefer", "return=minimal");
+                    await fallbackClient.SendAsync(request);
+                }
+                catch { }
+
+                SetRegistryValue("PendingOfflineSync", "");
             }
             catch { }
         }

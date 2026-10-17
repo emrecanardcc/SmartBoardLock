@@ -38,8 +38,10 @@ namespace KioskLockApp.UI
         private List<Form> secondaryScreens = new List<Form>();
         private string currentChallengeCode = "";
 
-        private Supabase.Client realtimeClient;
-        private RealtimeChannel boardChannel;
+        private Supabase.Client? realtimeClient;
+        private RealtimeChannel? boardChannel;
+        private Supabase.Client? fallbackRealtimeClient;
+        private RealtimeChannel? fallbackBoardChannel;
 
         private readonly string[] BlacklistedProcesses = { "taskmgr", "cmd", "powershell", "regedit", "mmc", "sethc", "utilman", "osk" };
 
@@ -102,7 +104,7 @@ namespace KioskLockApp.UI
             };
             clockTimer.Start();
 
-            watchdogTimer = new System.Windows.Forms.Timer { Interval = 300000 };
+            watchdogTimer = new System.Windows.Forms.Timer { Interval = 10000 };
             watchdogTimer.Tick += async (s, e) => await CheckStatusAsync();
             watchdogTimer.Start();
 
@@ -264,91 +266,124 @@ namespace KioskLockApp.UI
                 {
                     try { boardChannel?.Unsubscribe(); realtimeClient.Realtime.Disconnect(); } catch { }
                 }
+                if (fallbackRealtimeClient != null)
+                {
+                    try { fallbackBoardChannel?.Unsubscribe(); fallbackRealtimeClient.Realtime.Disconnect(); } catch { }
+                }
 
-                string url = SecureSupabase.SUPABASE_URL;
-                string key = SecureSupabase.SUPABASE_KEY;
+                // 1. Birincil Realtime Bağlantısı (Oracle Cloud Supabase)
+                try
+                {
+                    string url = SecureSupabase.SUPABASE_URL;
+                    string key = SecureSupabase.SUPABASE_KEY;
+                    var options = new Supabase.SupabaseOptions { AutoConnectRealtime = true };
+                    realtimeClient = new Supabase.Client(url, key, options);
+                    await realtimeClient.InitializeAsync();
 
-                var options = new Supabase.SupabaseOptions { AutoConnectRealtime = true };
-                realtimeClient = new Supabase.Client(url, key, options);
-                await realtimeClient.InitializeAsync();
-
-                boardChannel = realtimeClient.Realtime.Channel("realtime", "public", "boards");
-
-                boardChannel.AddPostgresChangeHandler(
-                    Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.Updates,
-                    (sender, change) =>
-                    {
-                        var record = change.Model<BoardRealtimeModel>();
-                        if (record != null && record.Id == boardId)
-                        {
-                            this.Invoke(new Action(() => {
-                                if (!string.IsNullOrEmpty(record.RemoteCommand) && record.RemoteCommand.ToUpper().StartsWith("REPAIR_INTEGRITY"))
-                                {
-                                    _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
-                                    LaunchRepairAndExit();
-                                    return;
-                                }
-
-                                if (!string.IsNullOrEmpty(record.RemoteCommand) && record.RemoteCommand.ToUpper() == "SHUTDOWN")
-                                {
-                                    _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
-                                    SecureSupabase.ExecuteShutdown();
-                                    return;
-                                }
-
-                                if (!string.IsNullOrEmpty(record.RemoteCommand) && record.RemoteCommand.StartsWith("MEDIA_DISPATCH:"))
-                                {
-                                    string payload = record.RemoteCommand.Substring("MEDIA_DISPATCH:".Length);
-                                    _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
-                                    _ = System.Threading.Tasks.Task.Run(async () => {
-                                        bool ok = await MediaManager.ProcessDispatchAsync(payload);
-                                        if (ok)
-                                        {
-                                            await SecureSupabase.ReportActiveMediaIdAsync(MediaManager.GetActiveMediaId());
-                                            this.Invoke(new Action(() => RefreshMediaDisplays()));
-                                        }
-                                    });
-                                }
-                                else if (!string.IsNullOrEmpty(record.RemoteCommand) && record.RemoteCommand.StartsWith("MEDIA_UPDATE_DURATION:"))
-                                {
-                                    string payload = record.RemoteCommand.Substring("MEDIA_UPDATE_DURATION:".Length);
-                                    _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
-                                    MediaManager.UpdateDuration(payload);
-                                    RefreshMediaDisplays();
-                                }
-                                else if (!string.IsNullOrEmpty(record.RemoteCommand) && (record.RemoteCommand == "MEDIA_RESET" || record.RemoteCommand == "RESET_MEDIA"))
-                                {
-                                    _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
-                                    MediaManager.ResetToDefault();
-                                    _ = SecureSupabase.ReportActiveMediaIdAsync("DEFAULT");
-                                    RefreshMediaDisplays();
-                                }
-
-                                if (lblBoard != null && lblBoard.Text != record.Name && !string.IsNullOrEmpty(record.Name))
-                                {
-                                    lblBoard.Text = record.Name;
-                                    SecureSupabase.SetRegistryValue("BoardName", record.Name);
-                                }
-
-                                SecureSupabase.SetRegistryValue("LastKnownIsActive", record.IsActive ? "true" : "false");
-
-                                if (!record.IsActive || record.IsUnlocked)
-                                {
-                                    isOfflineUnlocked = false;
-                                    UnlockScreen();
-                                }
-                                else
-                                {
-                                    isOfflineUnlocked = false;
-                                    LockScreen();
-                                }
-                            }));
+                    boardChannel = realtimeClient.Realtime.Channel("realtime", "public", "boards");
+                    boardChannel.AddPostgresChangeHandler(
+                        Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.Updates,
+                        (sender, change) => {
+                            var rec = change.Model<BoardRealtimeModel>();
+                            if (rec != null) HandleRealtimeRecord(rec, boardId);
                         }
-                    });
+                    );
+                    await boardChannel.Subscribe();
+                }
+                catch { }
 
-                await boardChannel.Subscribe();
+                // 2. İkincil / Canlı Güvenlik Ağı Realtime Bağlantısı (Cloud Supabase)
+                try
+                {
+                    string fallbackUrl = SecureSupabase.FALLBACK_URL;
+                    string fallbackKey = SecureSupabase.FALLBACK_KEY;
+                    var fallbackOptions = new Supabase.SupabaseOptions { AutoConnectRealtime = true };
+                    fallbackRealtimeClient = new Supabase.Client(fallbackUrl, fallbackKey, fallbackOptions);
+                    await fallbackRealtimeClient.InitializeAsync();
+
+                    fallbackBoardChannel = fallbackRealtimeClient.Realtime.Channel("realtime_fallback", "public", "boards");
+                    fallbackBoardChannel.AddPostgresChangeHandler(
+                        Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.Updates,
+                        (sender, change) => {
+                            var rec = change.Model<BoardRealtimeModel>();
+                            if (rec != null) HandleRealtimeRecord(rec, boardId);
+                        }
+                    );
+                    await fallbackBoardChannel.Subscribe();
+                }
+                catch { }
             }
             catch { }
+        }
+
+        private void HandleRealtimeRecord(BoardRealtimeModel record, string boardId)
+        {
+            if (record != null && record.Id == boardId)
+            {
+                this.Invoke(new Action(() => {
+                    if (!string.IsNullOrEmpty(record.RemoteCommand) && record.RemoteCommand.ToUpper().StartsWith("REPAIR_INTEGRITY"))
+                    {
+                        _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
+                        LaunchRepairAndExit();
+                        return;
+                    }
+
+                    if (!string.IsNullOrEmpty(record.RemoteCommand) && record.RemoteCommand.ToUpper() == "SHUTDOWN")
+                    {
+                        _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
+                        SecureSupabase.ExecuteShutdown();
+                        return;
+                    }
+
+                    if (!string.IsNullOrEmpty(record.RemoteCommand) && record.RemoteCommand.StartsWith("MEDIA_DISPATCH:"))
+                    {
+                        string payload = record.RemoteCommand.Substring("MEDIA_DISPATCH:".Length);
+                        _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
+                        _ = System.Threading.Tasks.Task.Run(async () => {
+                            bool ok = await MediaManager.ProcessDispatchAsync(payload);
+                            if (ok)
+                            {
+                                await SecureSupabase.ReportActiveMediaIdAsync(MediaManager.GetActiveMediaId());
+                                this.Invoke(new Action(() => RefreshMediaDisplays()));
+                            }
+                        });
+                    }
+                    else if (!string.IsNullOrEmpty(record.RemoteCommand) && record.RemoteCommand.StartsWith("MEDIA_UPDATE_DURATION:"))
+                    {
+                        string payload = record.RemoteCommand.Substring("MEDIA_UPDATE_DURATION:".Length);
+                        _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
+                        MediaManager.UpdateDuration(payload);
+                        RefreshMediaDisplays();
+                    }
+                    else if (!string.IsNullOrEmpty(record.RemoteCommand) && (record.RemoteCommand == "MEDIA_RESET" || record.RemoteCommand == "RESET_MEDIA"))
+                    {
+                        _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
+                        MediaManager.ResetToDefault();
+                        _ = SecureSupabase.ReportActiveMediaIdAsync("DEFAULT");
+                        RefreshMediaDisplays();
+                    }
+
+                    if (lblBoard != null && lblBoard.Text != record.Name && !string.IsNullOrEmpty(record.Name))
+                    {
+                        lblBoard.Text = record.Name;
+                        SecureSupabase.SetRegistryValue("BoardName", record.Name);
+                        _ = SecureSupabase.SyncBoardNameAsync(boardId, record.Name);
+                    }
+
+                    SecureSupabase.SetRegistryValue("LastKnownIsActive", record.IsActive ? "true" : "false");
+
+                    if (!record.IsActive || record.IsUnlocked)
+                    {
+                        isOfflineUnlocked = false;
+                        UnlockScreen();
+                    }
+                    else
+                    {
+                        isOfflineUnlocked = false;
+                        LockScreen();
+                    }
+                }));
+            }
         }
 
         private void Numpad_Click(object sender, EventArgs e)
