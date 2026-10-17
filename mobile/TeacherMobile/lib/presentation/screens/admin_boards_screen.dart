@@ -426,8 +426,9 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: primaryBlue, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                 onPressed: isSaving ? null : () async {
-                  if (nameController.text.trim().isEmpty || (!isEditing && pairingCode.length != 6)) {
-                    _showModernSnackbar('Lütfen zorunlu alanları doldurun.', isSuccess: false, bgColor: warningOrange);
+                  final cleanPairingCode = pairingCode.replaceAll(RegExp(r'\D'), '').trim();
+                  if (nameController.text.trim().isEmpty || (!isEditing && cleanPairingCode.length != 6)) {
+                    _showModernSnackbar('Lütfen zorunlu alanları doldurun (6 haneli eşleşme kodu).', isSuccess: false, bgColor: warningOrange);
                     return;
                   }
                   setDialogState(() => isSaving = true);
@@ -445,7 +446,7 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
                         Navigator.pop(dialogCtx);
                       }
                     } else {
-                      final pairingData = await _client.from('board_pairings').select().eq('pairing_code', pairingCode).eq('status', 'pending').maybeSingle();
+                      final pairingData = await _client.from('board_pairings').select().eq('pairing_code', cleanPairingCode).eq('status', 'pending').maybeSingle();
                       if (pairingData == null) {
                         setDialogState(() => isSaving = false);
                         _showModernSnackbar('Geçersiz veya süresi dolmuş kod!', isSuccess: false, bgColor: dangerRed);
@@ -465,7 +466,7 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
                         'board_id': boardResponse['id'],
                         'offline_secret': offlineSecret,
                         'status': 'completed',
-                      }).eq('pairing_code', pairingCode);
+                      }).eq('pairing_code', cleanPairingCode);
                       if (dialogCtx.mounted) {
                         _showModernSnackbar('Tahta eşleştirildi!', isSuccess: true, bgColor: successGreen);
                         Navigator.pop(dialogCtx);
@@ -1236,19 +1237,37 @@ class _OtpInputBoxesState extends State<OtpInputBoxes> {
   }
 
   void _onChanged(String value, int index) {
-    String fullCode = _controllers.map((e) => e.text).join();
-    widget.onCodeChanged(fullCode);
-    if (value.isNotEmpty) {
+    final clean = value.replaceAll(RegExp(r'\D'), '');
+    if (clean.length > 1) {
+      for (int i = 0; i < 6 && (index + i) < 6 && i < clean.length; i++) {
+        _controllers[index + i].text = clean[i];
+      }
+      int nextIndex = index + clean.length;
+      if (nextIndex >= 6) {
+        _focusNodes[5].unfocus();
+      } else {
+        _focusNodes[nextIndex].requestFocus();
+      }
+      String fullCode = _controllers.map((e) => e.text).join();
+      widget.onCodeChanged(fullCode);
+      return;
+    }
+
+    if (clean.isNotEmpty) {
+      _controllers[index].text = clean;
       if (index < 5) {
         _focusNodes[index + 1].requestFocus();
       } else {
         _focusNodes[index].unfocus();
       }
     } else {
+      _controllers[index].clear();
       if (index > 0) {
         _focusNodes[index - 1].requestFocus();
       }
     }
+    String fullCode = _controllers.map((e) => e.text).join();
+    widget.onCodeChanged(fullCode);
   }
 
   Widget _buildBox(int index) {
@@ -1261,7 +1280,7 @@ class _OtpInputBoxesState extends State<OtpInputBoxes> {
         textAlign: TextAlign.center,
         textAlignVertical: TextAlignVertical.center,
         keyboardType: TextInputType.number,
-        maxLength: 1,
+        maxLength: 6,
         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: primaryBlue),
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         decoration: InputDecoration(

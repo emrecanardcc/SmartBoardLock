@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -122,8 +122,18 @@ namespace KioskLockApp.UI
                 Cursor = Cursors.Hand
             };
 
-            // Butona tıklandığında uygulamayı tamamen kapatan olay (Event)
+            // Butona tıklandığında bekçiyi ve uygulamayı tamamen kapatan olay (Event)
             btnExit.Click += (s, e) => {
+                try
+                {
+                    // Bekçi servisini durdur ki KioskLockApp'i tekrar döngüye sokup açmasın
+                    foreach (var p in System.Diagnostics.Process.GetProcessesByName("WatchdogService"))
+                    {
+                        try { p.Kill(); } catch { }
+                    }
+                }
+                catch { }
+
                 Application.Exit();
                 Environment.Exit(0);
             };

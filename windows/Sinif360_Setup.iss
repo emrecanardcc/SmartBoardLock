@@ -37,8 +37,10 @@ PrivilegesRequired=admin
 OutputDir=userdocs:Inno Setup Output Files
 OutputBaseFilename=Sinif360_v2.1.1_Setup
 Compression=lzma2/ultra64
-SolidCompression=yes
 WizardStyle=modern
+CloseApplications=force
+CloseApplicationsFilter=*.exe
+RestartApplications=no
 
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName} Kaldır
@@ -50,7 +52,7 @@ Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
 Name: "{app}"; Permissions: users-full
 
 [Files]
-Source: "C:\Projeler\AkilliTahtaSistemi\dist\v2.1.1_publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-full
+Source: "C:\Projeler\AkilliTahtaSistemi\dist\v2.1.1_publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs restartreplace; Permissions: users-full
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -101,8 +103,15 @@ function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
 begin
-  // Kuruluma başlamadan önce çalışan eski tüm süreçleri (TahtaRepair dahil) zorla kapat
-  Exec('cmd.exe', '/c taskkill /f /im {#MyAppExeName} /im {#MyWatchdogExeName} /im {#MyUpdaterExeName} /im {#MyRepairExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  // 1. Önce Watchdog'u kapat ki KioskLockApp'i geri açmaya çalışmasın
+  Exec('cmd.exe', '/c taskkill /f /im {#MyWatchdogExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(300);
+  // 2. Kilit uygulamasını ve yardımcı araçları kapat
+  Exec('cmd.exe', '/c taskkill /f /im {#MyAppExeName} /im {#MyRepairExeName} /im {#MyUpdaterExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(500);
+  // 3. İkinci tur garanti sonlandırma
+  Exec('cmd.exe', '/c taskkill /f /im {#MyWatchdogExeName} /im {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(300);
 
   // Eğer .NET 8 Desktop Runtime x64 yüklü değilse otomatik indirip kur
   if not IsDotNet8Installed() then

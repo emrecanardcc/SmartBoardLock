@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Threading.Tasks;
@@ -83,6 +83,17 @@ namespace KioskLockApp.UI
                 // Henüz eşleşmedi, dinlemeye devam et
                 pollingTimer.Start();
             }
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            try
+            {
+                pollingTimer?.Stop();
+                pollingTimer?.Dispose();
+            }
+            catch { }
+            base.OnFormClosing(e);
         }
 
         private void SaveToRegistry(string boardId, string offlineSecret, string boardName, string schoolName)

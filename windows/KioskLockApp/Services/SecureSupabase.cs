@@ -198,7 +198,30 @@ namespace KioskLockApp.Services
                 string response = await sharedClient.GetStringAsync(url);
                 string cleanResponse = response.Replace(" ", "").ToLower();
 
-                if (cleanResponse == "[]") return ("DELETED", currentName, lastKnownActive, "");
+                if (cleanResponse == "[]")
+                {
+                    // Birincil sunucuda bulunamadıysa hemen silindi sayma; Fallback (Cloud Supabase) üzerinde var mı kontrol et
+                    try
+                    {
+                        string fallbackUrl = $"{FALLBACK_URL}/rest/v1/boards?id=eq.{boardId}&select=is_unlocked,is_active,name,remote_command";
+                        string fallbackResp = await fallbackClient.GetStringAsync(fallbackUrl);
+                        string cleanFallback = fallbackResp.Replace(" ", "").ToLower();
+                        if (cleanFallback != "[]")
+                        {
+                            _ = SyncBoardFromCloudToOracleAsync(boardId);
+                            response = fallbackResp;
+                            cleanResponse = cleanFallback;
+                        }
+                        else
+                        {
+                            return ("DELETED", currentName, lastKnownActive, "");
+                        }
+                    }
+                    catch
+                    {
+                        return ("DELETED", currentName, lastKnownActive, "");
+                    }
+                }
 
                 string fetchedName = ExtractJsonStringValue(response, "name");
                 if (!string.IsNullOrEmpty(fetchedName) && fetchedName != currentName)
@@ -312,7 +335,21 @@ namespace KioskLockApp.Services
                     var request = new HttpRequestMessage(new HttpMethod("POST"), url) { Content = new StringContent(jsonBody, Encoding.UTF8, "application/json") };
                     request.Headers.Add("Prefer", "return=minimal");
                     var response = await sharedClient.SendAsync(request);
-                    if (response.IsSuccessStatusCode) return code;
+                    if (response.IsSuccessStatusCode)
+                    {
+                        // FALLBACK: Cloud Supabase'e de çift yönlü kayıt açıyoruz
+                        // Böylece öğretmenin telefonundaki mobil uygulama henüz App Store güncellemesi almamış olsa bile (eski buluta bağlıyken) tahtayı anında eşleştirebilir!
+                        try
+                        {
+                            string fallbackUrl = $"{FALLBACK_URL}/rest/v1/board_pairings";
+                            var fallbackRequest = new HttpRequestMessage(new HttpMethod("POST"), fallbackUrl) { Content = new StringContent(jsonBody, Encoding.UTF8, "application/json") };
+                            fallbackRequest.Headers.Add("Prefer", "return=minimal");
+                            await fallbackClient.SendAsync(fallbackRequest);
+                        }
+                        catch { }
+
+                        return code;
+                    }
                 }
                 catch { }
             }
@@ -321,6 +358,7 @@ namespace KioskLockApp.Services
 
         public static async Task<Dictionary<string, string>> CheckPairingStatusAsync(string code)
         {
+            // 1. Önce Birincil (Oracle Cloud Always Free Supabase) Kontrolü
             try
             {
                 string url = $"{SUPABASE_URL}/rest/v1/board_pairings?pairing_code=eq.{code}&select=board_id,offline_secret,status";
@@ -338,7 +376,57 @@ namespace KioskLockApp.Services
                 }
             }
             catch { }
+
+            // 2. İkincil / Fallback (Cloud Supabase) Kontrolü
+            // Eğer eşleştirme eski mobil uygulama üzerinden Cloud Supabase'e yapıldıysa:
+            try
+            {
+                string fallbackUrl = $"{FALLBACK_URL}/rest/v1/board_pairings?pairing_code=eq.{code}&select=board_id,offline_secret,status";
+                string fallbackResponse = await fallbackClient.GetStringAsync(fallbackUrl);
+
+                if (fallbackResponse.Replace(" ", "").ToLower().Contains("\"status\":\"completed\""))
+                {
+                    string boardId = ExtractJsonStringValue(fallbackResponse, "board_id");
+                    string offlineSecret = ExtractJsonStringValue(fallbackResponse, "offline_secret");
+
+                    if (!string.IsNullOrEmpty(boardId) && !string.IsNullOrEmpty(offlineSecret))
+                    {
+                        // Tahta kaydını Oracle VM'e de senkronize et
+                        _ = SyncBoardFromCloudToOracleAsync(boardId);
+
+                        return new Dictionary<string, string> { { "board_id", boardId }, { "offline_secret", offlineSecret } };
+                    }
+                }
+            }
+            catch { }
+
             return null;
+        }
+
+        public static async Task SyncBoardFromCloudToOracleAsync(string boardId)
+        {
+            try
+            {
+                string url = $"{FALLBACK_URL}/rest/v1/boards?id=eq.{boardId}";
+                string boardJson = await fallbackClient.GetStringAsync(url);
+                if (!string.IsNullOrEmpty(boardJson) && boardJson.Trim().StartsWith("[") && boardJson.Length > 2)
+                {
+                    string rawRow = boardJson.Trim();
+                    if (rawRow.StartsWith("[") && rawRow.EndsWith("]"))
+                    {
+                        rawRow = rawRow.Substring(1, rawRow.Length - 2);
+                    }
+
+                    string postUrl = $"{SUPABASE_URL}/rest/v1/boards";
+                    var req = new HttpRequestMessage(HttpMethod.Post, postUrl)
+                    {
+                        Content = new StringContent(rawRow, Encoding.UTF8, "application/json")
+                    };
+                    req.Headers.Add("Prefer", "resolution=merge-duplicates");
+                    await sharedClient.SendAsync(req);
+                }
+            }
+            catch { }
         }
 
         public static async Task<string> GetBoardNameAsync(string boardId)
@@ -347,6 +435,15 @@ namespace KioskLockApp.Services
             {
                 string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=name";
                 string response = await sharedClient.GetStringAsync(url);
+                string name = ExtractJsonStringValue(response, "name");
+                if (!string.IsNullOrEmpty(name)) return name;
+            }
+            catch { }
+
+            try
+            {
+                string url = $"{FALLBACK_URL}/rest/v1/boards?id=eq.{boardId}&select=name";
+                string response = await fallbackClient.GetStringAsync(url);
                 return ExtractJsonStringValue(response, "name");
             }
             catch { return ""; }
@@ -354,18 +451,42 @@ namespace KioskLockApp.Services
 
         public static async Task<string> GetSchoolNameAsync(string boardId)
         {
+            string schoolId = "";
             try
             {
                 string boardUrl = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}&select=school_id";
                 string boardResponse = await sharedClient.GetStringAsync(boardUrl);
-                string schoolId = ExtractJsonStringValue(boardResponse, "school_id").Replace("\"", "").Trim();
+                schoolId = ExtractJsonStringValue(boardResponse, "school_id").Replace("\"", "").Trim();
+            }
+            catch { }
 
-                if (string.IsNullOrEmpty(schoolId)) return "Bilinmeyen Okul";
+            if (string.IsNullOrEmpty(schoolId))
+            {
+                try
+                {
+                    string boardUrl = $"{FALLBACK_URL}/rest/v1/boards?id=eq.{boardId}&select=school_id";
+                    string boardResponse = await fallbackClient.GetStringAsync(boardUrl);
+                    schoolId = ExtractJsonStringValue(boardResponse, "school_id").Replace("\"", "").Trim();
+                }
+                catch { }
+            }
 
+            if (string.IsNullOrEmpty(schoolId)) return "Bilinmeyen Okul";
+
+            try
+            {
                 string schoolUrl = $"{SUPABASE_URL}/rest/v1/schools?id=eq.{schoolId}&select=name";
                 string schoolResponse = await sharedClient.GetStringAsync(schoolUrl);
                 string schoolName = ExtractJsonStringValue(schoolResponse, "name").Replace("\"", "").Trim();
+                if (!string.IsNullOrEmpty(schoolName)) return schoolName;
+            }
+            catch { }
 
+            try
+            {
+                string schoolUrl = $"{FALLBACK_URL}/rest/v1/schools?id=eq.{schoolId}&select=name";
+                string schoolResponse = await fallbackClient.GetStringAsync(schoolUrl);
+                string schoolName = ExtractJsonStringValue(schoolResponse, "name").Replace("\"", "").Trim();
                 return string.IsNullOrEmpty(schoolName) ? "Bilinmeyen Okul" : schoolName;
             }
             catch { return "Bilinmeyen Okul"; }

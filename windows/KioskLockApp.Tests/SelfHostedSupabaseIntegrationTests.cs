@@ -68,10 +68,10 @@ namespace KioskLockApp.Tests
             Assert.IsTrue(root.GetArrayLength() > 0);
 
             var latest = root[0];
-            Assert.AreEqual("2.1.0", latest.GetProperty("version_number").GetString());
+            Assert.AreEqual("2.1.1", latest.GetProperty("version_number").GetString());
 
             string downloadUrl = latest.GetProperty("download_url").GetString()!;
-            Assert.AreEqual("http://130.61.78.192/TahtaUpdate_v2.1.0.zip", downloadUrl);
+            Assert.AreEqual("http://130.61.78.192:8000/storage/v1/object/public/updates/TahtaUpdate_v2.1.1.zip", downloadUrl);
 
             // Zip dosyasının HTTP üzerinden gerçekten inebildiğini doğrula (HEAD request)
             var headReq = new HttpRequestMessage(HttpMethod.Head, downloadUrl);
