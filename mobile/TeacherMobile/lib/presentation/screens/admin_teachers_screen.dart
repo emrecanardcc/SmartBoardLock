@@ -29,13 +29,12 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
 
   late final SupabaseClient _adminClient;
   final String _fallbackUrl = 'http://130.61.78.192:8000';
-  final String _fallbackServiceRoleKey = '';
 
   @override
   void initState() {
     super.initState();
     final url = dotenv.env['SUPABASE_URL'] ?? _fallbackUrl;
-    final key = dotenv.env['SUPABASE_SERVICE_ROLE_KEY'] ?? dotenv.env['SUPABASE_ANON_KEY'] ?? _client.supabaseKey;
+    final key = dotenv.env['SUPABASE_SERVICE_ROLE_KEY'] ?? dotenv.env['SUPABASE_ANON_KEY'] ?? '';
     _adminClient = SupabaseClient(url, key);
     _loadAdminData();
   }
