@@ -11,15 +11,30 @@ namespace KioskLockApp
         [STAThread]
         static void Main()
         {
+            string debugLog = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "kiosk_debug.log");
+            System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] Main started\n");
+
+            AppDomain.CurrentDomain.UnhandledException += (s, e) => {
+                try
+                {
+                    string logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "kiosk_crash.log");
+                    System.IO.File.AppendAllText(logPath, $"[{DateTime.UtcNow}] CRASH: {e.ExceptionObject}\n");
+                    System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] CRASH: {e.ExceptionObject}\n");
+                }
+                catch { }
+            };
+
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
             // Bekleyen güncellemeleri (.new dosyaları) uygula
             ApplyPendingUpdates();
+            System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] Pending updates checked\n");
 
             // Windows başlar başlamaz çalışması için Kayıt Defterine kanca atıyoruz
             ForceStartup();
+            System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] ForceStartup completed\n");
 
             // Registry'den kayıtlı tahta var mı kontrol et
             string boardId = "";
@@ -33,14 +48,17 @@ namespace KioskLockApp
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Okuma hatası olursa boş kabul et
+                System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] Registry error: {ex.Message}\n");
             }
+
+            System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] BoardId: '{boardId}'\n");
 
             // Eğer boardId yoksa (veya boşsa) kurulum/eşleşme ekranını aç
             if (string.IsNullOrEmpty(boardId))
             {
+                System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] Launching PairingScreen\n");
                 Application.Run(new PairingScreen());
             }
             else
@@ -48,37 +66,44 @@ namespace KioskLockApp
                 // =========================================================================
                 // LİSANS DOĞRULAMA & SESSİZ KAPANMA KONTROLÜ
                 // =========================================================================
-                // Eğer okulun lisansı yoksa, pasife alınmışsa veya süresi dolmuşsa:
-                // Tahta ekranı ASLA kilitlenmez, arka planda hiçbir işlem çalışmaz,
-                // uygulama tamamen sessizce anında sonlanır (Environment.Exit(0)).
-                // =========================================================================
                 bool isLicensed = true;
                 try
                 {
-                    var licenseTask = SecureSupabase.CheckLicenseStatusAsync(boardId);
+                    var licenseTask = System.Threading.Tasks.Task.Run(() => SecureSupabase.CheckLicenseStatusAsync(boardId));
                     if (licenseTask.Wait(3000))
                     {
                         isLicensed = licenseTask.Result;
+                        System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] License online check: {isLicensed}\n");
                     }
                     else
                     {
                         isLicensed = SecureSupabase.GetCachedLicenseStatus();
+                        System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] License timed out, cached: {isLicensed}\n");
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
                     isLicensed = SecureSupabase.GetCachedLicenseStatus();
+                    System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] License exception: {ex.Message}, cached: {isLicensed}\n");
                 }
 
                 if (!isLicensed)
                 {
-                    // Lisans geçersiz veya bitmiş: Sessizce sonlandır
+                    System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] EXITING: Not licensed\n");
                     Environment.Exit(0);
                     return;
                 }
 
-                // Lisans aktif: Kilit ekranını ve donanım korumasını başlat
-                Application.Run(new SecureRenderer());
+                System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] Launching SecureRenderer\n");
+                try
+                {
+                    Application.Run(new SecureRenderer());
+                    System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] SecureRenderer Application.Run exited normally\n");
+                }
+                catch (Exception ex)
+                {
+                    System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] SecureRenderer Run EXCEPTION: {ex}\n");
+                }
             }
         }
 

@@ -25,6 +25,7 @@ scratch/
 Publish_*/
 publish/
 **/publish/
+dist/
 *.zip
 
 # Security, Credentials & Secrets

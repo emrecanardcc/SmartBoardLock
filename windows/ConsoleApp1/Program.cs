@@ -9,9 +9,13 @@ namespace WatchdogService
     {
         static void Main(string[] args)
         {
+            string debugLog = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "watchdog_debug.log");
+            System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] Watchdog started\n");
+
             // Bekçinin arkada sadece tek bir örnek olarak çalışmasını garanti ediyoruz
             using (Mutex mutex = new Mutex(true, "AkilliTahtaWatchdogMutex", out bool createdNew))
             {
+                System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] Mutex createdNew: {createdNew}\n");
                 if (!createdNew) return; // Zaten çalışıyorsa ikinci bir bekçi açma
                 StartWatchdogLoop();
             }

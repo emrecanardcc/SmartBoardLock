@@ -14,20 +14,25 @@ namespace TahtaUpdater
         [STAThread]
         static void Main(string[] args)
         {
-            // Watchdog'un güncelleme sırasında Kiosk'u yeniden başlatmasını engelle
-            using (Mutex updateMutex = new Mutex(true, @"Global\TahtaGuncelleniyor", out bool createdNew))
+            Mutex updateMutex = null;
+            try
             {
-                Application.EnableVisualStyles();
-                Application.SetCompatibleTextRenderingDefault(false);
+                // Watchdog'un ve diger sureclerin guncelleme sirasinda Kiosk'u yeniden baslatmasini engelle
+                updateMutex = new Mutex(true, @"Global\TahtaGuncelleniyor", out _);
+            }
+            catch { }
 
-                if (args.Length < 2) return;
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
 
-                string zipPath = args[0].Replace("\"", "");
-                string targetFolder = args[1].Replace("\"", "");
+            if (args.Length < 2) return;
 
-                string logPath = Path.Combine(Path.GetTempPath(), "updater_log.txt");
-                File.WriteAllText(logPath, "Updater (UI) basladi...\n");
-                File.AppendAllText(logPath, $"Hedef Klasör: {targetFolder}\n");
+            string zipPath = args[0].Replace("\"", "");
+            string targetFolder = args[1].Replace("\"", "");
+
+            string logPath = Path.Combine(Path.GetTempPath(), "updater_log.txt");
+            File.WriteAllText(logPath, "Updater (UI) basladi...\n");
+            File.AppendAllText(logPath, $"Hedef Klasör: {targetFolder}\n");
 
             // --- MODERN GÜNCELLEME EKRANI (FLUENT DESIGN) ---
             Form updateForm = new Form
@@ -64,15 +69,14 @@ namespace TahtaUpdater
 
             // Ekran yüklendiğinde arka planda çıkarma işlemine başla
             updateForm.Shown += async (s, e) => {
-                await Task.Run(() => PerformUpdate(zipPath, targetFolder, logPath));
+                await Task.Run(() => PerformUpdate(zipPath, targetFolder, logPath, updateMutex));
                 Application.Exit();
             };
 
-                Application.Run(updateForm);
-            }
+            Application.Run(updateForm);
         }
 
-        static void PerformUpdate(string zipPath, string targetFolder, string logPath)
+        static void PerformUpdate(string zipPath, string targetFolder, string logPath, Mutex updateMutex)
         {
             string mainExeName = "KioskLockApp.exe";
 
@@ -80,10 +84,10 @@ namespace TahtaUpdater
             {
                 // 1. ADIM: WATCHDOG VE ESKI KIOSK'U ZORLA ÖLDÜR
                 Process[] watchdogs = Process.GetProcessesByName("WatchdogService");
-                foreach (var w in watchdogs) { w.Kill(); w.WaitForExit(); }
+                foreach (var w in watchdogs) { try { w.Kill(); w.WaitForExit(2000); } catch { } }
 
                 Process[] kiosks = Process.GetProcessesByName("KioskLockApp");
-                foreach (var k in kiosks) { k.Kill(); k.WaitForExit(); }
+                foreach (var k in kiosks) { try { k.Kill(); k.WaitForExit(2000); } catch { } }
 
                 Thread.Sleep(1000);
                 File.AppendAllText(logPath, "Eski surecler durduruldu.\n");
@@ -123,18 +127,49 @@ namespace TahtaUpdater
                             }
                         }
                     }
-                    File.Delete(zipPath);
+                    try { File.Delete(zipPath); } catch { }
                     File.AppendAllText(logPath, "Yeni dosyalar sifirdan yuklendi!\n");
                 }
 
-                // 4. ADIM: YENİ KIOSK'U AYAĞA KALDIR
+                // 3.5 ADIM: GÜNCELLEME SİNYALİNİ (MUTEX) SERBEST BIRAK
+                if (updateMutex != null)
+                {
+                    try
+                    {
+                        updateMutex.ReleaseMutex();
+                        updateMutex.Dispose();
+                        File.AppendAllText(logPath, "Guncelleme kilidi (Mutex) serbest birakildi.\n");
+                    }
+                    catch { }
+                }
+
+                // 4. ADIM: YENİ KIOSK VE WATCHDOG'U AYAĞA KALDIR
                 string newExePath = Path.Combine(targetFolder, mainExeName);
                 if (File.Exists(newExePath))
                 {
-                    ProcessStartInfo startInfo = new ProcessStartInfo(newExePath) { UseShellExecute = true, WorkingDirectory = targetFolder };
+                    ProcessStartInfo startInfo = new ProcessStartInfo(newExePath)
+                    {
+                        UseShellExecute = true,
+                        WorkingDirectory = targetFolder
+                    };
                     Process.Start(startInfo);
-                    File.AppendAllText(logPath, "Yeni Kiosk baslatildi. Operasyon basarili!\n");
+                    File.AppendAllText(logPath, "Yeni Kiosk baslatildi.\n");
                 }
+
+                string watchdogExePath = Path.Combine(targetFolder, "WatchdogService.exe");
+                if (File.Exists(watchdogExePath))
+                {
+                    ProcessStartInfo wdInfo = new ProcessStartInfo(watchdogExePath)
+                    {
+                        UseShellExecute = true,
+                        WorkingDirectory = targetFolder
+                    };
+                    Process.Start(wdInfo);
+                    File.AppendAllText(logPath, "Watchdog baslatildi.\n");
+                }
+
+                Thread.Sleep(1500);
+                File.AppendAllText(logPath, "Operasyon basariyla tamamlandi!\n");
             }
             catch (Exception ex)
             {
