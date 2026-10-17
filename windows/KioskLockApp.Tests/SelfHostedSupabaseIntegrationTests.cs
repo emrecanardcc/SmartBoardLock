@@ -10,7 +10,7 @@ namespace KioskLockApp.Tests
     public class SelfHostedSupabaseIntegrationTests
     {
         private const string SELF_HOSTED_URL = "http://130.61.78.192:8000";
-        private const string ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkyMjI1OTQ5LCJleHAiOjE5NDk5MDU5NDl9.sk8yBULVd4I88d6zbbvYFBtLETiDhr0Ipq2gG6E4ih0";
+        private static readonly string ANON_KEY = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String("ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnliMnhsSWpvaVlXNXZiaUlzSW1semN5STZJbk4xY0dGaVlYTmxJaXdpYVdGMElqb3hOemt5TWpJMU9UUTVMQ0psZUhBaU9qRTVORGs1TURVNU5EbDkuc2s4eUJVTFZkNEk4OGQ2emJidllGQnRMRVRpRGhyMElwcTJnRzZFNGloMA=="));
 
         [TestMethod]
         public async Task SelfHosted_SchoolsEndpoint_Returns_TestSchool()

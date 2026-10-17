@@ -6,6 +6,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,8 +17,15 @@ namespace TahtaRepair
 {
     static class Program
     {
-        public const string SUPABASE_URL = "https://clkasnbpmhddhstoixdz.supabase.co";
-        public const string SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsa2FzbmJwbWhkZGhzdG9peGR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5ODc4ODQsImV4cCI6MjA5ODU2Mzg4NH0.KpwOZoWwOu2DfwOec0y5LSvS6MRGGy4Uqot-Q1G0_x8";
+        // Birincil Sunucu: Oracle Cloud Always Free Self-Hosted Supabase
+        public const string SUPABASE_URL = "http://130.61.78.192:8000";
+        private const string _b64Key = "ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnliMnhsSWpvaVlXNXZiaUlzSW1semN5STZJbk4xY0dGaVlYTmxJaXdpYVdGMElqb3hOemt5TWpJMU9UUTVMQ0psZUhBaU9qRTVORGs1TURVNU5EbDkuc2s4eUJVTFZkNEk4OGQ2emJidllGQnRMRVRpRGhyMElwcTJnRzZFNGloMA==";
+        public static readonly string SUPABASE_KEY = Encoding.UTF8.GetString(Convert.FromBase64String(_b64Key));
+
+        // İkincil / Yedek Sunucu: Cloud Supabase
+        public const string FALLBACK_URL = "https://clkasnbpmhddhstoixdz.supabase.co";
+        private const string _b64FallbackKey = "ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnBjM01pT2lKemRYQmhZbUZ6WlNJc0luSmxaaUk2SW1Oc2EyRnpibUp3Yldoa1pHaHpkRzlwZUdSNklpd2ljbTlzWlNJNkltRnViMjRpTENKcFlYUWlPakUzT0RJNU9EYzRPRFFzSW1WNGNDSTZNakE1T0RVMk16ZzROSDAuS3B3T1pvV3dPdTJEZndPZWMweTVMU3ZTNk1SR0d5NFVxb3QtUTFHMF94OA==";
+        public static readonly string FALLBACK_KEY = Encoding.UTF8.GetString(Convert.FromBase64String(_b64FallbackKey));
 
         private static string logPath = Path.Combine(Path.GetTempPath(), "tahta_repair_log.txt");
 
@@ -368,12 +376,47 @@ namespace TahtaRepair
 
         private async Task<(string downloadUrl, string version)> FetchLatestAppVersionAsync()
         {
-            using (HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(20) })
+            // 1. Önce Birincil Sunucu (Oracle Cloud Always Free VM)
+            try
             {
-                client.DefaultRequestHeaders.Add("apikey", Program.SUPABASE_KEY);
-                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {Program.SUPABASE_KEY}");
+                var primaryResult = await FetchVersionFromServerAsync(Program.SUPABASE_URL, Program.SUPABASE_KEY);
+                if (!string.IsNullOrEmpty(primaryResult.downloadUrl))
+                {
+                    Program.Log($"Birincil sunucudan sürüm paketi bulundu: {primaryResult.version}");
+                    return primaryResult;
+                }
+            }
+            catch (Exception ex)
+            {
+                Program.Log($"Birincil sunucudan sürüm sorgulanamadı: {ex.Message}");
+            }
 
-                string url = $"{Program.SUPABASE_URL}/rest/v1/app_versions?select=version_number,download_url&order=created_at.desc&limit=1";
+            // 2. Yedek Sunucu (Cloud Supabase)
+            try
+            {
+                var fallbackResult = await FetchVersionFromServerAsync(Program.FALLBACK_URL, Program.FALLBACK_KEY);
+                if (!string.IsNullOrEmpty(fallbackResult.downloadUrl))
+                {
+                    Program.Log($"Yedek sunucudan sürüm paketi bulundu: {fallbackResult.version}");
+                    return fallbackResult;
+                }
+            }
+            catch (Exception ex)
+            {
+                Program.Log($"Yedek sunucudan sürüm sorgulanamadı: {ex.Message}");
+            }
+
+            return (string.Empty, string.Empty);
+        }
+
+        private async Task<(string downloadUrl, string version)> FetchVersionFromServerAsync(string baseUrl, string apiKey)
+        {
+            using (HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) })
+            {
+                client.DefaultRequestHeaders.Add("apikey", apiKey);
+                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+
+                string url = $"{baseUrl}/rest/v1/app_versions?select=version_number,download_url&order=created_at.desc&limit=1";
                 string json = await client.GetStringAsync(url);
 
                 using (JsonDocument doc = JsonDocument.Parse(json))
