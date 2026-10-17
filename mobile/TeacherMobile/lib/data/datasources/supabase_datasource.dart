@@ -1,19 +1,27 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseDatasource {
   final _client = Supabase.instance.client;
 
   // İkincil / Yedek sunucu bilgileri (Cloud Supabase)
-  static const String fallbackUrl = 'https://clkasnbpmhddhstoixdz.supabase.co';
-  static const String fallbackKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsa2FzbmJwbWhkZGhzdG9peGR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5ODc4ODQsImV4cCI6MjA5ODU2Mzg4NH0.KpwOZoWwOu2DfwOec0y5LSvS6MRGGy4Uqot-Q1G0_x8';
+  static String get fallbackUrl => dotenv.env['FALLBACK_SUPABASE_URL'] ?? 'https://clkasnbpmhddhstoixdz.supabase.co';
+  static String get fallbackKey => dotenv.env['FALLBACK_SUPABASE_ANON_KEY'] ?? '';
 
   // Birincil sunucu bilgileri (Oracle Cloud Self-Hosted Supabase)
-  static const String primaryUrl = 'http://130.61.78.192:8000';
-  static const String primaryKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkyMjI1OTQ5LCJleHAiOjE5NDk5MDU5NDl9.sk8yBULVd4I88d6zbbvYFBtLETiDhr0Ipq2gG6E4ih0';
+  static String get primaryUrl => dotenv.env['SUPABASE_URL'] ?? 'http://130.61.78.192:8000';
+  static String get primaryKey => dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
-  // Statik ve UTF-8 garantili Supabase istemcileri
-  static final SupabaseClient primaryClient = SupabaseClient(primaryUrl, primaryKey);
-  static final SupabaseClient fallbackClient = SupabaseClient(fallbackUrl, fallbackKey);
+  // Statik ve UTF-8 garantili Supabase istemcileri (güvenli ortam değişkenleri)
+  static SupabaseClient? _primaryClient;
+  static SupabaseClient get primaryClient {
+    return _primaryClient ??= SupabaseClient(primaryUrl, primaryKey);
+  }
+
+  static SupabaseClient? _fallbackClient;
+  static SupabaseClient get fallbackClient {
+    return _fallbackClient ??= SupabaseClient(fallbackUrl, fallbackKey);
+  }
 
   /// Hem aktif sunucuya hem de yedek/ikincil sunucuya aynı anda yazan çift-sunucu kalkanı (Tam UTF-8 Uyumlu)
   static Future<bool> syncBoardPatch({
@@ -25,27 +33,31 @@ class SupabaseDatasource {
     bool activeSuccess = false;
 
     // 1. Birincil Sunucu (Oracle Cloud VM)
-    try {
-      await primaryClient
-          .from('boards')
-          .update(patchData)
-          .eq('id', boardId);
-      primarySuccess = true;
-    } catch (e) {
-      // ignore: avoid_print
-      print('[SupabaseDatasource] Primary update error: $e');
+    if (primaryKey.isNotEmpty) {
+      try {
+        await primaryClient
+            .from('boards')
+            .update(patchData)
+            .eq('id', boardId);
+        primarySuccess = true;
+      } catch (e) {
+        // ignore: avoid_print
+        print('[SupabaseDatasource] Primary update error: $e');
+      }
     }
 
     // 2. İkincil / Yedek Sunucu (Cloud Supabase)
-    try {
-      await fallbackClient
-          .from('boards')
-          .update(patchData)
-          .eq('id', boardId);
-      fallbackSuccess = true;
-    } catch (e) {
-      // ignore: avoid_print
-      print('[SupabaseDatasource] Fallback update error: $e');
+    if (fallbackKey.isNotEmpty) {
+      try {
+        await fallbackClient
+            .from('boards')
+            .update(patchData)
+            .eq('id', boardId);
+        fallbackSuccess = true;
+      } catch (e) {
+        // ignore: avoid_print
+        print('[SupabaseDatasource] Fallback update error: $e');
+      }
     }
 
     // 3. Aktif oturum istemcisi üzerinden güncelleme

@@ -12,8 +12,7 @@ Future<void> main() async {
   } catch (_) {}
 
   final url = dotenv.env['SUPABASE_URL'] ?? 'http://130.61.78.192:8000';
-  final anonKey = dotenv.env['SUPABASE_ANON_KEY'] ??
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkyMjI1OTQ5LCJleHAiOjE5NDk5MDU5NDl9.sk8yBULVd4I88d6zbbvYFBtLETiDhr0Ipq2gG6E4ih0';
+  final anonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
   // 2. Supabase'i dışarıya kapalı ortam değişkenleriyle başlat
   await Supabase.initialize(
