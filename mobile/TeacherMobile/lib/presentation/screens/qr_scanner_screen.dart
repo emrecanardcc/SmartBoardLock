@@ -88,11 +88,15 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       } catch (_) {}
 
       // --- HER ŞEY DOĞRUYSA KİLİDİ AÇ ---
-      await _datasource.updateLockStatus(
+      final success = await _datasource.updateLockStatus(
         boardId: widget.expectedBoardId,
         isUnlocked: true,
         unlockedBy: teacherName ?? 'Öğretmen',
       );
+
+      if (!success) {
+        throw Exception("Kilit açma komutu sunucuya iletilemedi. Lütfen internet bağlantınızı kontrol edin.");
+      }
       
       if (!mounted) return;
       _showModernSnackbar("Erişim Onaylandı. Kilit Açılıyor...", isSuccess: true, bgColor: successGreen);

@@ -1,16 +1,16 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../../core/config/supabase_config.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseDatasource {
   final _client = Supabase.instance.client;
 
   // İkincil / Yedek sunucu bilgileri (Cloud Supabase)
-  static String get fallbackUrl => dotenv.env['FALLBACK_SUPABASE_URL'] ?? 'https://clkasnbpmhddhstoixdz.supabase.co';
-  static String get fallbackKey => dotenv.env['FALLBACK_SUPABASE_ANON_KEY'] ?? '';
+  static String get fallbackUrl => SupabaseConfig.fallbackUrl;
+  static String get fallbackKey => SupabaseConfig.fallbackKey;
 
   // Birincil sunucu bilgileri (Oracle Cloud Self-Hosted Supabase)
-  static String get primaryUrl => dotenv.env['SUPABASE_URL'] ?? 'http://130.61.78.192:8000';
-  static String get primaryKey => dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+  static String get primaryUrl => SupabaseConfig.primaryUrl;
+  static String get primaryKey => SupabaseConfig.primaryKey;
 
   // Statik ve UTF-8 garantili Supabase istemcileri (güvenli ortam değişkenleri)
   static SupabaseClient? _primaryClient;
@@ -32,46 +32,43 @@ class SupabaseDatasource {
     bool fallbackSuccess = false;
     bool activeSuccess = false;
 
-    // 1. Birincil Sunucu (Oracle Cloud VM)
-    if (primaryKey.isNotEmpty) {
-      try {
-        await primaryClient
-            .from('boards')
-            .update(patchData)
-            .eq('id', boardId);
-        primarySuccess = true;
-      } catch (e) {
-        // ignore: avoid_print
-        print('[SupabaseDatasource] Primary update error: $e');
-      }
-    }
+    // Eşzamanlı (Paralel) çoklu sunucu yazımı ile minimum gecikme
+    await Future.wait([
+      // 1. Birincil Sunucu (Oracle Cloud VM)
+      if (primaryKey.isNotEmpty)
+        () async {
+          try {
+            await primaryClient.from('boards').update(patchData).eq('id', boardId);
+            primarySuccess = true;
+          } catch (e) {
+            // ignore: avoid_print
+            print('[SupabaseDatasource] Primary update error: $e');
+          }
+        }(),
 
-    // 2. İkincil / Yedek Sunucu (Cloud Supabase)
-    if (fallbackKey.isNotEmpty) {
-      try {
-        await fallbackClient
-            .from('boards')
-            .update(patchData)
-            .eq('id', boardId);
-        fallbackSuccess = true;
-      } catch (e) {
-        // ignore: avoid_print
-        print('[SupabaseDatasource] Fallback update error: $e');
-      }
-    }
+      // 2. İkincil / Yedek Sunucu (Cloud Supabase)
+      if (fallbackKey.isNotEmpty)
+        () async {
+          try {
+            await fallbackClient.from('boards').update(patchData).eq('id', boardId);
+            fallbackSuccess = true;
+          } catch (e) {
+            // ignore: avoid_print
+            print('[SupabaseDatasource] Fallback update error: $e');
+          }
+        }(),
 
-    // 3. Aktif oturum istemcisi üzerinden güncelleme
-    try {
-      final activeClient = Supabase.instance.client;
-      await activeClient
-          .from('boards')
-          .update(patchData)
-          .eq('id', boardId);
-      activeSuccess = true;
-    } catch (e) {
-      // ignore: avoid_print
-      print('[SupabaseDatasource] Active client update error: $e');
-    }
+      // 3. Aktif oturum istemcisi üzerinden güncelleme
+      () async {
+        try {
+          await Supabase.instance.client.from('boards').update(patchData).eq('id', boardId);
+          activeSuccess = true;
+        } catch (e) {
+          // ignore: avoid_print
+          print('[SupabaseDatasource] Active client update error: $e');
+        }
+      }(),
+    ]);
 
     return primarySuccess || fallbackSuccess || activeSuccess;
   }

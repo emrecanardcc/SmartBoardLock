@@ -1,23 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'core/config/supabase_config.dart';
 import 'presentation/screens/auth_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. .env dosyasını güvenli bir şekilde yükle
+  // 1. .env dosyasını varsa güvenli bir şekilde yükle
   try {
     await dotenv.load(fileName: ".env");
   } catch (_) {}
 
-  final url = dotenv.env['SUPABASE_URL'] ?? 'http://130.61.78.192:8000';
-  final anonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
-
-  // 2. Supabase'i dışarıya kapalı ortam değişkenleriyle başlat
+  // 2. Supabase'i SupabaseConfig üzerinden güvenle başlat
   await Supabase.initialize(
-    url: url,
-    publishableKey: anonKey,
+    url: SupabaseConfig.primaryUrl,
+    publishableKey: SupabaseConfig.primaryKey,
   );
 
   runApp(const KioskRemoteApp());

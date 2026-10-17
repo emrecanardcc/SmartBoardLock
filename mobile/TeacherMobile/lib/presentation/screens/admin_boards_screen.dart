@@ -348,8 +348,9 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
     try {
       final patch = {'is_unlocked': false, 'last_locked_by': _adminName};
       await Future.wait([
-        SupabaseDatasource.primaryClient.from('boards').update(patch).eq('school_id', _schoolId!),
-        SupabaseDatasource.fallbackClient.from('boards').update(patch).eq('school_id', _schoolId!),
+        SupabaseDatasource.primaryClient.from('boards').update(patch).eq('school_id', _schoolId!).catchError((_) => null),
+        SupabaseDatasource.fallbackClient.from('boards').update(patch).eq('school_id', _schoolId!).catchError((_) => null),
+        _client.from('boards').update(patch).eq('school_id', _schoolId!).catchError((_) => null),
       ]);
       setState(() {
         for (var b in _boards) {

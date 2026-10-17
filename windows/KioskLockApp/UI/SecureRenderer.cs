@@ -104,7 +104,7 @@ namespace KioskLockApp.UI
             };
             clockTimer.Start();
 
-            watchdogTimer = new System.Windows.Forms.Timer { Interval = 10000 };
+            watchdogTimer = new System.Windows.Forms.Timer { Interval = 2000 };
             watchdogTimer.Tick += async (s, e) => await CheckStatusAsync();
             watchdogTimer.Start();
 
@@ -481,6 +481,8 @@ namespace KioskLockApp.UI
             if (floatingLockBtn.Visibility != System.Windows.Visibility.Visible)
                 floatingLockBtn.Visibility = System.Windows.Visibility.Visible;
 
+            if (watchdogTimer != null) watchdogTimer.Interval = 10000; // Açıkken 10 saniyede bir hafif kontrol
+
             RemoveSecondaryScreens();
             this.Hide();
         }
@@ -494,6 +496,8 @@ namespace KioskLockApp.UI
             // YENİ: WPF için Visibility kullanılır
             if (floatingLockBtn.Visibility == System.Windows.Visibility.Visible)
                 floatingLockBtn.Visibility = System.Windows.Visibility.Hidden;
+
+            if (watchdogTimer != null) watchdogTimer.Interval = 2000; // Kilitliyken 2 saniyede bir hızlı kontrol (Hızlı açılma)
 
             if (secondaryScreens.Count == 0 && Screen.AllScreens.Length > 1) CoverOtherScreens();
             this.Show();

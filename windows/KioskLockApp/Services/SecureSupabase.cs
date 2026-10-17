@@ -273,49 +273,64 @@ namespace KioskLockApp.Services
             bool isActive = isActivePrimary && isActiveFallback;
             SetRegistryValue("LastKnownIsActive", isActive ? "true" : "false");
 
-            // Kilit durumu: İKİ SUNUCUDAN BİRİNDE BİLE KİLİT AÇILDIYSA TAHTA AÇILMALIDIR!
+            // Kilit durumu: Birincil sunucu (Oracle VM) ayakta ise onun durumu esastır.
+            // Sırf ikincil sunucuda eski 'true' kaldı diye birincil sunucudaki kilit geri bozulamaz!
             bool primaryUnlocked = cleanPrimary.Contains("\"is_unlocked\":true");
             bool fallbackUnlocked = cleanFallback.Contains("\"is_unlocked\":true");
 
-            if (!isActive || primaryUnlocked || fallbackUnlocked)
+            bool primaryHasData = !string.IsNullOrEmpty(primaryResponse) && cleanPrimary != "[]";
+            bool fallbackHasData = !string.IsNullOrEmpty(fallbackResponse) && cleanFallback != "[]";
+            bool isUnlocked;
+
+            if (primaryHasData)
             {
-                // Eğer birinde açık diğeri kapalıysa ikisini anında eşitle
-                if (primaryUnlocked != fallbackUnlocked)
+                isUnlocked = primaryUnlocked;
+                // Eğer ikincil sunucu farklıysa, birincil sunucunun güncel durumunu ikincil sunucuya eşitle
+                if (fallbackHasData && (primaryUnlocked != fallbackUnlocked))
                 {
-                    _ = SyncUnlockStatusAcrossServersAsync(boardId, true);
+                    _ = SyncUnlockStatusToServerAsync(FALLBACK_URL, fallbackClient, boardId, isUnlocked);
                 }
+            }
+            else if (fallbackHasData)
+            {
+                // Birincil sunucuya ulaşılamıyorsa yedek sunucunun durumunu al
+                isUnlocked = fallbackUnlocked;
+            }
+            else
+            {
+                isUnlocked = false; // İkisine de ulaşılamıyorsa varsayılan kilitli
+            }
+
+            if (!isActive || isUnlocked)
+            {
                 return ("UNLOCKED", currentName, isActive, remoteCommand);
             }
 
             return ("LOCKED", currentName, isActive, remoteCommand);
         }
 
-        public static async Task SyncUnlockStatusAcrossServersAsync(string boardId, bool isUnlocked)
+        public static async Task SyncUnlockStatusToServerAsync(string baseUrl, HttpClient client, string boardId, bool isUnlocked)
         {
             string jsonBody = $"{{\"is_unlocked\": {isUnlocked.ToString().ToLower()}}}";
             try
             {
-                string url = $"{SUPABASE_URL}/rest/v1/boards?id=eq.{boardId}";
+                string url = $"{baseUrl}/rest/v1/boards?id=eq.{boardId}";
                 var req = new HttpRequestMessage(new HttpMethod("PATCH"), url)
                 {
                     Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
                 };
                 req.Headers.Add("Prefer", "return=minimal");
-                await sharedClient.SendAsync(req);
+                await client.SendAsync(req);
             }
             catch { }
+        }
 
-            try
-            {
-                string fallbackUrl = $"{FALLBACK_URL}/rest/v1/boards?id=eq.{boardId}";
-                var req = new HttpRequestMessage(new HttpMethod("PATCH"), fallbackUrl)
-                {
-                    Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
-                };
-                req.Headers.Add("Prefer", "return=minimal");
-                await fallbackClient.SendAsync(req);
-            }
-            catch { }
+        public static async Task SyncUnlockStatusAcrossServersAsync(string boardId, bool isUnlocked)
+        {
+            await Task.WhenAll(
+                SyncUnlockStatusToServerAsync(SUPABASE_URL, sharedClient, boardId, isUnlocked),
+                SyncUnlockStatusToServerAsync(FALLBACK_URL, fallbackClient, boardId, isUnlocked)
+            );
         }
 
         public static async Task SyncBoardNameAsync(string boardId, string newName)

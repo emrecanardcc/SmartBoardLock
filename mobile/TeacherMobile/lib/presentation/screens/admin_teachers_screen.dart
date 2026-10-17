@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/config/supabase_config.dart';
 
 // --- RENK PALETİ ---
 const Color bgLight = Color(0xFFF1F5F9);
@@ -27,8 +28,6 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
-  final String _fallbackUrl = 'http://130.61.78.192:8000';
-
   SupabaseClient _getAdminClient() {
     String? url;
     String? key;
@@ -38,8 +37,8 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
         key = dotenv.env['SUPABASE_SERVICE_ROLE_KEY'] ?? dotenv.env['SUPABASE_ANON_KEY'];
       }
     } catch (_) {}
-    url ??= _fallbackUrl;
-    key ??= '';
+    url ??= SupabaseConfig.primaryUrl;
+    key ??= SupabaseConfig.primaryKey;
     return SupabaseClient(
       url,
       key,
