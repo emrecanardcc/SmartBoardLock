@@ -775,7 +775,9 @@ class AdminRepository {
     required Uint8List bytes,
   }) async {
     try {
-      final safeName = '${DateTime.now().millisecondsSinceEpoch}_$fileName';
+      // Temiz ve sabit dosya adı (rastgele zaman damgası olmadan orijinal dosya adını korur)
+      final cleanName = fileName.split(RegExp(r'[\\/]')).last.trim();
+      final safeName = cleanName.isNotEmpty ? cleanName : 'TahtaUpdate.zip';
       await _storage.from('updates').uploadBinary(
         safeName,
         bytes,
