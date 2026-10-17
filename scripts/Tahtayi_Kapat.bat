@@ -2,34 +2,38 @@
 chcp 65001 >nul
 title Sınıf360 - Kapatma Aracı
 
-:: Yönetici Yetkisi Kontrolü ve Otomatik Yükseltme
+:: 1. Yönetici Yetkisi Kontrolü ve Düzgün Yükseltme
 net session >nul 2>&1
-if %errorLevel% neq 0 (
+if %errorlevel% neq 0 (
     echo Yönetici yetkileri alınıyor...
-    powershell -Command "Start-Process '%~f0' -Verb RunAs"
+    powershell -NoProfile -Command "Start-Process cmd.exe -ArgumentList '/c', '\"\"\"%~f0\"\"\"' -Verb RunAs"
     exit /b
 )
 
 echo ======================================================
-echo   SINIF360 - TÜM SÜREÇLERİ DURDURMA ARACI
+echo   SINIF360 - KİLİT VE BEKÇİ SÜREÇLERİNİ DURDURMA
 echo ======================================================
 echo.
 
-echo 1. Bekçi Servisi (WatchdogService) kapatılıyor...
-taskkill /f /im WatchdogService.exe >nul 2>&1
+:: Eğer derlenmiş C# kapatma programı mevcutsa doğrudan onu çağır
+if exist "%~dp0Sinif360_Kapat.exe" (
+    echo C# Kapatma Programı çalıştırılıyor...
+    "%~dp0Sinif360_Kapat.exe" --now
+    goto :after_kill
+)
+if exist "%~dp0..\windows\Publish_Sinif360Kapat\Sinif360_Kapat.exe" (
+    echo C# Kapatma Programı çalıştırılıyor...
+    "%~dp0..\windows\Publish_Sinif360Kapat\Sinif360_Kapat.exe" --now
+    goto :after_kill
+)
+
+:: Alternatif / Doğrudan Toplu Taskkill (Tüm süreçler aynı anda tek komutta)
+echo Süreçler sonlandırılıyor...
+taskkill /f /t /im WatchdogService.exe /im KioskLockApp.exe /im TahtaUpdater.exe /im TahtaRepair.exe >nul 2>&1
 timeout /t 1 /nobreak >nul
+taskkill /f /t /im WatchdogService.exe /im KioskLockApp.exe /im TahtaUpdater.exe /im TahtaRepair.exe >nul 2>&1
 
-echo 2. Kilit Uygulaması (KioskLockApp) kapatılıyor...
-taskkill /f /im KioskLockApp.exe >nul 2>&1
-
-echo 3. Güncelleyici ve Onarım Araçları kapatılıyor...
-taskkill /f /im TahtaUpdater.exe >nul 2>&1
-taskkill /f /im TahtaRepair.exe >nul 2>&1
-
-:: İkinci kontrol (Watchdog yeniden tetiklememiş olsun)
-taskkill /f /im WatchdogService.exe >nul 2>&1
-taskkill /f /im KioskLockApp.exe >nul 2>&1
-
+:after_kill
 :: Görev Yöneticisi kısıtlamalarını kaldır
 reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v DisableTaskMgr /f >nul 2>&1
 reg delete "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v DisableTaskMgr /f >nul 2>&1
