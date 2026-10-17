@@ -100,26 +100,28 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
   Future<void> _loadAdminData() async {
     try {
       final user = _client.auth.currentUser;
-      if (user == null) return;
+      if (user != null) {
+        final profile = await _client.from('user_profiles').select('school_id, full_name').eq('id', user.id).single();
+        _schoolId = profile['school_id'];
+        _adminName = profile['full_name'] ?? 'Kurum Yöneticisi';
 
-      final profile = await _client.from('user_profiles').select('school_id, full_name').eq('id', user.id).single();
-      _schoolId = profile['school_id'];
-      _adminName = profile['full_name'] ?? 'Kurum Yöneticisi';
-
-      if (_schoolId != null) {
-        final schoolData = await _client.from('schools').select('name, is_licensed, license_expires_at').eq('id', _schoolId!).maybeSingle();
-        _schoolName = schoolData?['name'];
-        _isSchoolLicensed = _evalLicense(schoolData);
-        final expStr = schoolData?['license_expires_at'] as String?;
-        if (expStr != null && expStr.isNotEmpty) {
-          _licenseExpiresAt = DateTime.tryParse(expStr);
-          if (_licenseExpiresAt != null) {
-            _remainingLicenseDays = _licenseExpiresAt!.difference(DateTime.now()).inDays;
+        if (_schoolId != null) {
+          final schoolData = await _client.from('schools').select('name, is_licensed, license_expires_at').eq('id', _schoolId!).maybeSingle();
+          _schoolName = schoolData?['name'];
+          _isSchoolLicensed = _evalLicense(schoolData);
+          final expStr = schoolData?['license_expires_at'] as String?;
+          if (expStr != null && expStr.isNotEmpty) {
+            _licenseExpiresAt = DateTime.tryParse(expStr);
+            if (_licenseExpiresAt != null) {
+              _remainingLicenseDays = _licenseExpiresAt!.difference(DateTime.now()).inDays;
+            }
           }
         }
       }
-    } catch (_) {}
-    setState(() => _isLoadingProfile = false);
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _isLoadingProfile = false);
+    }
   }
 
   List<String> _getFilteredGradesForCurrentKademe() {
@@ -264,16 +266,59 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
       _showModernSnackbar('Kurum lisansı sona ermiştir. İşlem yapılamaz. Lisans yenileme: emrecanardc.dev@gmail.com', isSuccess: false, bgColor: dangerRed);
       return;
     }
+
+    final newStatus = !currentStatus;
+    final index = _boards.indexWhere((b) => b['id'] == boardId);
+
+    // İyimser UI Güncellemesi (Kullanıcı anında tepki görür)
+    if (index != -1) {
+      setState(() {
+        _boards[index]['is_unlocked'] = newStatus;
+        if (newStatus) {
+          _boards[index]['last_unlocked_by'] = _adminName;
+        } else {
+          _boards[index]['last_locked_by'] = _adminName;
+        }
+      });
+    }
+
     try {
-      final updateData = <String, dynamic>{'is_unlocked': !currentStatus};
-      if (!currentStatus) {
+      final updateData = <String, dynamic>{'is_unlocked': newStatus};
+      if (newStatus) {
         updateData['last_unlocked_by'] = _adminName;
       } else {
         updateData['last_locked_by'] = _adminName;
       }
-      await SupabaseDatasource.syncBoardPatch(boardId: boardId, patchData: updateData);
+
+      final success = await SupabaseDatasource.syncBoardPatch(boardId: boardId, patchData: updateData);
+      if (success) {
+        if (mounted) {
+          _showModernSnackbar(
+            newStatus ? 'Tahta kilidi başarıyla açıldı.' : 'Tahta başarıyla kilitlendi.',
+            isSuccess: true,
+            bgColor: textDark,
+          );
+        }
+      } else {
+        // Hata durumunda iyimser güncellemeyi geri al
+        if (index != -1) {
+          setState(() {
+            _boards[index]['is_unlocked'] = currentStatus;
+          });
+        }
+        if (mounted) {
+          _showModernSnackbar('Kilit durumu sunucuya iletilemedi.', isSuccess: false, bgColor: dangerRed);
+        }
+      }
     } catch (e) {
-      _showModernSnackbar('Hata: $e', isSuccess: false, bgColor: dangerRed);
+      if (index != -1) {
+        setState(() {
+          _boards[index]['is_unlocked'] = currentStatus;
+        });
+      }
+      if (mounted) {
+        _showModernSnackbar('Hata: $e', isSuccess: false, bgColor: dangerRed);
+      }
     }
   }
 
@@ -301,7 +346,17 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
 
     if (confirm != true) return;
     try {
-      await _client.from('boards').update({'is_unlocked': false, 'last_locked_by': _adminName}).eq('school_id', _schoolId!);
+      final patch = {'is_unlocked': false, 'last_locked_by': _adminName};
+      await Future.wait([
+        SupabaseDatasource.primaryClient.from('boards').update(patch).eq('school_id', _schoolId!),
+        SupabaseDatasource.fallbackClient.from('boards').update(patch).eq('school_id', _schoolId!),
+      ]);
+      setState(() {
+        for (var b in _boards) {
+          b['is_unlocked'] = false;
+          b['last_locked_by'] = _adminName;
+        }
+      });
       if (mounted) _showModernSnackbar('Tüm tahtalar kilitlendi.', isSuccess: true, bgColor: textDark);
     } catch (e) {
       if (mounted) _showModernSnackbar('Hata: $e', isSuccess: false, bgColor: dangerRed);

@@ -17,7 +17,14 @@ const Color dangerRed = Color(0xFFF43F5E);
 const Color warningOrange = Color(0xFFF59E0B);
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final String? initialSchoolId;
+  final String? initialSchoolName;
+
+  const DashboardScreen({
+    super.key,
+    this.initialSchoolId,
+    this.initialSchoolName,
+  });
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -71,8 +78,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _scrollController.dispose();
-    _boardChannel?.unsubscribe();
-    _schoolChannel?.unsubscribe();
+    if (_boardChannel != null) {
+      _client.removeChannel(_boardChannel!);
+    }
+    if (_schoolChannel != null) {
+      _client.removeChannel(_schoolChannel!);
+    }
     super.dispose();
   }
 
@@ -99,20 +110,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _loadTeacherData() async {
     try {
-      final user = _client.auth.currentUser;
-      if (user == null) return;
-
-      final profile = await _client.from('user_profiles').select('school_id, full_name').eq('id', user.id).single();
-      _schoolId = profile['school_id'];
-      _teacherName = profile['full_name'] ?? 'Öğretmenim';
-
-      if (_schoolId != null) {
-        final schoolData = await _client.from('schools').select('name, is_licensed, license_expires_at').eq('id', _schoolId!).maybeSingle();
-        _schoolName = schoolData?['name'];
-        _isSchoolLicensed = _evalLicense(schoolData);
+      if (widget.initialSchoolId != null) {
+        _schoolId = widget.initialSchoolId;
+        _schoolName = widget.initialSchoolName ?? 'Örnek Okul';
+        _teacherName = 'Öğretmenim';
       }
-    } catch (_) {}
-    setState(() => _isLoadingProfile = false);
+
+      final user = _client.auth.currentUser;
+      if (user != null) {
+        final profile = await _client.from('user_profiles').select('school_id, full_name').eq('id', user.id).single();
+        _schoolId = profile['school_id'];
+        _teacherName = profile['full_name'] ?? 'Öğretmenim';
+
+        if (_schoolId != null) {
+          final schoolData = await _client.from('schools').select('name, is_licensed, license_expires_at').eq('id', _schoolId!).maybeSingle();
+          _schoolName = schoolData?['name'];
+          _isSchoolLicensed = _evalLicense(schoolData);
+        }
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _isLoadingProfile = false);
+    }
   }
 
   Future<void> _loadFavorites() async {
@@ -430,27 +449,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Color? textColor,
     required VoidCallback onTap,
   }) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      leading: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: iconColor.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: iconColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: iconColor, size: 22),
         ),
-        child: Icon(icon, color: iconColor, size: 22),
-      ),
-      title: Text(
-        title,
-        style: TextStyle(
-          color: textColor ?? textDark,
-          fontWeight: FontWeight.bold,
-          fontSize: 14,
+        title: Text(
+          title,
+          style: TextStyle(
+            color: textColor ?? textDark,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
         ),
+        subtitle: Text(subtitle, style: const TextStyle(color: textGrey, fontSize: 11)),
+        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: textGrey),
+        onTap: onTap,
       ),
-      subtitle: Text(subtitle, style: const TextStyle(color: textGrey, fontSize: 11)),
-      trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: textGrey),
-      onTap: onTap,
     );
   }
 

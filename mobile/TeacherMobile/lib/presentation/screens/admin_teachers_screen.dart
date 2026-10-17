@@ -27,15 +27,29 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
-  late final SupabaseClient _adminClient;
   final String _fallbackUrl = 'http://130.61.78.192:8000';
+
+  SupabaseClient _getAdminClient() {
+    String? url;
+    String? key;
+    try {
+      if (dotenv.isInitialized) {
+        url = dotenv.env['SUPABASE_URL'];
+        key = dotenv.env['SUPABASE_SERVICE_ROLE_KEY'] ?? dotenv.env['SUPABASE_ANON_KEY'];
+      }
+    } catch (_) {}
+    url ??= _fallbackUrl;
+    key ??= '';
+    return SupabaseClient(
+      url,
+      key,
+      authOptions: const AuthClientOptions(autoRefreshToken: false),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
-    final url = dotenv.env['SUPABASE_URL'] ?? _fallbackUrl;
-    final key = dotenv.env['SUPABASE_SERVICE_ROLE_KEY'] ?? dotenv.env['SUPABASE_ANON_KEY'] ?? '';
-    _adminClient = SupabaseClient(url, key);
     _loadAdminData();
   }
 
@@ -45,25 +59,50 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
     super.dispose();
   }
 
+  List<Map<String, dynamic>> _teachers = [];
+  bool _hasError = false;
+
   Future<void> _loadAdminData() async {
     try {
       final user = _client.auth.currentUser;
-      if (user == null) return;
+      if (user != null) {
+        final profile = await _client.from('user_profiles').select('school_id').eq('id', user.id).single();
+        _schoolId = profile['school_id'];
 
-      final profile = await _client.from('user_profiles').select('school_id').eq('id', user.id).single();
-      _schoolId = profile['school_id'];
-
-      if (_schoolId != null) {
-        final schoolData = await _client.from('schools').select('name').eq('id', _schoolId!).maybeSingle();
-        _schoolName = schoolData?['name'];
+        if (_schoolId != null) {
+          final schoolData = await _client.from('schools').select('name').eq('id', _schoolId!).maybeSingle();
+          _schoolName = schoolData?['name'];
+          await _loadTeachers();
+        }
       }
-    } catch (_) {}
-    if (mounted) setState(() => _isLoading = false);
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadTeachers() async {
+    if (_schoolId == null) return;
+    try {
+      final data = await _client
+          .from('user_profiles')
+          .select()
+          .eq('school_id', _schoolId!)
+          .eq('role', 'teacher')
+          .order('full_name', ascending: true);
+      if (mounted) {
+        setState(() {
+          _teachers = List<Map<String, dynamic>>.from(data);
+          _hasError = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _hasError = true);
+    }
   }
 
   Future<void> _refreshTeachers() async {
-    setState(() {});
-    await Future.delayed(const Duration(milliseconds: 500));
+    await _loadTeachers();
   }
 
   void _showModernSnackbar(String message, {required bool isSuccess, required Color bgColor}) {
@@ -144,20 +183,21 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
                         child: const Icon(Icons.person_add_rounded, color: primaryBlue, size: 24),
                       ),
                       const SizedBox(width: 14),
-                      const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Yeni Öğretmen Yetkilendir',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textDark),
-                          ),
-                          Text(
-                            'Giriş bilgileriyle akıllı tahtaları açabilir',
-                            style: TextStyle(fontSize: 12, color: textGrey),
-                          ),
-                        ],
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Yeni Öğretmen Yetkilendir',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textDark),
+                            ),
+                            Text(
+                              'Giriş bilgileriyle akıllı tahtaları açabilir',
+                              style: TextStyle(fontSize: 12, color: textGrey),
+                            ),
+                          ],
+                        ),
                       ),
-                      const Spacer(),
                       IconButton(
                         icon: const Icon(Icons.close_rounded, color: textGrey),
                         onPressed: () => Navigator.pop(sheetCtx),
@@ -257,8 +297,9 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
 
                               setDialogState(() => isAdding = true);
 
+                              final adminClient = _getAdminClient();
                               try {
-                                final response = await _adminClient.auth.admin.createUser(
+                                final response = await adminClient.auth.admin.createUser(
                                   AdminUserAttributes(
                                     email: email,
                                     password: pass,
@@ -268,12 +309,14 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
 
                                 final newUserId = response.user!.id;
 
-                                await _adminClient.from('user_profiles').insert({
+                                await adminClient.from('user_profiles').insert({
                                   'id': newUserId,
                                   'school_id': _schoolId,
                                   'role': 'teacher',
                                   'full_name': name,
                                 });
+
+                                await _loadTeachers();
 
                                 if (dialogCtx.mounted) {
                                   Navigator.pop(sheetCtx);
@@ -282,6 +325,8 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
                               } catch (e) {
                                 setDialogState(() => isAdding = false);
                                 _showModernSnackbar('Hata: $e', isSuccess: false, bgColor: dangerRed);
+                              } finally {
+                                adminClient.dispose();
                               }
                             },
                     ),
@@ -334,12 +379,16 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
     );
 
     if (confirm == true) {
+      final adminClient = _getAdminClient();
       try {
-        await _adminClient.from('user_profiles').delete().eq('id', teacherId);
-        await _adminClient.auth.admin.deleteUser(teacherId);
+        await adminClient.from('user_profiles').delete().eq('id', teacherId);
+        await adminClient.auth.admin.deleteUser(teacherId);
+        await _loadTeachers();
         if (mounted) _showModernSnackbar('$teacherName sistemden silindi.', isSuccess: true, bgColor: textDark);
       } catch (e) {
         if (mounted) _showModernSnackbar('Silme hatası: $e', isSuccess: false, bgColor: dangerRed);
+      } finally {
+        adminClient.dispose();
       }
     }
   }
@@ -372,20 +421,9 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
         ),
         centerTitle: false,
       ),
-      body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: _adminClient.from('user_profiles').stream(primaryKey: ['id']),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(child: Text('Veri yükleme hatası: ${snapshot.error}', style: const TextStyle(color: dangerRed)));
-          }
-
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator(color: primaryBlue));
-          }
-
-          final allSchoolTeachers = snapshot.data!
-              .where((user) => user['school_id'] == _schoolId && user['role'] == 'teacher')
-              .toList();
+      body: Builder(
+        builder: (context) {
+          final allSchoolTeachers = _teachers;
 
           final filteredTeachers = allSchoolTeachers.where((teacher) {
             final name = (teacher['full_name'] ?? '').toString().toLowerCase();
@@ -400,6 +438,30 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.only(bottom: 100),
               children: [
+                if (_hasError)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: dangerRed.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: dangerRed.withValues(alpha: 0.3)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.wifi_off_rounded, color: dangerRed, size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Sunucu bağlantısı sağlanamadı. Bilgiler çevrimdışı modda gösteriliyor.',
+                              style: TextStyle(fontSize: 12, color: dangerRed, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 // --- İSTATİSTİK KARTLARI ---
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),

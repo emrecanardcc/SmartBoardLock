@@ -90,7 +90,7 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
     }
 
     try {
-      await SupabaseDatasource.syncBoardPatch(
+      final success = await SupabaseDatasource.syncBoardPatch(
         boardId: widget.boardId,
         patchData: {
           'is_unlocked': false,
@@ -99,7 +99,11 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
       );
       
       if (mounted) {
-        _showModernSnackbar('Tahta başarıyla kilitlendi.', isSuccess: true, bgColor: textDark);
+        if (success) {
+          _showModernSnackbar('Tahta başarıyla kilitlendi.', isSuccess: true, bgColor: textDark);
+        } else {
+          _showModernSnackbar('Kilitleme komutu sunucuya iletilemedi.', isSuccess: false, bgColor: dangerRed);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -155,12 +159,18 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
             isUnlocked = snapshot.data!.first['is_unlocked'] ?? false;
           }
 
-          return Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(24.0),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight - 48),
+                  child: IntrinsicHeight(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
                 if (!widget.isSchoolLicensed)
                   Container(
                     margin: const EdgeInsets.only(bottom: 16),
@@ -405,10 +415,14 @@ class _BoardControlScreenState extends State<BoardControlScreen> {
                 const SizedBox(height: 12),
               ],
             ),
-          );
-        },
-      ),
-    ),
+          ),
+        ),
+      );
+    },
   );
-}
+},
+        ),
+      ),
+    );
+  }
 }

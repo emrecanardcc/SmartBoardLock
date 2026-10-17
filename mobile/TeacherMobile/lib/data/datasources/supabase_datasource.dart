@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseDatasource {
@@ -13,49 +11,60 @@ class SupabaseDatasource {
   static const String primaryUrl = 'http://130.61.78.192:8000';
   static const String primaryKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkyMjI1OTQ5LCJleHAiOjE5NDk5MDU5NDl9.sk8yBULVd4I88d6zbbvYFBtLETiDhr0Ipq2gG6E4ih0';
 
-  /// Hem aktif sunucuya hem de yedek/ikincil sunucuya aynı anda yazan çift-sunucu kalkanı
-  static Future<void> syncBoardPatch({
+  // Statik ve UTF-8 garantili Supabase istemcileri
+  static final SupabaseClient primaryClient = SupabaseClient(primaryUrl, primaryKey);
+  static final SupabaseClient fallbackClient = SupabaseClient(fallbackUrl, fallbackKey);
+
+  /// Hem aktif sunucuya hem de yedek/ikincil sunucuya aynı anda yazan çift-sunucu kalkanı (Tam UTF-8 Uyumlu)
+  static Future<bool> syncBoardPatch({
     required String boardId,
     required Map<String, dynamic> patchData,
   }) async {
-    // 1. Aktif istemci üzerinden güncelleme
-    try {
-      final client = Supabase.instance.client;
-      await client.from('boards').update(patchData).eq('id', boardId);
-    } catch (_) {}
+    bool primarySuccess = false;
+    bool fallbackSuccess = false;
+    bool activeSuccess = false;
 
-    // 2. Birincil (Oracle VM) REST PATCH çağrısı
+    // 1. Birincil Sunucu (Oracle Cloud VM)
     try {
-      final uri = Uri.parse('$primaryUrl/rest/v1/boards?id=eq.$boardId');
-      final httpClient = HttpClient();
-      httpClient.connectionTimeout = const Duration(seconds: 4);
-      final request = await httpClient.patchUrl(uri);
-      request.headers.set('apikey', primaryKey);
-      request.headers.set('Authorization', 'Bearer $primaryKey');
-      request.headers.set('Content-Type', 'application/json');
-      request.headers.set('Prefer', 'return=minimal');
-      request.write(jsonEncode(patchData));
-      await request.close();
-      httpClient.close();
-    } catch (_) {}
+      await primaryClient
+          .from('boards')
+          .update(patchData)
+          .eq('id', boardId);
+      primarySuccess = true;
+    } catch (e) {
+      // ignore: avoid_print
+      print('[SupabaseDatasource] Primary update error: $e');
+    }
 
-    // 3. İkincil / Yedek (Cloud Supabase) REST PATCH çağrısı
+    // 2. İkincil / Yedek Sunucu (Cloud Supabase)
     try {
-      final uri = Uri.parse('$fallbackUrl/rest/v1/boards?id=eq.$boardId');
-      final httpClient = HttpClient();
-      httpClient.connectionTimeout = const Duration(seconds: 4);
-      final request = await httpClient.patchUrl(uri);
-      request.headers.set('apikey', fallbackKey);
-      request.headers.set('Authorization', 'Bearer $fallbackKey');
-      request.headers.set('Content-Type', 'application/json');
-      request.headers.set('Prefer', 'return=minimal');
-      request.write(jsonEncode(patchData));
-      await request.close();
-      httpClient.close();
-    } catch (_) {}
+      await fallbackClient
+          .from('boards')
+          .update(patchData)
+          .eq('id', boardId);
+      fallbackSuccess = true;
+    } catch (e) {
+      // ignore: avoid_print
+      print('[SupabaseDatasource] Fallback update error: $e');
+    }
+
+    // 3. Aktif oturum istemcisi üzerinden güncelleme
+    try {
+      final activeClient = Supabase.instance.client;
+      await activeClient
+          .from('boards')
+          .update(patchData)
+          .eq('id', boardId);
+      activeSuccess = true;
+    } catch (e) {
+      // ignore: avoid_print
+      print('[SupabaseDatasource] Active client update error: $e');
+    }
+
+    return primarySuccess || fallbackSuccess || activeSuccess;
   }
 
-  Future<void> updateLockStatus({
+  Future<bool> updateLockStatus({
     required String boardId,
     required bool isUnlocked,
     String? unlockedBy,
@@ -63,14 +72,14 @@ class SupabaseDatasource {
     final patch = <String, dynamic>{
       'is_unlocked': isUnlocked,
     };
-    if (unlockedBy != null) {
+    if (unlockedBy != null && unlockedBy.trim().isNotEmpty) {
       if (isUnlocked) {
-        patch['last_unlocked_by'] = unlockedBy;
+        patch['last_unlocked_by'] = unlockedBy.trim();
       } else {
-        patch['last_locked_by'] = unlockedBy;
+        patch['last_locked_by'] = unlockedBy.trim();
       }
     }
-    await syncBoardPatch(boardId: boardId, patchData: patch);
+    return await syncBoardPatch(boardId: boardId, patchData: patch);
   }
 
   Stream<List<Map<String, dynamic>>> streamBoardStatus(String boardId) {
