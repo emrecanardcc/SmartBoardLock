@@ -75,7 +75,7 @@ class _TopBarState extends State<TopBar> {
 
   String _getSchoolName(UserProfileModel? user, SchoolSelectorProvider selector) {
     if (selector.selectedSchool != null) return selector.selectedSchool!.name;
-    return 'Sınıf360 Web Paneli';
+    return 'Sınıf360';
   }
 }
 

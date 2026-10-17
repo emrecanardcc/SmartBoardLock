@@ -1,11 +1,11 @@
 {
-    "name": "web_admin",
-    "short_name": "web_admin",
+    "name": "Sınıf360",
+    "short_name": "Sınıf360",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0F172A",
+    "theme_color": "#10B981",
+    "description": "Sınıf360 Akıllı Tahta Yönetim Sistemi",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

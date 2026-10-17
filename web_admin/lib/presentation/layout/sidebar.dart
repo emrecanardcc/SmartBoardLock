@@ -153,17 +153,22 @@ class AppSidebar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.tv_rounded,
-                color: Colors.white,
-                size: 22,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.asset(
+                'assets/images/logo.png',
+                width: 40,
+                height: 40,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.school_rounded, color: Colors.white, size: 22),
+                ),
               ),
             ),
             if (!isCollapsed) ...[

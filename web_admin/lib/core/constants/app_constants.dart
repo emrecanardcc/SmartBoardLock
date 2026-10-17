@@ -47,5 +47,5 @@ class AppConstants {
   static const int offlineThresholdMinutes = 5;
 
   // Uygulama adı
-  static const String appName = 'Sınıf360 Web Paneli';
+  static const String appName = 'Sınıf360';
 }

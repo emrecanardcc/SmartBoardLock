@@ -116,19 +116,28 @@ class _LoginScreenState extends State<LoginScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // Logo
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Icon(
-                                Icons.tv_rounded,
-                                color: Colors.white,
-                                size: 40,
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: Image.asset(
+                                'assets/images/logo.png',
+                                width: 72,
+                                height: 72,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Icon(
+                                    Icons.school_rounded,
+                                    color: Colors.white,
+                                    size: 40,
+                                  ),
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 40),
+                            const SizedBox(height: 32),
 
                             Text(
                               'Sınıf360',
@@ -195,6 +204,22 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // Mobil logo (küçük ekranda sol panel gizlendiğinde)
+                      if (MediaQuery.of(context).size.width <= 800) ...[
+                        Center(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Image.asset(
+                              'assets/images/logo.png',
+                              width: 64,
+                              height: 64,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
                       // Başlık
                       Text(
                         'Yönetici Girişi',
@@ -207,7 +232,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Web Kontrol Paneline erişmek için giriş yapın.',
+                        'Sınıf360 Yönetim Paneline erişmek için giriş yapın.',
                         style: GoogleFonts.inter(
                           fontSize: 14,
                           color: AppColors.textGrey,
