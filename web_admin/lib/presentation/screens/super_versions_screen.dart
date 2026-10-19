@@ -21,8 +21,15 @@ class SuperVersionsScreen extends StatefulWidget {
 }
 
 class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
-  int _selectedTab = 0; // 0: Sürümler, 1: Uzaktan Onarım (TahtaRepair)
+  int _selectedTab = 0; // 0: Sürümler, 1: Güncel Olmayan Tahtalar, 2: Uzaktan Onarım (TahtaRepair)
   late Future<List<AppVersionModel>> _versionsFuture;
+  String? _latestVersionNumber;
+
+  // Güncel Olmayan Tahtalar sekmesi filtreleri
+  String _outdatedSearchQuery = '';
+  bool _outdatedOnlyOnline = false;
+  String? _outdatedSelectedSchoolId;
+  bool _isBulkUpdatingOutdated = false;
 
   // Onarım (TahtaRepair) sekmesi durumu
   List<BoardModel> _boards = [];
@@ -48,7 +55,28 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
 
   void _loadVersions() {
     final repo = context.read<AdminRepository>();
-    _versionsFuture = repo.getAppVersions();
+    _versionsFuture = repo.getAppVersions().then((versions) {
+      if (mounted) {
+        setState(() {
+          _latestVersionNumber =
+              versions.isNotEmpty ? versions.first.versionNumber : null;
+        });
+      }
+      return versions;
+    });
+  }
+
+  bool _isBoardOutdated(BoardModel board) {
+    if (_latestVersionNumber == null || _latestVersionNumber!.isEmpty) {
+      return false;
+    }
+    final bVer = board.appVersion?.trim() ?? '';
+    if (bVer.isEmpty) return true;
+    return bVer != _latestVersionNumber!.trim();
+  }
+
+  List<BoardModel> get _outdatedBoards {
+    return _boards.where(_isBoardOutdated).toList();
   }
 
   void _loadBoards() {
@@ -114,7 +142,9 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
                     Text(
                       _selectedTab == 0
                           ? 'Sürüm & Güncelleme Merkezi'
-                          : 'Uzaktan Bütünlük Onarımı (TahtaRepair)',
+                          : _selectedTab == 1
+                              ? 'Güncelleme Bekleyen Tahtalar'
+                              : 'Uzaktan Bütünlük Onarımı (TahtaRepair)',
                       style: GoogleFonts.inter(
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
@@ -125,7 +155,9 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
                     Text(
                       _selectedTab == 0
                           ? 'Sistem güncellemelerini yönetin ve yeni sürüm yayınlayın.'
-                          : 'Sorunlu veya çöken tahtalara uzaktan sıfırdan temiz kurulum sinyali gönderin.',
+                          : _selectedTab == 1
+                              ? 'En son sürümde (v${_latestVersionNumber ?? "..."}) olmayan tahtaları görüntüleyin ve tek tıkla güncelleyin.'
+                              : 'Sorunlu veya çöken tahtalara uzaktan sıfırdan temiz kurulum sinyali gönderin.',
                       style: GoogleFonts.inter(
                           fontSize: 13, color: AppColors.textGrey),
                     ),
@@ -138,9 +170,34 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
                   label: const Text('Yeni Sürüm Yayınla'),
                   onPressed: () => _showAddEditVersionDialog(context, repo),
                 )
-              else ...[
+              else if (_selectedTab == 1) ...[
                 IconButton(
-                  icon: const Icon(Icons.refresh_rounded, color: AppColors.textGrey),
+                  icon: const Icon(Icons.refresh_rounded,
+                      color: AppColors.textGrey),
+                  tooltip: 'Yenile',
+                  onPressed: _refresh,
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.system_update_rounded, size: 18),
+                  label: Text(
+                      'Açık Olanları Güncelle (${_outdatedBoards.where((b) => b.isOnline).length})'),
+                  onPressed: _isBulkUpdatingOutdated ||
+                          _outdatedBoards.where((b) => b.isOnline).isEmpty
+                      ? null
+                      : () => _confirmBulkUpdateOutdated(
+                          context,
+                          repo,
+                          _outdatedBoards.where((b) => b.isOnline).toList()),
+                ),
+              ] else ...[
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded,
+                      color: AppColors.textGrey),
                   tooltip: 'Yenile',
                   onPressed: _loadBoards,
                 ),
@@ -177,8 +234,19 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
               children: [
                 _buildTabButton(0, Icons.folder_zip_rounded, 'Sürüm Paketleri'),
                 const SizedBox(width: 6),
-                _buildTabButton(1, Icons.build_circle_rounded,
-                    'Uzaktan Bütünlük Onarımı (TahtaRepair)'),
+                _buildTabButton(
+                  1,
+                  Icons.system_update_rounded,
+                  'Güncel Olmayan Tahtalar',
+                  badgeCount: _outdatedBoards.length,
+                  badgeColor: AppColors.danger,
+                ),
+                const SizedBox(width: 6),
+                _buildTabButton(
+                  2,
+                  Icons.build_circle_rounded,
+                  'Uzaktan Bütünlük Onarımı (TahtaRepair)',
+                ),
               ],
             ),
           ),
@@ -188,6 +256,8 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
           // Aktif Tab İçeriği
           if (_selectedTab == 0)
             Expanded(child: _buildVersionsTab(context, repo))
+          else if (_selectedTab == 1)
+            Expanded(child: _buildOutdatedBoardsTab(context, repo))
           else
             Expanded(child: _buildRepairTab(context, repo)),
         ],
@@ -195,13 +265,19 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
     );
   }
 
-  Widget _buildTabButton(int index, IconData icon, String label) {
+  Widget _buildTabButton(
+    int index,
+    IconData icon,
+    String label, {
+    int? badgeCount,
+    Color? badgeColor,
+  }) {
     final isSelected = _selectedTab == index;
     return InkWell(
       onTap: () => setState(() => _selectedTab = index),
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: isSelected ? AppColors.bgCard : Colors.transparent,
@@ -222,7 +298,11 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
             Icon(
               icon,
               size: 16,
-              color: isSelected ? AppColors.primary : AppColors.textGrey,
+              color: isSelected
+                  ? (badgeCount != null && badgeCount > 0 && index == 1
+                      ? AppColors.danger
+                      : AppColors.primary)
+                  : AppColors.textGrey,
             ),
             const SizedBox(width: 8),
             Text(
@@ -230,9 +310,35 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
               style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? AppColors.primary : AppColors.textGrey,
+                color: isSelected
+                    ? (badgeCount != null && badgeCount > 0 && index == 1
+                        ? AppColors.danger
+                        : AppColors.primary)
+                    : AppColors.textGrey,
               ),
             ),
+            if (badgeCount != null && badgeCount > 0) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: (badgeColor ?? AppColors.danger)
+                      .withValues(alpha: isSelected ? 1.0 : 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$badgeCount',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: isSelected
+                        ? Colors.white
+                        : (badgeColor ?? AppColors.danger),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -243,6 +349,167 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Sürüm ve Tahta Durum Özeti Kartı
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.bgCard,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              // 1. Aktif Sürüm
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.rocket_launch_rounded,
+                          color: AppColors.primary, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Aktif Hedef Sürüm',
+                              style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: AppColors.textLight,
+                                  fontWeight: FontWeight.w500)),
+                          Text(
+                              _latestVersionNumber != null
+                                  ? 'v$_latestVersionNumber'
+                                  : 'Belirlenmedi',
+                              style: GoogleFonts.inter(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textDark),
+                              overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(width: 1, height: 36, color: AppColors.border),
+              // 2. Güncel Tahtalar
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.check_circle_rounded,
+                            color: AppColors.success, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Güncel Tahtalar',
+                                style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: AppColors.textLight,
+                                    fontWeight: FontWeight.w500)),
+                            Text(
+                                '${_boards.length - _outdatedBoards.length} / ${_boards.length}',
+                                style: GoogleFonts.inter(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.success),
+                                overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Container(width: 1, height: 36, color: AppColors.border),
+              // 3. Güncelleme Bekleyen Tahtalar
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: (_outdatedBoards.isNotEmpty
+                                  ? AppColors.danger
+                                  : AppColors.success)
+                              .withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          _outdatedBoards.isNotEmpty
+                              ? Icons.warning_amber_rounded
+                              : Icons.verified_rounded,
+                          color: _outdatedBoards.isNotEmpty
+                              ? AppColors.danger
+                              : AppColors.success,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Güncelleme Bekleyen',
+                                style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: AppColors.textLight,
+                                    fontWeight: FontWeight.w500)),
+                            Text('${_outdatedBoards.length} Tahta',
+                                style: GoogleFonts.inter(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: _outdatedBoards.isNotEmpty
+                                        ? AppColors.danger
+                                        : AppColors.success),
+                                overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_outdatedBoards.isNotEmpty) ...[
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.danger.withValues(alpha: 0.1),
+                    foregroundColor: AppColors.danger,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                  ),
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                  label: const Text('Listeyi İncele'),
+                  onPressed: () => setState(() => _selectedTab = 1),
+                ),
+              ],
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
         // Bilgi Kartı
         Container(
           width: double.infinity,
@@ -526,6 +793,533 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
         ),
       ],
     );
+  }
+
+  Widget _buildOutdatedBoardsTab(BuildContext context, AdminRepository repo) {
+    final outdatedList = _outdatedBoards;
+    final onlineOutdated = outdatedList.where((b) => b.isOnline).toList();
+
+    // Filtreleme
+    final filtered = outdatedList.where((b) {
+      if (_outdatedOnlyOnline && !b.isOnline) return false;
+      if (_outdatedSelectedSchoolId != null &&
+          b.schoolId != _outdatedSelectedSchoolId) {
+        return false;
+      }
+      if (_outdatedSearchQuery.isNotEmpty) {
+        final q = _outdatedSearchQuery.toLowerCase();
+        final nameMatch = b.name.toLowerCase().contains(q);
+        final schoolMatch =
+            (_schoolNames[b.schoolId] ?? '').toLowerCase().contains(q);
+        final gradeMatch = b.gradeBranchLabel.toLowerCase().contains(q);
+        final verMatch = (b.appVersion ?? '').toLowerCase().contains(q);
+        if (!nameMatch && !schoolMatch && !gradeMatch && !verMatch) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Bilgilendirme ve Hızlı Eylem Kartı
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: (outdatedList.isNotEmpty
+                    ? AppColors.danger
+                    : AppColors.success)
+                .withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: (outdatedList.isNotEmpty
+                      ? AppColors.danger
+                      : AppColors.success)
+                  .withValues(alpha: 0.25),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: (outdatedList.isNotEmpty
+                          ? AppColors.danger
+                          : AppColors.success)
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  outdatedList.isNotEmpty
+                      ? Icons.warning_amber_rounded
+                      : Icons.verified_rounded,
+                  color: outdatedList.isNotEmpty
+                      ? AppColors.danger
+                      : AppColors.success,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      outdatedList.isNotEmpty
+                          ? 'Güncelleme Bekleyen ${outdatedList.length} Akıllı Tahta Tespit Edildi'
+                          : 'Harika! Tüm Akıllı Tahtalar En Güncel Sürümde',
+                      style: GoogleFonts.inter(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      outdatedList.isNotEmpty
+                          ? 'Aktif Hedef Sürüm: v${_latestVersionNumber ?? "..."}. Aşağıda listelenen tahtalarda eski bir sürüm çalışıyor veya sürüm bilgisi henüz bildirilmemiş.'
+                          : 'Sistemdeki ${_boards.length} tahtanın tamamı aktif en son sürümü (v$_latestVersionNumber) kullanıyor.',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppColors.textGrey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (onlineOutdated.isNotEmpty) ...[
+                const SizedBox(width: 16),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    elevation: 1,
+                  ),
+                  icon: const Icon(Icons.system_update_rounded, size: 18),
+                  label: Text(
+                      'Açık Olanları Güncelle (${onlineOutdated.length})'),
+                  onPressed: _isBulkUpdatingOutdated
+                      ? null
+                      : () => _confirmBulkUpdateOutdated(
+                          context, repo, onlineOutdated),
+                ),
+              ],
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Arama ve Filtreleme Araç Çubuğu
+        if (outdatedList.isNotEmpty)
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 40,
+                  child: TextField(
+                    onChanged: (v) =>
+                        setState(() => _outdatedSearchQuery = v),
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.textDark),
+                    decoration: InputDecoration(
+                      hintText:
+                          'Tahta adı, okul, sınıf veya sürüm numarası ile filtrele...',
+                      prefixIcon: const Icon(Icons.search_rounded,
+                          color: AppColors.textGrey, size: 18),
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 14),
+                      filled: true,
+                      fillColor: AppColors.bgCard,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide:
+                            const BorderSide(color: AppColors.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                            color: AppColors.primary, width: 1.5),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Çevrimiçi Filtre Chip
+              FilterChip(
+                label: Text(
+                    'Yalnızca Çevrimiçi (${onlineOutdated.length} / ${outdatedList.length})'),
+                selected: _outdatedOnlyOnline,
+                onSelected: (v) =>
+                    setState(() => _outdatedOnlyOnline = v),
+                selectedColor: AppColors.success.withValues(alpha: 0.15),
+                checkmarkColor: AppColors.success,
+                labelStyle: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight:
+                      _outdatedOnlyOnline ? FontWeight.w700 : FontWeight.w500,
+                  color: _outdatedOnlyOnline
+                      ? AppColors.success
+                      : AppColors.textGrey,
+                ),
+              ),
+            ],
+          ),
+
+        if (outdatedList.isNotEmpty) const SizedBox(height: 16),
+
+        // Tahtalar Listesi
+        Expanded(
+          child: _isLoadingBoards && _boards.isEmpty
+              ? const Center(
+                  child:
+                      CircularProgressIndicator(color: AppColors.primary))
+              : outdatedList.isEmpty
+                  ? Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(32),
+                        decoration: BoxDecoration(
+                          color: AppColors.bgCard,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: AppColors.success
+                                    .withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.verified_rounded,
+                                  size: 56, color: AppColors.success),
+                            ),
+                            const SizedBox(height: 16),
+                            Text('Tüm Akıllı Tahtalar Güncel!',
+                                style: GoogleFonts.inter(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textDark)),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Sistemdeki ${_boards.length} tahtanın tamamı aktif en son sürümü (v$_latestVersionNumber) kullanıyor.',
+                              style: GoogleFonts.inter(
+                                  fontSize: 13, color: AppColors.textGrey),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : filtered.isEmpty
+                      ? Center(
+                          child: Text(
+                            'Arama kriterlerine uygun güncel olmayan tahta bulunamadı.',
+                            style: GoogleFonts.inter(
+                                color: AppColors.textGrey, fontSize: 14),
+                          ),
+                        )
+                      : Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.bgCard,
+                            borderRadius: BorderRadius.circular(16),
+                            border: const Border.fromBorderSide(
+                                BorderSide(color: AppColors.border)),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: ListView.separated(
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1, color: AppColors.border),
+                              itemBuilder: (context, index) {
+                                final board = filtered[index];
+                                final schoolName =
+                                    _schoolNames[board.schoolId] ??
+                                        'Bilinmeyen Okul';
+                                final isOnline = board.isOnline;
+                                final currentVersion = board.appVersion !=
+                                            null &&
+                                        board.appVersion!.trim().isNotEmpty
+                                    ? 'v${board.appVersion}'
+                                    : 'Bilinmiyor / Eski';
+
+                                return ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 20, vertical: 10),
+                                  leading: Container(
+                                    width: 46,
+                                    height: 46,
+                                    decoration: BoxDecoration(
+                                      color: isOnline
+                                          ? AppColors.danger
+                                              .withValues(alpha: 0.08)
+                                          : AppColors.bgPage,
+                                      borderRadius:
+                                          BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isOnline
+                                            ? AppColors.danger
+                                                .withValues(alpha: 0.25)
+                                            : AppColors.border,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      Icons.tv_rounded,
+                                      color: isOnline
+                                          ? AppColors.danger
+                                          : AppColors.textGrey,
+                                      size: 24,
+                                    ),
+                                  ),
+                                  title: Row(
+                                    children: [
+                                      Text(
+                                        board.name,
+                                        style: GoogleFonts.inter(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 15,
+                                          color: AppColors.textDark,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 7, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isOnline
+                                              ? AppColors.success
+                                                  .withValues(alpha: 0.1)
+                                              : AppColors.offline
+                                                  .withValues(alpha: 0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                          border: Border.all(
+                                            color: isOnline
+                                                ? AppColors.success
+                                                    .withValues(alpha: 0.3)
+                                                : AppColors.border,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          isOnline ? 'ÇEVRİMİÇİ' : 'ÇEVRİMDİŞİ',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w800,
+                                            color: isOnline
+                                                ? AppColors.success
+                                                : AppColors.offline,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        '$schoolName • ${board.gradeBranchLabel.isNotEmpty ? board.gradeBranchLabel : "Sınıf Belirtilmemiş"}',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          color: AppColors.textGrey,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      // Sürüm Karşılaştırma Rozetleri
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.danger
+                                                  .withValues(alpha: 0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: AppColors.danger
+                                                    .withValues(alpha: 0.25),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                    Icons.cancel_rounded,
+                                                    size: 13,
+                                                    color: AppColors.danger),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  'Mevcut: $currentVersion',
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 11,
+                                                    fontWeight:
+                                                        FontWeight.w700,
+                                                    color: AppColors.danger,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          const Icon(
+                                              Icons.arrow_forward_rounded,
+                                              size: 14,
+                                              color: AppColors.textGrey),
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.success
+                                                  .withValues(alpha: 0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: AppColors.success
+                                                    .withValues(alpha: 0.25),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                    Icons.check_circle_rounded,
+                                                    size: 13,
+                                                    color: AppColors.success),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  'Hedef: v${_latestVersionNumber ?? "..."}',
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 11,
+                                                    fontWeight:
+                                                        FontWeight.w700,
+                                                    color: AppColors.success,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  trailing: isOnline
+                                      ? ElevatedButton.icon(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppColors.primary,
+                                            foregroundColor: Colors.white,
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 14,
+                                                    vertical: 10),
+                                            elevation: 1,
+                                          ),
+                                          icon: const Icon(
+                                              Icons.system_update_rounded,
+                                              size: 16),
+                                          label: const Text('Şimdi Güncelle'),
+                                          onPressed: () =>
+                                              _confirmSingleRepair(
+                                                  context, repo, board),
+                                        )
+                                      : Tooltip(
+                                          message:
+                                              'Tahta kapalı olduğu için şu an komut gönderilemez. Tahta açıldığında güncellenebilir.',
+                                          child: OutlinedButton.icon(
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor:
+                                                  AppColors.textGrey,
+                                              side: const BorderSide(
+                                                  color: AppColors.border),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 8),
+                                            ),
+                                            icon: const Icon(
+                                                Icons.power_off_rounded,
+                                                size: 15),
+                                            label: const Text('Tahta Kapalı'),
+                                            onPressed: null,
+                                          ),
+                                        ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _confirmBulkUpdateOutdated(
+    BuildContext context,
+    AdminRepository repo,
+    List<BoardModel> onlineOutdatedBoards,
+  ) async {
+    if (onlineOutdatedBoards.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Şu an açık olan ve güncelleme bekleyen tahta bulunmuyor.'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Toplu Sürüm Güncelleme (Bütünlüğü Onar)',
+      content:
+          'Şu an açık olan ${onlineOutdatedBoards.length} adet akıllı tahtaya en son v$_latestVersionNumber sürümüne yükseltme komutu gönderilecektir.\n\nHer tahta arka planda en yeni sürümü indirip sistemini otomatik olarak güncelleyecektir. Eşleştirme ve okul ayarları (Registry) korunacaktır.\n\nİşlemi onaylıyor musunuz?',
+      confirmLabel: 'Tümünü Güncelle (${onlineOutdatedBoards.length})',
+      icon: Icons.system_update_rounded,
+    );
+
+    if (confirmed && context.mounted) {
+      setState(() => _isBulkUpdatingOutdated = true);
+      try {
+        await repo.sendBulkRepairIntegrityCommand(
+            onlineOutdatedBoards.map((b) => b.id).toList());
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  '${onlineOutdatedBoards.length} adet açık tahtaya güncelleme komutu başarıyla gönderildi.'),
+              backgroundColor: AppColors.textDark,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Toplu güncelleme hatası: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isBulkUpdatingOutdated = false);
+      }
+    }
   }
 
   Widget _buildRepairTab(BuildContext context, AdminRepository repo) {
