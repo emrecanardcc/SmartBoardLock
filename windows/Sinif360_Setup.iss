@@ -1,10 +1,10 @@
 ; =====================================================================
 ; Sınıf360 / Akıllı Tahta Kilit Sistemi - Profesyonel Kurulum Scripti
-; Sürüm: 2.1.1 | Yayıncı: Emre Can ARDIÇ
+; Sürüm: 2.1.2 | Yayıncı: Emre Can ARDIÇ
 ; =====================================================================
 
 #define MyAppName "Sınıf360 Akıllı Tahta Kilit Sistemi"
-#define MyAppVersion "2.1.1"
+#define MyAppVersion "2.1.2"
 #define MyAppPublisher "Emre Can ARDIÇ"
 #define MyAppExeName "KioskLockApp.exe"
 #define MyWatchdogExeName "WatchdogService.exe"
@@ -35,7 +35,7 @@ DisableFinishedPage=yes
 ; ProgramData'ya yazabilmek ve başlangıç kancası atabilmek için yönetici izni gereklidir
 PrivilegesRequired=admin
 OutputDir=userdocs:Inno Setup Output Files
-OutputBaseFilename=Sinif360_v2.1.1_Setup
+OutputBaseFilename=Sinif360_v2.1.2_Setup
 Compression=lzma2/ultra64
 WizardStyle=modern
 CloseApplications=force
@@ -52,7 +52,7 @@ Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
 Name: "{app}"; Permissions: users-full
 
 [Files]
-Source: "C:\Projeler\AkilliTahtaSistemi\dist\v2.1.1_publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs restartreplace; Permissions: users-full
+Source: "C:\Projeler\AkilliTahtaSistemi\dist\v2.1.2_publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs restartreplace; Permissions: users-full
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
