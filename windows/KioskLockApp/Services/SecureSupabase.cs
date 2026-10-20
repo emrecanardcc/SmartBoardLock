@@ -275,8 +275,9 @@ namespace KioskLockApp.Services
             bool isActive = isActivePrimary && isActiveFallback;
             SetRegistryValue("LastKnownIsActive", isActive ? "true" : "false");
 
-            // Kilit durumu: Birincil sunucu (Oracle VM) ayakta ise onun durumu esastır.
-            // Sırf ikincil sunucuda eski 'true' kaldı diye birincil sunucudaki kilit geri bozulamaz!
+            // Kilit durumu: İki sunucudan herhangi birinde kilit açılmışsa (öğretmen QR okuttuysa veya mobilden açtıysa):
+            // "Unlock-Wins" (Kilit Açma Önceliği): Öğretmenin derste mahsur kalmaması ve yarış durumlarının önlenmesi esastır.
+            // Her iki sunucu kontrol edilir, herhangi biri açıksa kilit açılır.
             bool primaryUnlocked = cleanPrimary.Contains("\"is_unlocked\":true");
             bool fallbackUnlocked = cleanFallback.Contains("\"is_unlocked\":true");
 
@@ -284,23 +285,23 @@ namespace KioskLockApp.Services
             bool fallbackHasData = !string.IsNullOrEmpty(fallbackResponse) && cleanFallback != "[]";
             bool isUnlocked;
 
-            if (primaryHasData)
+            if (primaryUnlocked || fallbackUnlocked)
             {
-                isUnlocked = primaryUnlocked;
-                // Eğer ikincil sunucu farklıysa, birincil sunucunun güncel durumunu ikincil sunucuya eşitle
-                if (fallbackHasData && (primaryUnlocked != fallbackUnlocked))
+                isUnlocked = true;
+                // Henüz açılmamış olan sunucuyu da açarak iki sunucuyu milisaniyeler içinde senkronize et
+                if (primaryHasData && !primaryUnlocked)
                 {
-                    _ = SyncUnlockStatusToServerAsync(FALLBACK_URL, fallbackClient, boardId, isUnlocked);
+                    _ = SyncUnlockStatusToServerAsync(SUPABASE_URL, sharedClient, boardId, true);
                 }
-            }
-            else if (fallbackHasData)
-            {
-                // Birincil sunucuya ulaşılamıyorsa yedek sunucunun durumunu al
-                isUnlocked = fallbackUnlocked;
+                if (fallbackHasData && !fallbackUnlocked)
+                {
+                    _ = SyncUnlockStatusToServerAsync(FALLBACK_URL, fallbackClient, boardId, true);
+                }
             }
             else
             {
-                isUnlocked = false; // İkisine de ulaşılamıyorsa varsayılan kilitli
+                // İki sunucuda da kilit kapalıysa (veya veri yoksa) kilitli kal
+                isUnlocked = false;
             }
 
             if (!isActive || isUnlocked)

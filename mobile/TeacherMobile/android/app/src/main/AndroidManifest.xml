@@ -6,6 +6,7 @@
 
     
     <application
+        android:usesCleartextTraffic="true"
         android:label="Sınıf360"
     android:name="${applicationName}"
     android:icon="@mipmap/ic_launcher">
