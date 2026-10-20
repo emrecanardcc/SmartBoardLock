@@ -40,8 +40,6 @@ namespace KioskLockApp.UI
 
         private Supabase.Client? realtimeClient;
         private RealtimeChannel? boardChannel;
-        private Supabase.Client? fallbackRealtimeClient;
-        private RealtimeChannel? fallbackBoardChannel;
 
         private readonly string[] BlacklistedProcesses = { "taskmgr", "cmd", "powershell", "regedit", "mmc", "sethc", "utilman", "osk" };
 
@@ -266,10 +264,6 @@ namespace KioskLockApp.UI
                 {
                     try { boardChannel?.Unsubscribe(); realtimeClient.Realtime.Disconnect(); } catch { }
                 }
-                if (fallbackRealtimeClient != null)
-                {
-                    try { fallbackBoardChannel?.Unsubscribe(); fallbackRealtimeClient.Realtime.Disconnect(); } catch { }
-                }
 
                 // 1. Birincil Realtime Bağlantısı (Oracle Cloud Supabase)
                 try
@@ -292,26 +286,6 @@ namespace KioskLockApp.UI
                 }
                 catch { }
 
-                // 2. İkincil / Canlı Güvenlik Ağı Realtime Bağlantısı (Cloud Supabase)
-                try
-                {
-                    string fallbackUrl = SecureSupabase.FALLBACK_URL;
-                    string fallbackKey = SecureSupabase.FALLBACK_KEY;
-                    var fallbackOptions = new Supabase.SupabaseOptions { AutoConnectRealtime = true };
-                    fallbackRealtimeClient = new Supabase.Client(fallbackUrl, fallbackKey, fallbackOptions);
-                    await fallbackRealtimeClient.InitializeAsync();
-
-                    fallbackBoardChannel = fallbackRealtimeClient.Realtime.Channel("realtime_fallback", "public", "boards");
-                    fallbackBoardChannel.AddPostgresChangeHandler(
-                        Supabase.Realtime.PostgresChanges.PostgresChangesOptions.ListenType.Updates,
-                        (sender, change) => {
-                            var rec = change.Model<BoardRealtimeModel>();
-                            if (rec != null) HandleRealtimeRecord(rec, boardId);
-                        }
-                    );
-                    await fallbackBoardChannel.Subscribe();
-                }
-                catch { }
             }
             catch { }
         }

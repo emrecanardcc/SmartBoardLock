@@ -4,14 +4,11 @@ import 'package:tahta_kumandasi/data/services/qr_validator.dart';
 
 void main() {
   group('Sınıf360 Mobile Core Smoke Tests', () {
-    test('SupabaseConfig returns valid non-empty URLs and Keys', () {
+    test('SupabaseConfig returns valid non-empty Oracle VM URLs and Keys', () {
       expect(SupabaseConfig.primaryUrl, isNotEmpty);
       expect(SupabaseConfig.primaryKey, isNotEmpty);
-      expect(SupabaseConfig.fallbackUrl, isNotEmpty);
-      expect(SupabaseConfig.fallbackKey, isNotEmpty);
-
       expect(SupabaseConfig.primaryUrl, startsWith('http'));
-      expect(SupabaseConfig.fallbackUrl, startsWith('https'));
+      expect(SupabaseConfig.primaryUrl, contains('130.61.78.192'));
     });
 
     test('QrValidator accurately computes and validates SHA-256 HMAC signature', () {
