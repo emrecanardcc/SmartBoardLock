@@ -130,6 +130,28 @@ class _TeachersManageScreenState extends State<TeachersManageScreen> {
         ? selectorProvider.allSchools
         : _schools;
 
+    String currentSchoolName = 'Okulunuz';
+    if (effectiveSchoolId != null) {
+      final matched =
+          schools.where((s) => s.id == effectiveSchoolId).firstOrNull;
+      if (matched != null) {
+        currentSchoolName = matched.name;
+      } else {
+        final userWithSchool = _allUsers
+            .where((u) =>
+                u.schoolId == effectiveSchoolId &&
+                u.schoolName != null &&
+                u.schoolName!.isNotEmpty)
+            .firstOrNull;
+        if (userWithSchool != null) {
+          currentSchoolName = userWithSchool.schoolName!;
+        } else if (authProvider.currentUser?.schoolName != null &&
+            authProvider.currentUser!.schoolName!.isNotEmpty) {
+          currentSchoolName = authProvider.currentUser!.schoolName!;
+        }
+      }
+    }
+
     final users = _getFilteredUsers();
     final adminCount = _allUsers.where((u) => u.role == UserRole.admin).length;
     final teacherCount =
@@ -178,13 +200,27 @@ class _TeachersManageScreenState extends State<TeachersManageScreen> {
               const SizedBox(width: 8),
               ElevatedButton.icon(
                 icon: const Icon(Icons.person_add_rounded, size: 18),
-                label: const Text('Yeni Kullanıcı Ekle'),
+                label: Text(
+                    isSuperAdmin ? 'Yeni Kullanıcı Ekle' : 'Yeni Öğretmen Ekle'),
                 onPressed: () async {
+                  if (!isSuperAdmin &&
+                      (effectiveSchoolId == null ||
+                          effectiveSchoolId.isEmpty)) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Hesabınıza atanmış bir okul bulunamadı. Lütfen sistem yöneticisiyle iletişime geçin.'),
+                        backgroundColor: AppColors.warning,
+                      ),
+                    );
+                    return;
+                  }
                   await _showAddUserDialog(
                     context,
                     repo,
                     schools: schools,
                     preselectedSchoolId: effectiveSchoolId,
+                    preselectedSchoolName: currentSchoolName,
                     isSuperAdmin: isSuperAdmin,
                   );
                   _loadUsers(_lastLoadedSchoolId);
@@ -534,14 +570,30 @@ class _TeachersManageScreenState extends State<TeachersManageScreen> {
                                             _loadUsers(_lastLoadedSchoolId);
                                           } else if (value == 'password') {
                                             await _showChangePasswordDialog(
-                                                context, repo, user);
+                                              context,
+                                              repo,
+                                              user,
+                                              isSuperAdmin: isSuperAdmin,
+                                              currentUserId:
+                                                  authProvider.currentUser?.id,
+                                            );
                                           } else if (value == 'email') {
                                             await _showChangeEmailDialog(
-                                                context, repo, user);
+                                              context,
+                                              repo,
+                                              user,
+                                              isSuperAdmin: isSuperAdmin,
+                                              currentUserId:
+                                                  authProvider.currentUser?.id,
+                                            );
                                             _loadUsers(_lastLoadedSchoolId);
                                           } else if (value == 'delete') {
                                             await _deleteUser(
-                                                context, repo, user);
+                                              context,
+                                              repo,
+                                              user,
+                                              isSuperAdmin: isSuperAdmin,
+                                            );
                                             _loadUsers(_lastLoadedSchoolId);
                                           }
                                         },
@@ -623,22 +675,30 @@ class _TeachersManageScreenState extends State<TeachersManageScreen> {
     );
   }
 
-  // ─── DİYALOG: YENİ KULLANICI EKLE ───────────────────────────────────────────
+  // ─── DİYALOG: YENİ KULLANICI / ÖĞRETMEN EKLE ──────────────────────────────────
   Future<void> _showAddUserDialog(
     BuildContext context,
     AdminRepository repo, {
     required List<SchoolModel> schools,
     required String? preselectedSchoolId,
+    String? preselectedSchoolName,
     required bool isSuperAdmin,
   }) async {
     final nameController = TextEditingController();
     final emailController = TextEditingController();
     final passwordController = TextEditingController();
     String selectedRole = 'teacher';
-    String? selectedSchoolId = preselectedSchoolId ??
-        (schools.isNotEmpty ? schools.first.id : null);
+    String? selectedSchoolId = isSuperAdmin
+        ? (preselectedSchoolId ??
+            (schools.isNotEmpty ? schools.first.id : null))
+        : preselectedSchoolId;
     bool isSaving = false;
     bool obscurePassword = true;
+
+    // Okul adını belirle (müdür için salt okunur gösterilecek)
+    final schoolNameToShow = preselectedSchoolName ??
+        schools.where((s) => s.id == selectedSchoolId).firstOrNull?.name ??
+        'Okulunuz';
 
     await showDialog(
       context: context,
@@ -667,12 +727,16 @@ class _TeachersManageScreenState extends State<TeachersManageScreen> {
                             color: AppColors.primary, size: 22),
                       ),
                       const SizedBox(width: 12),
-                      Text('Yeni Kullanıcı Ekle',
-                          style: GoogleFonts.inter(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textDark,
-                          )),
+                      Text(
+                        isSuperAdmin
+                            ? 'Yeni Kullanıcı Ekle'
+                            : 'Yeni Öğretmen Ekle',
+                        style: GoogleFonts.inter(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textDark,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -714,25 +778,29 @@ class _TeachersManageScreenState extends State<TeachersManageScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedRole,
-                    decoration: const InputDecoration(
-                      labelText: 'Rol',
-                      prefixIcon: Icon(Icons.badge_outlined,
-                          color: AppColors.textGrey),
+                  // Süper Admin için Rol Seçici (Müdürler sadece Öğretmen ekleyebilir)
+                  if (isSuperAdmin) ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedRole,
+                      decoration: const InputDecoration(
+                        labelText: 'Rol',
+                        prefixIcon: Icon(Icons.badge_outlined,
+                            color: AppColors.textGrey),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'teacher', child: Text('Öğretmen')),
+                        DropdownMenuItem(
+                            value: 'admin',
+                            child: Text('Okul Müdürü / Yönetici')),
+                      ],
+                      onChanged: (v) =>
+                          setDialogState(() => selectedRole = v ?? 'teacher'),
                     ),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'teacher', child: Text('Öğretmen')),
-                      DropdownMenuItem(
-                          value: 'admin',
-                          child: Text('Okul Müdürü / Yönetici')),
-                    ],
-                    onChanged: (v) =>
-                        setDialogState(() => selectedRole = v ?? 'teacher'),
-                  ),
-                  if (schools.isNotEmpty) ...[
+                  ],
+                  // Okul Seçimi: Süper Admin tüm okulları seçebilir, Müdürler ise yalnızca kendi okulunu kilitli olarak görür
+                  if (isSuperAdmin && schools.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       initialValue: selectedSchoolId,
@@ -750,6 +818,79 @@ class _TeachersManageScreenState extends State<TeachersManageScreen> {
                       onChanged: (v) =>
                           setDialogState(() => selectedSchoolId = v),
                     ),
+                  ] else if (!isSuperAdmin) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.bgPage,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.school_rounded,
+                              color: AppColors.primary, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Bağlı Olduğu Okul',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: AppColors.textGrey,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  schoolNameToShow,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textDark,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Tooltip(
+                            message:
+                                'Müdürler sadece kendi okullarına öğretmen ekleyebilir.',
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.lock_rounded,
+                                      size: 12, color: AppColors.primary),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Kendi Okulunuz',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 24),
                   Row(
@@ -765,14 +906,22 @@ class _TeachersManageScreenState extends State<TeachersManageScreen> {
                         onPressed: isSaving
                             ? null
                             : () async {
+                                final finalSchoolId = isSuperAdmin
+                                    ? selectedSchoolId
+                                    : preselectedSchoolId;
+                                final finalRole =
+                                    isSuperAdmin ? selectedRole : 'teacher';
+
                                 if (nameController.text.trim().isEmpty ||
                                     emailController.text.trim().isEmpty ||
                                     passwordController.text.trim().isEmpty ||
-                                    selectedSchoolId == null) {
+                                    finalSchoolId == null ||
+                                    finalSchoolId.isEmpty) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                          'Lütfen tüm alanları doldurun ve okul seçin.'),
+                                    SnackBar(
+                                      content: Text(finalSchoolId == null
+                                          ? 'Kullanıcıya atanacak geçerli bir okul bulunamadı.'
+                                          : 'Lütfen tüm alanları doldurun.'),
                                       backgroundColor: AppColors.warning,
                                     ),
                                   );
@@ -784,8 +933,8 @@ class _TeachersManageScreenState extends State<TeachersManageScreen> {
                                     email: emailController.text,
                                     password: passwordController.text,
                                     fullName: nameController.text,
-                                    schoolId: selectedSchoolId!,
-                                    role: selectedRole,
+                                    schoolId: finalSchoolId,
+                                    role: finalRole,
                                   );
                                   if (context.mounted) {
                                     Navigator.pop(context);
@@ -832,8 +981,22 @@ class _TeachersManageScreenState extends State<TeachersManageScreen> {
   Future<void> _showChangePasswordDialog(
     BuildContext context,
     AdminRepository repo,
-    UserProfileModel user,
-  ) async {
+    UserProfileModel user, {
+    required bool isSuperAdmin,
+    required String? currentUserId,
+  }) async {
+    if (!isSuperAdmin &&
+        user.role == UserRole.admin &&
+        user.id != currentUserId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Yalnızca kendi şifrenizi veya öğretmenlerin şifresini değiştirebilirsiniz.'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
     final newPasswordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
     bool isSaving = false;
@@ -1025,8 +1188,22 @@ class _TeachersManageScreenState extends State<TeachersManageScreen> {
   Future<void> _showChangeEmailDialog(
     BuildContext context,
     AdminRepository repo,
-    UserProfileModel user,
-  ) async {
+    UserProfileModel user, {
+    required bool isSuperAdmin,
+    required String? currentUserId,
+  }) async {
+    if (!isSuperAdmin &&
+        user.role == UserRole.admin &&
+        user.id != currentUserId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Yalnızca kendi e-postanızı veya öğretmenlerin e-postasını değiştirebilirsiniz.'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
     final emailController =
         TextEditingController(text: user.email ?? '');
     bool isSaving = false;
@@ -1219,24 +1396,27 @@ class _TeachersManageScreenState extends State<TeachersManageScreen> {
                           color: AppColors.textGrey),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedRole,
-                    decoration: const InputDecoration(
-                      labelText: 'Rol',
-                      prefixIcon: Icon(Icons.badge_outlined,
-                          color: AppColors.textGrey),
+                  // Rol seçimi: Yalnızca Süper Admin değiştirebilir
+                  if (isSuperAdmin) ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedRole,
+                      decoration: const InputDecoration(
+                        labelText: 'Rol',
+                        prefixIcon: Icon(Icons.badge_outlined,
+                            color: AppColors.textGrey),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'teacher', child: Text('Öğretmen')),
+                        DropdownMenuItem(
+                            value: 'admin',
+                            child: Text('Okul Müdürü / Yönetici')),
+                      ],
+                      onChanged: (v) =>
+                          setDialogState(() => selectedRole = v ?? 'teacher'),
                     ),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'teacher', child: Text('Öğretmen')),
-                      DropdownMenuItem(
-                          value: 'admin',
-                          child: Text('Okul Müdürü / Yönetici')),
-                    ],
-                    onChanged: (v) =>
-                        setDialogState(() => selectedRole = v ?? 'teacher'),
-                  ),
+                  ],
                   if (isSuperAdmin && schools.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
@@ -1270,13 +1450,19 @@ class _TeachersManageScreenState extends State<TeachersManageScreen> {
                         onPressed: isSaving
                             ? null
                             : () async {
+                                final finalSchoolId = isSuperAdmin
+                                    ? selectedSchoolId
+                                    : user.schoolId;
+                                final finalRole = isSuperAdmin
+                                    ? selectedRole
+                                    : user.roleKey;
                                 setDialogState(() => isSaving = true);
                                 try {
                                   await repo.updateUserProfile(
                                     userId: user.id,
                                     fullName: nameController.text,
-                                    role: selectedRole,
-                                    schoolId: selectedSchoolId,
+                                    role: finalRole,
+                                    schoolId: finalSchoolId,
                                   );
                                   if (context.mounted) {
                                     Navigator.pop(context);
@@ -1323,8 +1509,19 @@ class _TeachersManageScreenState extends State<TeachersManageScreen> {
   Future<void> _deleteUser(
     BuildContext context,
     AdminRepository repo,
-    UserProfileModel user,
-  ) async {
+    UserProfileModel user, {
+    required bool isSuperAdmin,
+  }) async {
+    if (!isSuperAdmin && user.role == UserRole.admin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Okul yöneticileri başka bir okul yöneticisini silemez.'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
     final confirmed = await showConfirmDialog(
       context,
       title: 'Kullanıcıyı Sil',
