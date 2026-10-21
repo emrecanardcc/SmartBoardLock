@@ -75,7 +75,8 @@ class _MediaManageScreenState extends State<MediaManageScreen> {
       final activePkg = await repo.getActivePackage(schoolId);
       final allPkgs = await repo.getAllPackages(schoolId);
       final templates = await repo.getTemplates(schoolId);
-      repo.cleanupTemporaryMediaFiles();
+      // 3 günden eski süresi dolmuş medya dosyalarını arka planda temizle (yeni afişleri koru)
+      repo.cleanupExpiredMediaFiles(retentionDays: 3);
 
       if (!mounted || currentVersion != _loadVersion) return;
       setState(() {

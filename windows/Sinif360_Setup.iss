@@ -216,14 +216,17 @@ begin
   if CurStep = ssPostInstall then
   begin
     // Anti-Tamper Klasör Koruma Kuralları:
-    // 1. İzinleri sıfırla
-    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /reset /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    // 2. SYSTEM ve Administrators için Tam Denetim, Standart Kullanıcılar (Öğrenciler) için Salt Okuma/Çalıştırma
-    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    // 3. Öğrencilere ve standart kullanıcılara SİLME (DE, DC) ve YAZMA (WD, AD) işlemlerini AÇIKÇA YASAKLA (DENY)
-    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /deny *S-1-5-32-545:(DE,DC,WD,AD) /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    // 4. Medya (Afiş/Duyuru önbelleği) klasörüne yazma izni ver
-    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}\Media') + '" /grant *S-1-5-32-545:(OI)(CI)M /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // 1. Media alt klasörlerini oluştur
+    ForceDirectories(ExpandConstant('{app}\Media\Posters'));
+    ForceDirectories(ExpandConstant('{app}\Media\Default'));
+    ForceDirectories(ExpandConstant('{app}\Media\Announcements'));
+    // 2. İzinleri sıfırla ve varsa eski DENY kuralını kaldır
+    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /remove:d *S-1-5-32-545 /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // 3. SYSTEM ve Administrators için Tam Denetim, Standart Kullanıcılar (Öğrenciler) için Salt Okuma/Çalıştırma (RX)
+    //    (RX yetkisi altında öğrenciler dosyaları silemez, değiştiremez veya yeniden adlandıramaz)
+    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // 4. Medya (Afiş/Duyuru önbelleği) klasörünün mirasını ayır ve Users için Değiştirme (M) izni tanımla
+    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}\Media') + '" /inheritance:d /remove:d *S-1-5-32-545 /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)M /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     // 5. Klasörü Sistem ve Gizli olarak işaretle (Dosya Gezgini'nde varsayılan görünmez)
     Exec('cmd.exe', '/c attrib +s +h "' + ExpandConstant('{app}') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;

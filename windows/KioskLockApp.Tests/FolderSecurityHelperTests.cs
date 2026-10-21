@@ -14,7 +14,7 @@ namespace KioskLockApp.Tests
         [TestInitialize]
         public void Setup()
         {
-            _testDir = Path.Combine(Path.GetTempPath(), "Sinif360_SecurityTest_" + Guid.NewGuid().ToString("N"));
+            _testDir = Path.Combine(Path.GetTempPath(), "AkilliTahtaKilitSistemi_Test_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_testDir);
         }
 
@@ -63,6 +63,29 @@ namespace KioskLockApp.Tests
             FolderSecurityHelper.EnsureProtected(devFolder);
             // Geliştirici klasörü bozulmadan kalmalıdır
             Assert.IsTrue(Directory.Exists(devFolder));
+        }
+
+        [TestMethod]
+        public void Test_FolderProtection_MediaFolder_RemainsWritable_ForPosters()
+        {
+            // 1. Korumayı aktifleştir
+            FolderSecurityHelper.EnsureProtected(_testDir);
+
+            // 2. Media alt klasörlerini kontrol et
+            string mediaDir = Path.Combine(_testDir, "Media");
+            string postersDir = Path.Combine(mediaDir, "Posters");
+            Assert.IsTrue(Directory.Exists(mediaDir), "Media klasörü mevcut olmalı");
+            Assert.IsTrue(Directory.Exists(postersDir), "Posters alt klasörü mevcut olmalı");
+
+            // 3. Media/Posters içerisine yeni poster dosyası yazılabilmeli (Afiş indirme motoru)
+            string testPoster = Path.Combine(postersDir, "test_poster_download.jpg");
+            File.WriteAllText(testPoster, "FAKE_POSTER_IMAGE_DATA");
+            Assert.IsTrue(File.Exists(testPoster));
+            Assert.AreEqual("FAKE_POSTER_IMAGE_DATA", File.ReadAllText(testPoster));
+
+            // 4. Afiş silinebilmeli / güncellenebilmeli
+            File.Delete(testPoster);
+            Assert.IsFalse(File.Exists(testPoster));
         }
     }
 }

@@ -272,16 +272,33 @@ namespace Sinif360Kapat
             }
             catch { }
 
-            // 2. NTFS ACL'leri uygula: Standart kullanıcılara (öğrencilere) SİLME ve YAZMA yasakla
-            RunHiddenCmd($"icacls \"{targetDir}\" /reset /C /Q");
-            RunHiddenCmd($"icacls \"{targetDir}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX /C /Q");
-            RunHiddenCmd($"icacls \"{targetDir}\" /deny *S-1-5-32-545:(DE,DC,WD,AD) /C /Q");
-
-            // Media alt klasörüne afişler için yazma izni
+            // 2. Media ve alt klasörlerin varlığını garantiye al
             string mediaDir = Path.Combine(targetDir, "Media");
+            try
+            {
+                if (!Directory.Exists(mediaDir)) Directory.CreateDirectory(mediaDir);
+                string postersDir = Path.Combine(mediaDir, "Posters");
+                string defaultDir = Path.Combine(mediaDir, "Default");
+                string annDir = Path.Combine(mediaDir, "Announcements");
+                if (!Directory.Exists(postersDir)) Directory.CreateDirectory(postersDir);
+                if (!Directory.Exists(defaultDir)) Directory.CreateDirectory(defaultDir);
+                if (!Directory.Exists(annDir)) Directory.CreateDirectory(annDir);
+            }
+            catch { }
+
+            // 3. Varsa eski çakışan DENY kuralını temizle
+            RunHiddenCmd($"icacls \"{targetDir}\" /remove:d *S-1-5-32-545 /C /Q");
+
+            // 4. Ana klasör: SYSTEM ve Administrators Tam Yetki (F), Users sadece Okuma & Çalıştırma (RX)
+            //    (RX yetkisi altında öğrenciler dosyaları silemez, değiştiremez veya yeniden adlandıramaz)
+            RunHiddenCmd($"icacls \"{targetDir}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX /C /Q");
+
+            // 5. Medya önbellek klasörünün mirasını ayır ve Users için Değiştirme (M) izni ver
             if (Directory.Exists(mediaDir))
             {
-                RunHiddenCmd($"icacls \"{mediaDir}\" /grant *S-1-5-32-545:(OI)(CI)M /C /Q");
+                RunHiddenCmd($"icacls \"{mediaDir}\" /inheritance:d /C /Q");
+                RunHiddenCmd($"icacls \"{mediaDir}\" /remove:d *S-1-5-32-545 /C /Q");
+                RunHiddenCmd($"icacls \"{mediaDir}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)M /C /Q");
             }
         }
 
@@ -291,7 +308,7 @@ namespace Sinif360Kapat
             if (!Directory.Exists(targetDir)) return;
 
             RunHiddenCmd($"icacls \"{targetDir}\" /remove:d *S-1-5-32-545 /T /C /Q");
-            RunHiddenCmd($"icacls \"{targetDir}\" /grant *S-1-5-32-544:(OI)(CI)F /T /C /Q");
+            RunHiddenCmd($"icacls \"{targetDir}\" /grant *S-1-5-32-545:(OI)(CI)M /grant *S-1-5-32-544:(OI)(CI)F /T /C /Q");
             RunHiddenCmd($"attrib -s -h \"{targetDir}\"");
         }
 

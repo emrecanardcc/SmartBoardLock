@@ -59,21 +59,33 @@ namespace KioskLockApp.Services
         {
             try
             {
-                // 1. İzinleri sıfırla / temizle
-                RunHiddenCmd($"icacls \"{dirPath}\" /reset /C /Q");
+                // 1. Media ve alt klasörlerin varlığını garantiye al
+                string mediaDir = Path.Combine(dirPath, "Media");
+                try
+                {
+                    if (!Directory.Exists(mediaDir)) Directory.CreateDirectory(mediaDir);
+                    string postersDir = Path.Combine(mediaDir, "Posters");
+                    string defaultDir = Path.Combine(mediaDir, "Default");
+                    string annDir = Path.Combine(mediaDir, "Announcements");
+                    if (!Directory.Exists(postersDir)) Directory.CreateDirectory(postersDir);
+                    if (!Directory.Exists(defaultDir)) Directory.CreateDirectory(defaultDir);
+                    if (!Directory.Exists(annDir)) Directory.CreateDirectory(annDir);
+                }
+                catch { }
 
-                // 2. SYSTEM (*S-1-5-18) ve Administrators (*S-1-5-32-544) için Tam Denetim
-                //    Users (*S-1-5-32-545) için Sadece Okuma & Çalıştırma (RX)
+                // 2. Varsa eski çakışan DENY kuralını temizle
+                RunHiddenCmd($"icacls \"{dirPath}\" /remove:d *S-1-5-32-545 /C /Q");
+
+                // 3. Ana klasör: SYSTEM ve Administrators Tam Yetki (F), Users sadece Okuma & Çalıştırma (RX)
+                //    (RX yetkisi altında öğrenciler dosyaları silemez, değiştiremez veya yeniden adlandıramaz)
                 RunHiddenCmd($"icacls \"{dirPath}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX /C /Q");
 
-                // 3. Kullanıcılar için SİLME (DE, DC) ve YAZMA (WD, AD) işlemlerini AÇIKÇA YASAKLA (DENY)
-                RunHiddenCmd($"icacls \"{dirPath}\" /deny *S-1-5-32-545:(DE,DC,WD,AD) /C /Q");
-
-                // 4. Medya (afiş/duyuru önbelleği) klasörüne yazma izni ver (içerik indirebilsin ama ana klasörü silemesin)
-                string mediaDir = Path.Combine(dirPath, "Media");
+                // 4. Medya önbellek klasörünün mirasını ayır ve Users için Değiştirme (M) izni ver
                 if (Directory.Exists(mediaDir))
                 {
-                    RunHiddenCmd($"icacls \"{mediaDir}\" /grant *S-1-5-32-545:(OI)(CI)M /C /Q");
+                    RunHiddenCmd($"icacls \"{mediaDir}\" /inheritance:d /C /Q");
+                    RunHiddenCmd($"icacls \"{mediaDir}\" /remove:d *S-1-5-32-545 /C /Q");
+                    RunHiddenCmd($"icacls \"{mediaDir}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)M /C /Q");
                 }
             }
             catch { }
@@ -111,7 +123,7 @@ namespace KioskLockApp.Services
                 }
 
                 RunHiddenCmd($"icacls \"{dirPath}\" /remove:d *S-1-5-32-545 /T /C /Q");
-                RunHiddenCmd($"icacls \"{dirPath}\" /grant *S-1-5-32-544:(OI)(CI)F /T /C /Q");
+                RunHiddenCmd($"icacls \"{dirPath}\" /grant *S-1-5-32-545:(OI)(CI)M /grant *S-1-5-32-544:(OI)(CI)F /T /C /Q");
                 RunHiddenCmd($"attrib -s -h \"{dirPath}\"");
             }
             catch { }

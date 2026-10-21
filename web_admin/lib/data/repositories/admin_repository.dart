@@ -1161,17 +1161,9 @@ class AdminRepository {
       // Paketi kaydet
       await saveActivePackage(packageModel);
 
-      // Açık tahtalar indirdikten sonra Supabase Storage'ı temiz tut (45 saniye sonra sil)
-      if (uploadedStorageFiles.isNotEmpty) {
-        Future.delayed(const Duration(seconds: 45), () async {
-          try {
-            await _storage.from('updates').remove(uploadedStorageFiles);
-            debugPrint('Yayın paketinin geçici görselleri (${uploadedStorageFiles.length}) storage kovasından silindi.');
-          } catch (e) {
-            debugPrint('Geçici görseller silinirken hata: $e');
-          }
-        });
-      }
+      // Kapalı tahtaların da afişleri indirebilmesi için görseller sunucuda 3 gün tutulur.
+      // 3 günden eski eski paket kalıntıları arka planda otomatik süpürülür.
+      cleanupExpiredMediaFiles(retentionDays: 3).catchError((_) => 0);
 
       return packageModel;
     } catch (e) {
@@ -1368,6 +1360,54 @@ class AdminRepository {
     } catch (e) {
       debugPrint('uploadMediaImage error: $e');
       rethrow;
+    }
+  }
+
+  /// Supabase Storage updates kovasındaki 3 günden (retentionDays) eski geçici medya kalıntılarını otomatik süpürür.
+  /// Tahtaların afişleri yerel disklerine çekebilmeleri için yeni yüklenen afişler en az 3 gün sunucuda kalır.
+  Future<int> cleanupExpiredMediaFiles({int retentionDays = 3}) async {
+    try {
+      final files = await _storage.from('updates').list();
+      final toDelete = <String>[];
+      final cutoff = DateTime.now().subtract(Duration(days: retentionDays));
+
+      for (final file in files) {
+        // Tahta güncelleme paketlerini (.zip / .exe) ASLA silme
+        if (file.name.endsWith('.zip') || file.name.endsWith('.exe')) continue;
+
+        if (file.name.startsWith('media_')) {
+          // Dosya adı deseni: media_{timestamp}_{index}_{fileName}
+          final parts = file.name.split('_');
+          if (parts.length >= 2) {
+            final ms = int.tryParse(parts[1]);
+            if (ms != null) {
+              final fileDate = DateTime.fromMillisecondsSinceEpoch(ms);
+              if (fileDate.isBefore(cutoff)) {
+                toDelete.add(file.name);
+                continue;
+              }
+            }
+          }
+          if (file.createdAt != null) {
+            try {
+              final dt = DateTime.parse(file.createdAt!);
+              if (dt.isBefore(cutoff)) {
+                toDelete.add(file.name);
+              }
+            } catch (_) {}
+          }
+        }
+      }
+
+      if (toDelete.isNotEmpty) {
+        await _storage.from('updates').remove(toDelete);
+        debugPrint('3 günden eski medya kalıntıları temizlendi (${toDelete.length} dosya).');
+        return toDelete.length;
+      }
+      return 0;
+    } catch (e) {
+      debugPrint('cleanupExpiredMediaFiles hatası: $e');
+      return 0;
     }
   }
 
