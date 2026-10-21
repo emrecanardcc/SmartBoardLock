@@ -59,6 +59,7 @@ class AppConstants {
   // Tahta durum sabitleri
   static const int offlineThresholdMinutes = 5;
 
-  // Uygulama adı
+  // Uygulama adı ve versiyonu
   static const String appName = 'Sınıf360';
+  static const String appVersion = '2.1.2';
 }
