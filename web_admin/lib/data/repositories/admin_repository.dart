@@ -1084,7 +1084,8 @@ class AdminRepository {
           imgBase64 = thumbBase64;
 
           // Tahtanın yerel diskine çekebilmesi için Storage updates kovasına yükle
-          final safeName = 'media_${DateTime.now().millisecondsSinceEpoch}_${i}_$fileName';
+          // Türkçe karakter, boşluk ve özel simgelerden arındırılmış %100 güvenli S3 anahtarı üretir
+          final safeName = _sanitizeStorageFileName(fileName, '$i');
           await _storage.from('updates').uploadBinary(
             safeName,
             bytes,
@@ -1343,13 +1344,26 @@ class AdminRepository {
     }
   }
 
+  /// Supabase Storage (S3) için Türkçe karakter, boşluk ve özel sembollerden arındırılmış güvenli anahtar üretir.
+  String _sanitizeStorageFileName(String originalFileName, String suffix) {
+    String ext = '.jpg';
+    final dotIndex = originalFileName.lastIndexOf('.');
+    if (dotIndex != -1 && dotIndex < originalFileName.length - 1) {
+      final rawExt = originalFileName.substring(dotIndex).toLowerCase().trim();
+      if (RegExp(r'^\.[a-z0-9]{2,5}$').hasMatch(rawExt)) {
+        ext = rawExt;
+      }
+    }
+    return 'media_${DateTime.now().millisecondsSinceEpoch}_$suffix$ext';
+  }
+
   /// Afiş görselini geçici olarak yükler ve indirme URL'ini döner
   Future<String> uploadMediaImage({
     required String fileName,
     required Uint8List bytes,
   }) async {
     try {
-      final safeName = 'media_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+      final safeName = _sanitizeStorageFileName(fileName, 'single');
       await _storage.from('updates').uploadBinary(
         safeName,
         bytes,
