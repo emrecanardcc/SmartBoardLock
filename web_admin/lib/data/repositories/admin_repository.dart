@@ -1057,6 +1057,7 @@ class AdminRepository {
     required DateTime validTo,
     required List<Map<String, dynamic>> posterInputs,
     required List<Map<String, dynamic>> announcementInputs,
+    int rotationIntervalSeconds = 15,
     String? schoolId,
   }) async {
     try {
@@ -1131,6 +1132,7 @@ class AdminRepository {
         items: items,
         isActive: true,
         targetBoardIds: boardIds,
+        rotationIntervalSeconds: rotationIntervalSeconds,
         createdAt: DateTime.now(),
       );
 
@@ -1139,6 +1141,8 @@ class AdminRepository {
         'package_id': packageId,
         'package_title': title.trim(),
         'package_version': version.trim(),
+        'rotation_interval_seconds': rotationIntervalSeconds,
+        'duration_seconds': rotationIntervalSeconds,
         'valid_from': validFrom.toUtc().toIso8601String(),
         'valid_to': validTo.toUtc().toIso8601String(),
         'items': items.map((x) => {

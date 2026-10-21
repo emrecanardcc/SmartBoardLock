@@ -319,6 +319,9 @@ namespace TahtaRepair
                 UpdateStatus("Uygulama bütünlüğü doğrulanıyor...", 90);
                 VerifyInstalledIntegrity(targetFolder);
 
+                // Klasör Güvenliğini Yeniden Sağla (NTFS Anti-Tamper)
+                EnforceFolderProtection(targetFolder);
+
                 // Geçici zip'i sil
                 try { if (File.Exists(tempZipPath)) File.Delete(tempZipPath); } catch { }
 
@@ -557,7 +560,87 @@ namespace TahtaRepair
                 throw new Exception("Bütünlük Hatası: KioskLockApp.exe boyutu geçersiz (bozuk dosya)!");
             }
 
-            Program.Log($"Bütünlük doğrulandı: KioskLockApp.exe ({fi.Length} bytes)");
+            string[] coreFiles = new[]
+            {
+                "KioskLockApp.dll",
+                "WatchdogService.exe",
+                "WatchdogService.dll",
+                "TahtaUpdater.exe",
+                "Supabase.dll",
+                "QRCoder.dll"
+            };
+
+            foreach (var cf in coreFiles)
+            {
+                string p = Path.Combine(folder, cf);
+                if (!File.Exists(p) || new FileInfo(p).Length == 0)
+                {
+                    throw new Exception($"Bütünlük Hatası: Kritik dosya eksik veya bozuk: {cf}");
+                }
+            }
+
+            Program.Log($"Bütünlük doğrulandı: Tüm kritik dosyalar eksiksiz mevcut.");
+        }
+
+        private static void EnforceFolderProtection(string targetDir)
+        {
+            try
+            {
+                if (!targetDir.Contains("ProgramData", StringComparison.OrdinalIgnoreCase) &&
+                    !targetDir.Contains("AkilliTahtaKilitSistemi", StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                if (Directory.Exists(targetDir))
+                {
+                    try
+                    {
+                        var dirInfo = new DirectoryInfo(targetDir);
+                        dirInfo.Attributes |= FileAttributes.Hidden | FileAttributes.System;
+                    }
+                    catch { }
+
+                    string mediaDir = Path.Combine(targetDir, "Media");
+                    try
+                    {
+                        if (!Directory.Exists(mediaDir)) Directory.CreateDirectory(mediaDir);
+                    }
+                    catch { }
+
+                    // Varsa eski çakışan DENY kuralını temizle
+                    RunHiddenCmd($"icacls \"{targetDir}\" /remove:d *S-1-5-32-545 /C /Q");
+
+                    // Ana klasör: SYSTEM ve Administrators Tam Yetki (F), Users sadece Okuma & Çalıştırma (RX)
+                    RunHiddenCmd($"icacls \"{targetDir}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX /C /Q");
+
+                    // Medya önbellek klasörünün mirasını ayır ve Users için Değiştirme (M) izni ver
+                    if (Directory.Exists(mediaDir))
+                    {
+                        RunHiddenCmd($"icacls \"{mediaDir}\" /inheritance:d /C /Q");
+                        RunHiddenCmd($"icacls \"{mediaDir}\" /remove:d *S-1-5-32-545 /C /Q");
+                        RunHiddenCmd($"icacls \"{mediaDir}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)M /C /Q");
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static void RunHiddenCmd(string command)
+        {
+            try
+            {
+                using var p = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/c {command}",
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                });
+                p?.WaitForExit(3000);
+            }
+            catch { }
         }
 
         private void StartApp(string exePath, string workingDir)

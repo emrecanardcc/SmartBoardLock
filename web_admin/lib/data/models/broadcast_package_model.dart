@@ -86,6 +86,7 @@ class BroadcastPackageModel {
   final bool isTemplate;
   final String? templateName;
   final List<String> targetBoardIds;
+  final int rotationIntervalSeconds;
   final DateTime createdAt;
 
   const BroadcastPackageModel({
@@ -100,6 +101,7 @@ class BroadcastPackageModel {
     this.isTemplate = false,
     this.templateName,
     this.targetBoardIds = const [],
+    this.rotationIntervalSeconds = 15,
     required this.createdAt,
   });
 
@@ -135,6 +137,7 @@ class BroadcastPackageModel {
     bool? isTemplate,
     String? templateName,
     List<String>? targetBoardIds,
+    int? rotationIntervalSeconds,
     DateTime? createdAt,
   }) {
     return BroadcastPackageModel(
@@ -149,6 +152,7 @@ class BroadcastPackageModel {
       isTemplate: isTemplate ?? this.isTemplate,
       templateName: templateName ?? this.templateName,
       targetBoardIds: targetBoardIds ?? this.targetBoardIds,
+      rotationIntervalSeconds: rotationIntervalSeconds ?? this.rotationIntervalSeconds,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -166,6 +170,7 @@ class BroadcastPackageModel {
       'is_template': isTemplate,
       'template_name': templateName,
       'target_board_ids': targetBoardIds,
+      'rotation_interval_seconds': rotationIntervalSeconds,
       'created_at': createdAt.toUtc().toIso8601String(),
     };
   }
@@ -217,6 +222,9 @@ class BroadcastPackageModel {
       isTemplate: map['is_template'] as bool? ?? false,
       templateName: map['template_name']?.toString(),
       targetBoardIds: parsedBoardIds,
+      rotationIntervalSeconds: map['rotation_interval_seconds'] != null
+          ? int.tryParse(map['rotation_interval_seconds'].toString()) ?? 15
+          : 15,
       createdAt: map['created_at'] != null
           ? DateTime.parse(map['created_at'].toString()).toLocal()
           : DateTime.now(),

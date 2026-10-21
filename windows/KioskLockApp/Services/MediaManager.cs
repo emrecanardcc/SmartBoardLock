@@ -55,6 +55,9 @@ namespace KioskLockApp.Services
         [JsonPropertyName("valid_to")]
         public DateTime ValidTo { get; set; } = DateTime.MaxValue;
 
+        [JsonPropertyName("rotation_interval_seconds")]
+        public int RotationIntervalSeconds { get; set; } = 15;
+
         [JsonPropertyName("last_updated")]
         public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 
@@ -516,6 +519,16 @@ namespace KioskLockApp.Services
 
                     string packageVersion = root.TryGetProperty("package_version", out var pv) ? (pv.GetString() ?? "v1.0") : "v1.0";
 
+                    int rotSec = 15;
+                    if (root.TryGetProperty("rotation_interval_seconds", out var pRot) && pRot.TryGetInt32(out int parsedRot))
+                    {
+                        rotSec = Math.Clamp(parsedRot, 3, 300);
+                    }
+                    else if (root.TryGetProperty("duration_seconds", out var pDur) && pDur.TryGetInt32(out int parsedDur))
+                    {
+                        rotSec = Math.Clamp(parsedDur, 3, 300);
+                    }
+
                     DateTime validFrom = DateTime.MinValue;
                     if (root.TryGetProperty("valid_from", out var propFrom))
                     {
@@ -634,6 +647,7 @@ namespace KioskLockApp.Services
                         currentManifest.ActiveMediaId = id;
                         currentManifest.PackageTitle = packageTitle;
                         currentManifest.PackageVersion = packageVersion;
+                        currentManifest.RotationIntervalSeconds = rotSec;
                         currentManifest.ValidFrom = validFrom;
                         currentManifest.ValidTo = validTo;
                         SaveManifest();
@@ -814,6 +828,17 @@ namespace KioskLockApp.Services
             }
 
             return list;
+        }
+
+        /// <summary>
+        /// Müdür tarafından webden belirlenen afiş geçiş süresini (saniye) döner.
+        /// </summary>
+        public static int GetRotationIntervalSeconds()
+        {
+            lock (syncLock)
+            {
+                return currentManifest.RotationIntervalSeconds >= 3 ? currentManifest.RotationIntervalSeconds : 15;
+            }
         }
 
         /// <summary>

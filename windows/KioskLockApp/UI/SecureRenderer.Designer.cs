@@ -693,6 +693,11 @@ namespace KioskLockApp.UI
                 // 1. Afişleri güncelle
                 activePosterPaths = MediaManager.GetActivePosterFilePaths();
                 currentPosterIndex = 0;
+                int rotSec = MediaManager.GetRotationIntervalSeconds();
+                if (posterSlideshowTimer != null)
+                {
+                    posterSlideshowTimer.Interval = Math.Max(3, rotSec) * 1000;
+                }
                 RefreshPosterImageOnly();
 
                 // 2. Duyuruları güncelle

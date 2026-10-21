@@ -77,7 +77,8 @@ namespace KioskLockApp.UI
             };
             _ = SecureSupabase.ReportActiveMediaIdAsync(MediaManager.GetActiveMediaId());
 
-            posterSlideshowTimer = new System.Windows.Forms.Timer { Interval = 15000 };
+            int rotSec = MediaManager.GetRotationIntervalSeconds();
+            posterSlideshowTimer = new System.Windows.Forms.Timer { Interval = Math.Max(3, rotSec) * 1000 };
             posterSlideshowTimer.Tick += (s, e) => {
                 if (activePosterPaths.Count > 1)
                 {

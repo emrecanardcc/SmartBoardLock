@@ -2496,6 +2496,7 @@ class _PackageContainerDialogState extends State<_PackageContainerDialog> {
   final List<Map<String, dynamic>> _posters = [];
   final List<Map<String, dynamic>> _announcements = [];
 
+  int _rotationIntervalSeconds = 15;
   bool _isSending = false;
   String? _statusText;
 
@@ -2505,6 +2506,7 @@ class _PackageContainerDialogState extends State<_PackageContainerDialog> {
     final edit = widget.editPackage;
     if (edit != null) {
       _titleController.text = edit.title;
+      _rotationIntervalSeconds = edit.rotationIntervalSeconds;
       // Otomatik sonraki versiyon önerisi
       _versionController.text = _getNextVersion(edit.version);
       _validFrom = DateTime.now().subtract(const Duration(minutes: 5));
@@ -2652,6 +2654,7 @@ class _PackageContainerDialogState extends State<_PackageContainerDialog> {
         validTo: _validTo,
         posterInputs: _posters,
         announcementInputs: _announcements,
+        rotationIntervalSeconds: _rotationIntervalSeconds,
         schoolId: widget.schoolId,
       );
 
@@ -2819,7 +2822,55 @@ class _PackageContainerDialogState extends State<_PackageContainerDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 14),
+
+              // Afiş Ekranda Kalma / Geçiş Süresi
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.bgPage,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.timer_outlined, size: 20, color: AppColors.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Afiş Ekranda Kalma Süresi',
+                            style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13),
+                          ),
+                          Text(
+                            'Tahtada birden fazla afiş olduğunda her afişin ekranda kalacağı saniye',
+                            style: GoogleFonts.inter(fontSize: 11, color: AppColors.textGrey),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    DropdownButton<int>(
+                      value: _rotationIntervalSeconds,
+                      underline: const SizedBox(),
+                      items: const [
+                        DropdownMenuItem(value: 5, child: Text('5 Saniye (Hızlı)')),
+                        DropdownMenuItem(value: 10, child: Text('10 Saniye')),
+                        DropdownMenuItem(value: 15, child: Text('15 Saniye (Önerilen)')),
+                        DropdownMenuItem(value: 20, child: Text('20 Saniye')),
+                        DropdownMenuItem(value: 30, child: Text('30 Saniye (Detaylı)')),
+                        DropdownMenuItem(value: 60, child: Text('60 Saniye (1 Dakika)')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => _rotationIntervalSeconds = val);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
 
               // BÖLÜM 1: AFİŞLER (GÖRSELLER) KONTEYNERİ
               Wrap(
