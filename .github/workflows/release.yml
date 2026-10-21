@@ -1,4 +1,4 @@
-name: Sınıf360 Production Release & Deploy
+name: Sınıf360 Mobile Store Build & Deploy (iOS & Android)
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Yayınlanacak sürüm (Örn: 2.1.2)'
+        description: 'Mobil Sürüm Etiketi (Örn: 2.1.2)'
         required: true
         default: '2.1.2'
 
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   # =========================================================================
-  # 1. ANDROID DERLEME (Signed AAB)
+  # 1. ANDROID RELEASE AAB DERLEME
   # =========================================================================
   build-android:
     name: 🤖 Android AppBundle (.aab)
@@ -68,101 +68,7 @@ jobs:
           path: mobile/TeacherMobile/build/app/outputs/bundle/release/app-release.aab
 
   # =========================================================================
-  # 2. WEB ADMİN CANLIYA ALMA (Cloudflare Pages)
-  # =========================================================================
-  deploy-web:
-    name: 🌐 Web Admin Cloudflare Canlı Yayın
-    runs-on: ubuntu-latest
-    steps:
-      - name: Kodu Çek
-        uses: actions/checkout@v4
-
-      - name: Flutter Kur
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-          cache: true
-
-      - name: Web Admin Derle
-        working-directory: web_admin
-        run: |
-          flutter pub get
-          flutter build web --release
-
-      - name: Cloudflare Pages Canlıya Al
-        if: env.CLOUDFLARE_API_TOKEN != ''
-        uses: cloudflare/wrangler-action@v3
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy web_admin/build/web --project-name=sinif360-admin
-
-  # =========================================================================
-  # 3. WINDOWS TAHTA GÜNCELLEME PAKETİ
-  # =========================================================================
-  deploy-windows:
-    name: 🖥️ Windows Kiosk & Watchdog Paketi
-    runs-on: windows-latest
-    steps:
-      - name: Kodu Çek
-        uses: actions/checkout@v4
-
-      - name: .NET 8 Kur
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Windows Bileşenlerini Derle & Paketle
-        run: |
-          dotnet publish windows/KioskLockApp/KioskLockApp.csproj -c Release -r win-x64 --no-self-contained -o dist/v_publish
-          dotnet publish windows/ConsoleApp1/WatchdogService.csproj -c Release -r win-x64 --no-self-contained -o dist/v_publish
-          dotnet publish windows/TahtaRepair/TahtaRepair.csproj -c Release -r win-x64 --no-self-contained -o dist/v_publish
-          dotnet publish windows/TahtaUpdater/TahtaUpdater.csproj -c Release -r win-x64 --no-self-contained -o dist/v_publish
-          Compress-Archive -Path dist/v_publish/* -DestinationPath dist/TahtaUpdate.zip -Force
-
-      - name: Windows Paketini Kaydet
-        uses: actions/upload-artifact@v4
-        with:
-          name: TahtaUpdate.zip
-          path: dist/TahtaUpdate.zip
-
-  # =========================================================================
-  # 4. GITHUB RELEASES OLUŞTURMA
-  # =========================================================================
-  create-release:
-    name: 🚀 GitHub Release & Dosya Ekleme
-    needs: [build-android, deploy-windows]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Kodu Çek
-        uses: actions/checkout@v4
-
-      - name: Android Paketini İndir
-        uses: actions/download-artifact@v4
-        with:
-          name: app-release.aab
-          path: artifacts/
-
-      - name: Windows Paketini İndir
-        uses: actions/download-artifact@v4
-        with:
-          name: TahtaUpdate.zip
-          path: artifacts/
-
-      - name: GitHub Release Yayınla
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: |
-            artifacts/app-release.aab
-            artifacts/TahtaUpdate.zip
-          generate_release_notes: true
-
-  # =========================================================================
-  # 5. IOS TESTFLIGHT BULUT DAĞITIMI (GitHub macOS Runner)
+  # 2. IOS TESTFLIGHT BULUT DAĞITIMI (GitHub macOS Bulut Makinesi)
   # =========================================================================
   deploy-ios:
     name: 🍎 iOS TestFlight Otomatik Yükleme
@@ -201,3 +107,28 @@ jobs:
         run: |
           bundle install || gem install fastlane
           fastlane beta
+
+  # =========================================================================
+  # 3. GITHUB RELEASES AAB PAKETİ EKLEME
+  # =========================================================================
+  create-release:
+    name: 🚀 GitHub Release Oluşturma
+    needs: [build-android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodu Çek
+        uses: actions/checkout@v4
+
+      - name: Android Paketini İndir
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release.aab
+          path: artifacts/
+
+      - name: GitHub Release Yayınla
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            artifacts/app-release.aab
+          generate_release_notes: true
