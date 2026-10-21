@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../data/services/app_update_service.dart';
+import 'forced_update_screen.dart';
 import 'login_screen.dart';
 import 'dashboard_screen.dart';
 import 'admin_boards_screen.dart';
@@ -21,10 +23,24 @@ class _AuthGateState extends State<AuthGate> {
   @override
   void initState() {
     super.initState();
-    // Kritik düzeltme: Ekran çizimini bekle
+    // Ekran çizimini bekle ve önce zorunlu güncelleme, ardından auth kontrolü yap
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkRole();
+      _checkAppAndRole();
     });
+  }
+
+  Future<void> _checkAppAndRole() async {
+    // 1. ADIM: ZORUNLU GÜNCELLEME KONTROLÜ
+    try {
+      final updateInfo = await AppUpdateService.checkForUpdate();
+      if (updateInfo != null && updateInfo.isForced) {
+        _navigate(ForcedUpdateScreen(updateInfo: updateInfo));
+        return;
+      }
+    } catch (_) {}
+
+    // 2. ADIM: OTURUM VE ROL KONTROLÜ
+    await _checkRole();
   }
 
   Future<void> _checkRole() async {
