@@ -36,6 +36,14 @@ namespace KioskLockApp
             ForceStartup();
             System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] ForceStartup completed\n");
 
+            // Anti-Tamper: Program ve sistem klasörünü öğrencilerin silmesine karşı NTFS düzeyinde kilitle
+            try
+            {
+                FolderSecurityHelper.EnsureProtected();
+                System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] Folder protection enforced\n");
+            }
+            catch { }
+
             // Registry'den kayıtlı tahta var mı kontrol et
             string boardId = "";
             try

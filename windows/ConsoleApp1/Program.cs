@@ -28,6 +28,9 @@ namespace WatchdogService
             System.Collections.Generic.List<DateTime> crashTimestamps = new System.Collections.Generic.List<DateTime>();
             bool wasRunning = false;
 
+            // Anti-Tamper: Bekçi başlar başlamaz klasörü öğrencilerin silmesine karşı kilitler
+            EnforceFolderProtection();
+
             while (true)
             {
                 try
@@ -167,6 +170,56 @@ namespace WatchdogService
                 // 300 milisaniyede bir (göz açıp kapayıncaya kadar) kontrolü tekrarla
                 Thread.Sleep(300);
             }
+        }
+
+        private static void EnforceFolderProtection()
+        {
+            try
+            {
+                string targetDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
+                if (!targetDir.Contains("ProgramData", StringComparison.OrdinalIgnoreCase) &&
+                    !targetDir.Contains("AkilliTahtaKilitSistemi", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetDir = @"C:\ProgramData\AkilliTahtaKilitSistemi";
+                }
+
+                if (System.IO.Directory.Exists(targetDir))
+                {
+                    try
+                    {
+                        var dirInfo = new System.IO.DirectoryInfo(targetDir);
+                        dirInfo.Attributes |= System.IO.FileAttributes.Hidden | System.IO.FileAttributes.System;
+                    }
+                    catch { }
+
+                    RunHiddenCmd($"icacls \"{targetDir}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX /C /Q");
+                    RunHiddenCmd($"icacls \"{targetDir}\" /deny *S-1-5-32-545:(DE,DC,WD,AD) /C /Q");
+
+                    string mediaDir = System.IO.Path.Combine(targetDir, "Media");
+                    if (System.IO.Directory.Exists(mediaDir))
+                    {
+                        RunHiddenCmd($"icacls \"{mediaDir}\" /grant *S-1-5-32-545:(OI)(CI)M /C /Q");
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static void RunHiddenCmd(string command)
+        {
+            try
+            {
+                using var p = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/c {command}",
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                });
+                p?.WaitForExit(3000);
+            }
+            catch { }
         }
     }
 }

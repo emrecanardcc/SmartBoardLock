@@ -92,6 +92,9 @@ namespace TahtaUpdater
                 Thread.Sleep(1000);
                 File.AppendAllText(logPath, "Eski surecler durduruldu.\n");
 
+                // 1.5 ADIM: KLASÖRÜ GEÇİCİ OLARAK GÜNCELLEME İÇİN AÇ (KİLİDİ KALDIR)
+                UnlockFolder(targetFolder);
+
                 // 2. ADIM: TERTEMİZ SAYFA (KLASÖRÜN İÇİNİ KOMPLE SİL - UPDATER HARİÇ)
                 if (Directory.Exists(targetFolder))
                 {
@@ -129,6 +132,9 @@ namespace TahtaUpdater
                     }
                     try { File.Delete(zipPath); } catch { }
                     File.AppendAllText(logPath, "Yeni dosyalar sifirdan yuklendi!\n");
+
+                    // Anti-Tamper: Yeni dosyalar yüklendikten sonra klasörü tekrar NTFS silme korumasına al
+                    ProtectFolder(targetFolder);
                 }
 
                 // 3.5 ADIM: GÜNCELLEME SİNYALİNİ (MUTEX) SERBEST BIRAK
@@ -175,6 +181,63 @@ namespace TahtaUpdater
             {
                 File.AppendAllText(logPath, "HATA: " + ex.Message + "\n");
             }
+        }
+
+        private static void UnlockFolder(string dirPath)
+        {
+            try
+            {
+                RunHiddenCmd($"icacls \"{dirPath}\" /remove:d *S-1-5-32-545 /T /C /Q");
+                RunHiddenCmd($"icacls \"{dirPath}\" /grant *S-1-5-32-544:(OI)(CI)F /T /C /Q");
+                RunHiddenCmd($"attrib -s -h \"{dirPath}\"");
+            }
+            catch { }
+        }
+
+        private static void ProtectFolder(string dirPath)
+        {
+            try
+            {
+                if (!dirPath.Contains("ProgramData", StringComparison.OrdinalIgnoreCase) &&
+                    !dirPath.Contains("AkilliTahtaKilitSistemi", StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                try
+                {
+                    var dirInfo = new DirectoryInfo(dirPath);
+                    dirInfo.Attributes |= FileAttributes.Hidden | FileAttributes.System;
+                }
+                catch { }
+
+                RunHiddenCmd($"icacls \"{dirPath}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX /C /Q");
+                RunHiddenCmd($"icacls \"{dirPath}\" /deny *S-1-5-32-545:(DE,DC,WD,AD) /C /Q");
+
+                string mediaDir = Path.Combine(dirPath, "Media");
+                if (Directory.Exists(mediaDir))
+                {
+                    RunHiddenCmd($"icacls \"{mediaDir}\" /grant *S-1-5-32-545:(OI)(CI)M /C /Q");
+                }
+            }
+            catch { }
+        }
+
+        private static void RunHiddenCmd(string command)
+        {
+            try
+            {
+                using var p = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/c {command}",
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                });
+                p?.WaitForExit(3000);
+            }
+            catch { }
         }
     }
 }
