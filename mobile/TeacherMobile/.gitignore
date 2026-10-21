@@ -45,3 +45,13 @@ app.*.map.json
 /android/app/release
 # Çevre Değişkenleri (Gizli Anahtarlar)
 .env
+# Keystores & sensitive build files
+android/key.properties
+android/upload-keystore.jks
+*.jks
+*.keystore
+*.p8
+AuthKey_*
+fastlane/.env
+fastlane/README.md
+
