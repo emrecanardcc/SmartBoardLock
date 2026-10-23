@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using KioskLockApp.Core;
 using KioskLockApp.Services;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -39,20 +40,46 @@ namespace KioskLockApp.Tests
             string testFile = Path.Combine(_testDir, "KioskLockApp.dll");
             File.WriteAllText(testFile, "Protected binary content");
 
-            // 2. Korumayı aktifleştir
-            FolderSecurityHelper.EnsureProtected(_testDir);
+            // 2. Korumayı aktifleştir (NTFS DENY + Kernel Lock)
+            FolderSecurityHelper.EnsureProtected(_testDir, synchronous: true);
 
             // 3. Dosyanın hala okunabilir olduğunu doğrula (Uygulama çalışabilmeli)
             Assert.IsTrue(File.Exists(testFile));
             string readContent = File.ReadAllText(testFile);
             Assert.AreEqual("Protected binary content", readContent);
 
-            // 4. Klasörün kilit açma (Unlock) metodunu test et
+            // 4. Kernel kilit aktifken dosyanın silinmeye çalışılması engellenmeli (Sharing violation veya UnauthorizedAccess)
+            bool deleteBlocked = false;
+            try
+            {
+                File.Delete(testFile);
+            }
+            catch (Exception)
+            {
+                deleteBlocked = true;
+            }
+            Assert.IsTrue(deleteBlocked, "Kilitli çekirdek dosyası silinememeli!");
+
+            // 5. Klasörün kilit açma (Unlock) metodunu test et
             FolderSecurityHelper.UnlockFolder(_testDir);
 
-            // 5. Kilit kalktıktan sonra dosyanın sorunsuz silinebildiğini doğrula
+            // 6. Kilit kalktıktan sonra dosyanın sorunsuz silinebildiğini doğrula
             File.Delete(testFile);
             Assert.IsFalse(File.Exists(testFile));
+        }
+
+        [TestMethod]
+        public void Test_ProcessSecurity_ProtectAndUnprotect()
+        {
+            // DACL korumasını uygula
+            bool protectedOk = ProcessSecurity.ProtectCurrentProcess();
+            Assert.IsTrue(protectedOk, "ProcessSecurity.ProtectCurrentProcess başarılı olmalı");
+            Assert.IsTrue(ProcessSecurity.IsProtected);
+
+            // DACL korumasını kaldır
+            bool unprotectedOk = ProcessSecurity.UnprotectCurrentProcess();
+            Assert.IsTrue(unprotectedOk, "ProcessSecurity.UnprotectCurrentProcess başarılı olmalı");
+            Assert.IsFalse(ProcessSecurity.IsProtected);
         }
 
         [TestMethod]
@@ -86,6 +113,24 @@ namespace KioskLockApp.Tests
             // 4. Afiş silinebilmeli / güncellenebilmeli
             File.Delete(testPoster);
             Assert.IsFalse(File.Exists(testPoster));
+        }
+
+        [TestMethod]
+        public void Test_SingleInstance_Mutex_BlocksSecondInstance()
+        {
+            string mutexName = "Global\\TestSingleInstanceMutex_" + Guid.NewGuid().ToString("N");
+
+            // Birinci örnek mutex'i alır
+            using (var firstMutex = new System.Threading.Mutex(true, mutexName, out bool createdFirst))
+            {
+                Assert.IsTrue(createdFirst, "İlk örnek mutex'i başarıyla almalıdır");
+
+                // İkinci örnek aynı mutex'i almaya çalışır
+                using (var secondMutex = new System.Threading.Mutex(true, mutexName, out bool createdSecond))
+                {
+                    Assert.IsFalse(createdSecond, "İkinci kopya mutex'i alamamalı (çifte açılma engellenmeli)");
+                }
+            }
         }
     }
 }

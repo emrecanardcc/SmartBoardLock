@@ -14,7 +14,7 @@ namespace TahtaUpdater
         [STAThread]
         static void Main(string[] args)
         {
-            Mutex updateMutex = null;
+            Mutex? updateMutex = null;
             try
             {
                 // Watchdog'un ve diger sureclerin guncelleme sirasinda Kiosk'u yeniden baslatmasini engelle
@@ -76,7 +76,7 @@ namespace TahtaUpdater
             Application.Run(updateForm);
         }
 
-        static void PerformUpdate(string zipPath, string targetFolder, string logPath, Mutex updateMutex)
+        static void PerformUpdate(string zipPath, string targetFolder, string logPath, Mutex? updateMutex)
         {
             string mainExeName = "KioskLockApp.exe";
 
@@ -92,10 +92,10 @@ namespace TahtaUpdater
                 Thread.Sleep(1000);
                 File.AppendAllText(logPath, "Eski surecler durduruldu.\n");
 
-                // 1.5 ADIM: KLASÖRÜ GEÇİCİ OLARAK GÜNCELLEME İÇİN AÇ (KİLİDİ KALDIR)
+                // 1.5 ADIM: KLASÖRÜ GEÇİCİ OLARAK GÜNCELLEME İÇİN AÇ (KİLİDİ VE DENY'LERİ KALDIR)
                 UnlockFolder(targetFolder);
 
-                // 2. ADIM: TERTEMİZ SAYFA (KLASÖRÜN İÇİNİ KOMPLE SİL - UPDATER HARİÇ)
+                // 2. ADIM: TERTEMİZ SAYFA (KLASÖRÜN İÇİNİ KOMPLE SİL - UPDATER VE MEDIA HARİÇ)
                 if (Directory.Exists(targetFolder))
                 {
                     foreach (string file in Directory.GetFiles(targetFolder))
@@ -119,7 +119,7 @@ namespace TahtaUpdater
                                 continue;
 
                             string completeFileName = Path.Combine(targetFolder, file.FullName);
-                            string directory = Path.GetDirectoryName(completeFileName);
+                            string? directory = Path.GetDirectoryName(completeFileName);
 
                             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                                 Directory.CreateDirectory(directory);
@@ -133,7 +133,7 @@ namespace TahtaUpdater
                     try { File.Delete(zipPath); } catch { }
                     File.AppendAllText(logPath, "Yeni dosyalar sifirdan yuklendi!\n");
 
-                    // Anti-Tamper: Yeni dosyalar yüklendikten sonra klasörü tekrar NTFS silme korumasına al
+                    // Anti-Tamper: Yeni dosyalar yüklendikten sonra klasörü tekrar "Demir Zırh" NTFS korumasına al
                     ProtectFolder(targetFolder);
                 }
 
@@ -187,8 +187,11 @@ namespace TahtaUpdater
         {
             try
             {
-                RunHiddenCmd($"icacls \"{dirPath}\" /remove:d *S-1-5-32-545 /T /C /Q");
-                RunHiddenCmd($"icacls \"{dirPath}\" /grant *S-1-5-32-544:(OI)(CI)F /T /C /Q");
+                // DENY ACE'lerini kaldır
+                RunHiddenCmd($"icacls \"{dirPath}\" /remove:d *S-1-5-32-544 /remove:d *S-1-5-32-545 /remove:d *S-1-1-0 /T /C /Q");
+                // Yöneticilere tam yetki, kullanıcılara değiştirme yetkisi ver
+                RunHiddenCmd($"icacls \"{dirPath}\" /grant *S-1-5-32-544:(OI)(CI)F /grant *S-1-5-32-545:(OI)(CI)M /T /C /Q");
+                // Gizli ve Sistem özniteliklerini kaldır
                 RunHiddenCmd($"attrib -s -h \"{dirPath}\"");
             }
             catch { }
@@ -211,13 +214,19 @@ namespace TahtaUpdater
                 }
                 catch { }
 
-                RunHiddenCmd($"icacls \"{dirPath}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX /C /Q");
-                RunHiddenCmd($"icacls \"{dirPath}\" /deny *S-1-5-32-545:(DE,DC,WD,AD) /C /Q");
+                // SYSTEM tam yetki, Administrators Değiştirme (M), Users sadece okuma/çalıştırma
+                RunHiddenCmd($"icacls \"{dirPath}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)M /grant:r *S-1-5-32-545:(OI)(CI)RX /C /Q");
 
+                // Administrators ve Users için AÇIK DENY (Silme Yasağı: DE, DC)
+                RunHiddenCmd($"icacls \"{dirPath}\" /deny *S-1-5-32-544:(OI)(CI)(DE,DC) /deny *S-1-5-32-545:(OI)(CI)(DE,DC) /C /Q");
+
+                // Media alt klasörünü dinamik afiş indirmeleri için serbest bırak
                 string mediaDir = Path.Combine(dirPath, "Media");
                 if (Directory.Exists(mediaDir))
                 {
-                    RunHiddenCmd($"icacls \"{mediaDir}\" /grant *S-1-5-32-545:(OI)(CI)M /C /Q");
+                    RunHiddenCmd($"icacls \"{mediaDir}\" /inheritance:d /C /Q");
+                    RunHiddenCmd($"icacls \"{mediaDir}\" /remove:d *S-1-5-32-544 /remove:d *S-1-5-32-545 /remove:d *S-1-1-0 /C /Q");
+                    RunHiddenCmd($"icacls \"{mediaDir}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)M /C /Q");
                 }
             }
             catch { }

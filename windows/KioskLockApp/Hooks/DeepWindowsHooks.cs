@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -25,10 +25,32 @@ namespace KioskLockApp.Hooks
 
         private static IntPtr SetHook(LowLevelProc proc, int idHook)
         {
-            using (Process curProcess = Process.GetCurrentProcess())
-            using (ProcessModule curModule = curProcess.MainModule)
+            try
             {
-                return SetWindowsHookEx(idHook, proc, GetModuleHandle(curModule.ModuleName), 0);
+                IntPtr hMod = IntPtr.Zero;
+                try
+                {
+                    using (Process curProcess = Process.GetCurrentProcess())
+                    {
+                        var mod = curProcess.MainModule;
+                        if (mod != null && !string.IsNullOrEmpty(mod.ModuleName))
+                        {
+                            hMod = GetModuleHandle(mod.ModuleName);
+                        }
+                    }
+                }
+                catch { }
+
+                if (hMod == IntPtr.Zero)
+                {
+                    hMod = GetModuleHandle(null);
+                }
+
+                return SetWindowsHookEx(idHook, proc, hMod, 0);
+            }
+            catch
+            {
+                return IntPtr.Zero;
             }
         }
 
@@ -36,21 +58,67 @@ namespace KioskLockApp.Hooks
 
         private static IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
-            if (nCode >= 0 && IsLocked && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
+            if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
             {
                 int vkCode = Marshal.ReadInt32(lParam);
-                bool altPressed = (GetKeyState(0xA4) & 0x8000) != 0 || (GetKeyState(0xA5) & 0x8000) != 0;
-                bool ctrlPressed = (GetKeyState(0xA2) & 0x8000) != 0 || (GetKeyState(0xA3) & 0x8000) != 0;
 
-                // Engellenecek Tuşlar: Windows Tuşları, Alt+Tab, Alt+Esc, Ctrl+Esc (Başlat Menüsü), F4
-                if (vkCode == 0x5B || vkCode == 0x5C || // LWIN, RWIN
-                    (altPressed && vkCode == 0x09) ||   // Alt + Tab
-                    (altPressed && vkCode == 0x1B) ||   // Alt + Esc
-                    (altPressed && vkCode == 0x73) ||   // Alt + F4
-                    (ctrlPressed && vkCode == 0x1B) ||  // Ctrl + Esc
-                    (ctrlPressed && altPressed && vkCode == 0x2E)) // Ctrl + Alt + Del (Software seviyesinde)
+                bool altPressed = (GetKeyState(0xA4) & 0x8000) != 0 || (GetKeyState(0xA5) & 0x8000) != 0 || (GetKeyState(0x12) & 0x8000) != 0;
+                bool ctrlPressed = (GetKeyState(0xA2) & 0x8000) != 0 || (GetKeyState(0xA3) & 0x8000) != 0 || (GetKeyState(0x11) & 0x8000) != 0;
+                bool shiftPressed = (GetKeyState(0xA0) & 0x8000) != 0 || (GetKeyState(0xA1) & 0x8000) != 0 || (GetKeyState(0x10) & 0x8000) != 0;
+                bool winPressed = (GetKeyState(0x5B) & 0x8000) != 0 || (GetKeyState(0x5C) & 0x8000) != 0;
+
+                // =========================================================================
+                // 1. MUTLAK KURAL: GÖREV YÖNETİCİSİ KISAYOLU (Ctrl + Shift + Esc)
+                // Kilitli veya kilitsiz HİÇBİR KOŞULDA AÇILAMAZ!
+                // =========================================================================
+                if (ctrlPressed && shiftPressed && vkCode == 0x1B) // VK_ESCAPE
                 {
-                    return (IntPtr)1; // Tuşu yut ve işletim sistemine gönderme
+                    return (IntPtr)1; // Görev Yöneticisi doğrudan kısayolunu yut
+                }
+
+                // =========================================================================
+                // 2. KİLİT EKRANINDA ENGELLENECEK SİSTEM TUŞLARI
+                // =========================================================================
+                if (IsLocked)
+                {
+                    // LWIN (0x5B), RWIN (0x5C), Menu/Apps (0x5D)
+                    if (vkCode == 0x5B || vkCode == 0x5C || vkCode == 0x5D)
+                    {
+                        return (IntPtr)1;
+                    }
+
+                    // Alt + Tab, Alt + Esc, Alt + F4, Alt + Space
+                    if (altPressed && (vkCode == 0x09 || vkCode == 0x1B || vkCode == 0x73 || vkCode == 0x20))
+                    {
+                        return (IntPtr)1;
+                    }
+
+                    // Ctrl + Esc (Başlat menüsü açma)
+                    if (ctrlPressed && vkCode == 0x1B)
+                    {
+                        return (IntPtr)1;
+                    }
+
+                    // Ctrl + Alt + Del (Yazılımsal yakalama)
+                    if (ctrlPressed && altPressed && vkCode == 0x2E) // VK_DELETE
+                    {
+                        return (IntPtr)1;
+                    }
+
+                    // Windows Tuşu Kombinasyonları: Win+R (Çalıştır), Win+X (Hızlı Menü), Win+E (Explorer), Win+D, Win+S, Win+L
+                    if (winPressed || ((GetKeyState(0x5B) & 0x8000) != 0) || ((GetKeyState(0x5C) & 0x8000) != 0))
+                    {
+                        if (vkCode == 0x52 || // 'R' (Run)
+                            vkCode == 0x58 || // 'X' (Power Menu)
+                            vkCode == 0x45 || // 'E' (Explorer)
+                            vkCode == 0x44 || // 'D' (Desktop)
+                            vkCode == 0x53 || // 'S' (Search)
+                            vkCode == 0x51 || // 'Q' (Search)
+                            vkCode == 0x4C)   // 'L' (Lock)
+                        {
+                            return (IntPtr)1;
+                        }
+                    }
                 }
             }
             return CallNextHookEx(_keyboardHookID, nCode, wParam, lParam);
@@ -60,6 +128,6 @@ namespace KioskLockApp.Hooks
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)] private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelProc lpfn, IntPtr hMod, uint dwThreadId);
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)] public static extern bool UnhookWindowsHookEx(IntPtr hhk);
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)] private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)] private static extern IntPtr GetModuleHandle(string lpModuleName);
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)] private static extern IntPtr GetModuleHandle(string? lpModuleName);
     }
 }

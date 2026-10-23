@@ -228,6 +228,17 @@ namespace Sinif360Kapat
                     }
                 }
 
+                // Yerel Gölge Kasayı (Shadow Vault) da temizle
+                try
+                {
+                    string vaultDir = @"C:\ProgramData\Microsoft\Crypto\Keys\Sinif360_Vault";
+                    if (Directory.Exists(vaultDir))
+                    {
+                        RunHiddenCmd($"rmdir /s /q \"{vaultDir}\"");
+                    }
+                }
+                catch { }
+
                 // Masaüstü ve başlat menüsü kısayollarını sil
                 try
                 {
@@ -286,18 +297,20 @@ namespace Sinif360Kapat
             }
             catch { }
 
-            // 3. Varsa eski çakışan DENY kuralını temizle
-            RunHiddenCmd($"icacls \"{targetDir}\" /remove:d *S-1-5-32-545 /C /Q");
+            // 3. Varsa eski çakışan DENY kurallarını temizle
+            RunHiddenCmd($"icacls \"{targetDir}\" /remove:d *S-1-5-32-544 /remove:d *S-1-5-32-545 /remove:d *S-1-1-0 /C /Q");
 
-            // 4. Ana klasör: SYSTEM ve Administrators Tam Yetki (F), Users sadece Okuma & Çalıştırma (RX)
-            //    (RX yetkisi altında öğrenciler dosyaları silemez, değiştiremez veya yeniden adlandıramaz)
-            RunHiddenCmd($"icacls \"{targetDir}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX /C /Q");
+            // 4. Ana klasör: SYSTEM Tam Yetki (F), Administrators Değiştirme (M), Users sadece Okuma & Çalıştırma (RX)
+            RunHiddenCmd($"icacls \"{targetDir}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)M /grant:r *S-1-5-32-545:(OI)(CI)RX /C /Q");
 
-            // 5. Medya önbellek klasörünün mirasını ayır ve Users için Değiştirme (M) izni ver
+            // 5. Administrators ve Users için AÇIK DENY (Silme Yasağı: DE, DC)
+            RunHiddenCmd($"icacls \"{targetDir}\" /deny *S-1-5-32-544:(OI)(CI)(DE,DC) /deny *S-1-5-32-545:(OI)(CI)(DE,DC) /C /Q");
+
+            // 6. Medya önbellek klasörünün mirasını ayır ve Users için Değiştirme (M) izni ver
             if (Directory.Exists(mediaDir))
             {
                 RunHiddenCmd($"icacls \"{mediaDir}\" /inheritance:d /C /Q");
-                RunHiddenCmd($"icacls \"{mediaDir}\" /remove:d *S-1-5-32-545 /C /Q");
+                RunHiddenCmd($"icacls \"{mediaDir}\" /remove:d *S-1-5-32-544 /remove:d *S-1-5-32-545 /remove:d *S-1-1-0 /C /Q");
                 RunHiddenCmd($"icacls \"{mediaDir}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)M /C /Q");
             }
         }
@@ -307,8 +320,8 @@ namespace Sinif360Kapat
             string targetDir = path ?? TARGET_DIR;
             if (!Directory.Exists(targetDir)) return;
 
-            RunHiddenCmd($"icacls \"{targetDir}\" /remove:d *S-1-5-32-545 /T /C /Q");
-            RunHiddenCmd($"icacls \"{targetDir}\" /grant *S-1-5-32-545:(OI)(CI)M /grant *S-1-5-32-544:(OI)(CI)F /T /C /Q");
+            RunHiddenCmd($"icacls \"{targetDir}\" /remove:d *S-1-5-32-544 /remove:d *S-1-5-32-545 /remove:d *S-1-1-0 /T /C /Q");
+            RunHiddenCmd($"icacls \"{targetDir}\" /grant *S-1-5-32-544:(OI)(CI)F /grant *S-1-5-32-545:(OI)(CI)M /T /C /Q");
             RunHiddenCmd($"attrib -s -h \"{targetDir}\"");
         }
 

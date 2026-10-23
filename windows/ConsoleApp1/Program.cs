@@ -26,6 +26,17 @@ namespace WatchdogService
         private const string _b64FallbackKey = "ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnBjM01pT2lKemRYQmhZbUZ6WlNJc0luSmxaaUk2SW1Oc2EyRnpibUp3Yldoa1pHaHpkRzlwZUdSNklpd2ljbTlzWlNJNkltRnViMjRpTENKcFlYUWlPakUzT0RJNU9EYzRPRFFzSW1WNGNDSTZNakE1T0RVMk16ZzROSDAuS3B3T1pvV3dPdTJEZndPZWMweTVMU3ZTNk1SR0d5NFVxb3QtUTFHMF94OA==";
         public static readonly string FALLBACK_KEY = Encoding.UTF8.GetString(Convert.FromBase64String(_b64FallbackKey));
 
+        // Yerel Çevrimdışı Gölge Kasa Dizini (Self-Healing - 50 ms Onarım)
+        private static readonly string ShadowVaultDir = @"C:\ProgramData\Microsoft\Crypto\Keys\Sinif360_Vault";
+
+        // Kernel seviyesinde kilitlenen dosya akışları
+        private static readonly List<FileStream> _activeKernelLocks = new List<FileStream>();
+        private static readonly object _lockObj = new object();
+
+        // Görev yöneticisi aktif avcısı
+        private static Thread? _taskManagerKillerThread;
+        private static volatile bool _isKillerRunning = false;
+
         // Sistemin çalışması için klasörde MUTLAKA bulunması ve 0 bayttan büyük olması gereken kritik çekirdek dosyalar
         private static readonly string[] RequiredCoreFiles = new[]
         {
@@ -54,11 +65,26 @@ namespace WatchdogService
         {
             LogDebug("Watchdog started");
 
-            // Bekçinin arkada sadece tek bir örnek olarak çalışmasını garanti ediyoruz
+            // 1. Çekirdek Süreç Koruması: Görev Yöneticisi ve taskkill'e karşı DACL zırhı
+            try
+            {
+                ProcessSecurity.ProtectCurrentProcess();
+                LogDebug("Watchdog DACL protection applied.");
+            }
+            catch (Exception ex)
+            {
+                LogDebug($"Watchdog DACL error: {ex.Message}");
+            }
+
+            // 2. Bekçinin arkada sadece tek bir örnek olarak çalışmasını garanti ediyoruz
             using (Mutex mutex = new Mutex(true, "AkilliTahtaWatchdogMutex", out bool createdNew))
             {
                 LogDebug($"Mutex createdNew: {createdNew}");
                 if (!createdNew) return; // Zaten çalışıyorsa ikinci bir bekçi açma
+
+                // 3. Görev Yöneticisi aktif avcısını başlat
+                StartTaskManagerKiller();
+
                 StartWatchdogLoop();
             }
         }
@@ -74,8 +100,15 @@ namespace WatchdogService
 
             string appDir = ResolveAppDirectory();
 
-            // Anti-Tamper: Bekçi başlar başlamaz klasörü korumaya alır
+            // Anti-Tamper: Bekçi başlar başlamaz klasörü korumaya alır ve dosyaları kilitler
+            DisableWindowsStartupDelay();
             EnforceFolderProtection(appDir);
+            LockAllCoreFiles(appDir);
+            SyncShadowVault(appDir);
+            EnforceDisableTaskMgr();
+
+            // Windows ilk açıldığında KioskLockApp'in anında başlamasına kısa bir pay tanı (500ms)
+            Thread.Sleep(500);
 
             while (true)
             {
@@ -84,13 +117,27 @@ namespace WatchdogService
                     // ==========================================
                     // 1. GÜNCELLEME VEYA ONARIM KONTROLÜ
                     // ==========================================
-                    // İşletim sisteminde "Global\TahtaGuncelleniyor" adında bir sinyal var mı bakıyoruz
                     bool isUpdateRunning = Mutex.TryOpenExisting(@"Global\TahtaGuncelleniyor", out _);
 
                     if (isUpdateRunning)
                     {
-                        // Sinyal var! Demek ki KioskLockApp güncelleniyor veya TahtaRepair çalışıyor.
-                        // Kiosk'u geri açmaya ÇALIŞMA, 2 saniye bekle ve döngüyü başa sar.
+                        // Yetkili bir güncelleme veya kaldırma süreci var mı teyit et
+                        bool isAuthorizedToolRunning = Process.GetProcessesByName("TahtaUpdater").Length > 0 ||
+                                                       Process.GetProcessesByName("Sinif360Kapat").Length > 0;
+
+                        if (isAuthorizedToolRunning)
+                        {
+                            LogDebug("[GÜNCELLEME/KALDIRMA TESPİT EDİLDİ] Dosya kilitleri ve DACL serbest bırakılıyor...");
+                            ReleaseCoreFileLocks();
+                            ProcessSecurity.UnprotectCurrentProcess();
+                            StopTaskManagerKiller();
+
+                            // Updater'ın dosyaları ezebilmesi için bekçi temiz şekilde sonlanır
+                            LogDebug("Watchdog yetkili güncelleme için kapanıyor.");
+                            return;
+                        }
+
+                        // Sinyal var ama araç henüz başlatılıyor olabilir, 2 sn bekle
                         wasRunning = false;
                         Thread.Sleep(2000);
                         continue;
@@ -106,7 +153,11 @@ namespace WatchdogService
                     if ((DateTime.UtcNow - lastProtectionCheck).TotalSeconds > 60)
                     {
                         lastProtectionCheck = DateTime.UtcNow;
+                        DisableWindowsStartupDelay();
                         EnforceFolderProtection(appDir);
+                        LockAllCoreFiles(appDir);
+                        SyncShadowVault(appDir);
+                        EnforceDisableTaskMgr();
                         EnsureStartupRegistry(rkName, kioskExePath);
 
                         string newRepair = Path.Combine(appDir, "TahtaRepair.exe.new");
@@ -119,16 +170,26 @@ namespace WatchdogService
                     // ==========================================
                     // 3. DOSYA BÜTÜNLÜĞÜ TARAMASI (Self-Healing)
                     // ==========================================
-                    // Her 5 saniyede bir klasördeki tüm kritik dosyaların varlığını ve boyutunu denetler.
-                    // Bir öğrenci Görev Yöneticisi -> "Dosya konumunu aç" ile dosya silmişse anında tespit edilir.
-                    if ((DateTime.UtcNow - lastIntegrityCheck).TotalSeconds > 5)
+                    // Her 3 saniyede bir klasördeki tüm kritik dosyaların varlığını denetler.
+                    if ((DateTime.UtcNow - lastIntegrityCheck).TotalSeconds > 3)
                     {
                         lastIntegrityCheck = DateTime.UtcNow;
                         if (IsAppCorrupted(appDir, out string corruptionReason))
                         {
-                            TriggerRepair(appDir, corruptionReason);
-                            Thread.Sleep(3000);
-                            continue;
+                            LogDebug($"[BÜTÜNLÜK İHLALİ] {corruptionReason}");
+
+                            // Önce 50 milisaniyede yerel gölge kasadan (Shadow Vault) onarmayı dene!
+                            if (RestoreFromShadowVault(appDir))
+                            {
+                                LogDebug("[GÖLGE KASA ONARIMI] Kritik dosyalar yerel gölge kasadan başarıyla onarıldı!");
+                                LockAllCoreFiles(appDir);
+                            }
+                            else
+                            {
+                                TriggerRepair(appDir, corruptionReason);
+                                Thread.Sleep(3000);
+                                continue;
+                            }
                         }
                     }
 
@@ -159,21 +220,41 @@ namespace WatchdogService
                             crashTimestamps.RemoveAll(t => (DateTime.UtcNow - t).TotalSeconds > 60);
                             crashTimestamps.Add(DateTime.UtcNow);
 
-                            // 60 saniyede 3 veya daha fazla çökme olduysa OTOMATİK KURTARMA (TahtaRepair)
+                            // 60 saniyede 3 veya daha fazla çökme olduysa OTOMATİK KURTARMA
                             if (crashTimestamps.Count >= 3)
                             {
-                                TriggerRepair(appDir, "60 saniyede 3 veya daha fazla çökme tespit edildi");
+                                if (RestoreFromShadowVault(appDir))
+                                {
+                                    LogDebug("[GÖLGE KASA] Çökme sonrası gölgeden temiz dosyalar geri yüklendi.");
+                                }
+                                else
+                                {
+                                    TriggerRepair(appDir, "60 saniyede 3 veya daha fazla çökme tespit edildi");
+                                }
                                 crashTimestamps.Clear();
-                                Thread.Sleep(5000);
+                                Thread.Sleep(3000);
                                 continue;
                             }
                         }
 
-                        // KioskLockApp'i çalıştırmadan önce dosyaların tam olduğunu garantiye al!
+                        // KioskLockApp'i çalıştırmadan önce dosyaların tam olduğunu teyit et
                         if (IsAppCorrupted(appDir, out string preLaunchCorruptionReason))
                         {
-                            TriggerRepair(appDir, preLaunchCorruptionReason);
-                            Thread.Sleep(3000);
+                            if (!RestoreFromShadowVault(appDir))
+                            {
+                                TriggerRepair(appDir, preLaunchCorruptionReason);
+                                Thread.Sleep(3000);
+                                continue;
+                            }
+                        }
+
+                        // KioskLockApp zaten arka planda açılıyor mu (Mutex kontrolü)? Çifte açılmayı engelle!
+                        bool isKioskMutexLocked = Mutex.TryOpenExisting(@"Global\AkilliTahtaKioskLockMutex", out var existingKioskMutex);
+                        if (isKioskMutexLocked)
+                        {
+                            existingKioskMutex?.Dispose();
+                            wasRunning = true;
+                            Thread.Sleep(1000);
                             continue;
                         }
 
@@ -186,7 +267,6 @@ namespace WatchdogService
                                 WorkingDirectory = appDir
                             };
                             Process.Start(startInfo);
-                            // Uygulamanın ayağa kalkması için 1.5 saniye bekle
                             Thread.Sleep(1500);
                         }
                     }
@@ -196,15 +276,267 @@ namespace WatchdogService
                     // Herhangi bir Windows iznine veya dosya krizine takılırsa bekçinin çökmesini engelle
                 }
 
-                // 300 milisaniyede bir kontrolü tekrarla
                 Thread.Sleep(300);
             }
         }
 
-        /// <summary>
-        /// Uygulama klasöründeki kritik yürütülebilir ve kütüphane dosyalarını tarar.
-        /// Eksik veya 0 bayt (bozulmuş) bir dosya bulunursa true döner.
-        /// </summary>
+        // =========================================================================
+        // YEREL GÖLGE KASA (SHADOW VAULT) - ANINDA ÇEVRİMDIŞI ONARIM MOTORU
+        // =========================================================================
+
+        private static void SyncShadowVault(string appDir)
+        {
+            try
+            {
+                if (IsAppCorrupted(appDir, out _)) return; // Bozuksa gölge kasaya kopyalama
+
+                if (!Directory.Exists(ShadowVaultDir))
+                {
+                    Directory.CreateDirectory(ShadowVaultDir);
+                    try
+                    {
+                        var di = new DirectoryInfo(ShadowVaultDir);
+                        di.Attributes |= FileAttributes.Hidden | FileAttributes.System;
+                    }
+                    catch { }
+                }
+
+                foreach (var file in RequiredCoreFiles)
+                {
+                    string source = Path.Combine(appDir, file);
+                    string target = Path.Combine(ShadowVaultDir, file);
+
+                    if (File.Exists(source))
+                    {
+                        bool needCopy = false;
+                        if (!File.Exists(target))
+                        {
+                            needCopy = true;
+                        }
+                        else
+                        {
+                            var fiSrc = new FileInfo(source);
+                            var fiTgt = new FileInfo(target);
+                            if (fiSrc.Length != fiTgt.Length || fiSrc.LastWriteTimeUtc > fiTgt.LastWriteTimeUtc)
+                            {
+                                needCopy = true;
+                            }
+                        }
+
+                        if (needCopy)
+                        {
+                            try
+                            {
+                                File.Copy(source, target, true);
+                            }
+                            catch { }
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static bool RestoreFromShadowVault(string appDir)
+        {
+            try
+            {
+                if (!Directory.Exists(ShadowVaultDir)) return false;
+
+                // Gölge kasada tüm dosyalar tam mı kontrol et
+                foreach (var file in RequiredCoreFiles)
+                {
+                    string vaultFile = Path.Combine(ShadowVaultDir, file);
+                    if (!File.Exists(vaultFile) || new FileInfo(vaultFile).Length == 0)
+                    {
+                        return false; // Gölge kasa da eksik
+                    }
+                }
+
+                // Tüm dosyaları geri yükle
+                foreach (var file in RequiredCoreFiles)
+                {
+                    string vaultFile = Path.Combine(ShadowVaultDir, file);
+                    string appFile = Path.Combine(appDir, file);
+
+                    bool needRestore = false;
+                    if (!File.Exists(appFile))
+                    {
+                        needRestore = true;
+                    }
+                    else
+                    {
+                        var fiApp = new FileInfo(appFile);
+                        if (fiApp.Length == 0) needRestore = true;
+                    }
+
+                    if (needRestore)
+                    {
+                        try
+                        {
+                            File.Copy(vaultFile, appFile, true);
+                            LogDebug($"[GÖLGE KASA] Dosya onarıldı: {file}");
+                        }
+                        catch (Exception ex)
+                        {
+                            LogDebug($"[GÖLGE KASA HATA] {file} kopyalanamadı: {ex.Message}");
+                        }
+                    }
+                }
+
+                return !IsAppCorrupted(appDir, out _);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        // =========================================================================
+        // KERNEL DOSYA KİLİTLERİ (Sharing Violation)
+        // =========================================================================
+
+        private static void LockAllCoreFiles(string dirPath)
+        {
+            lock (_lockObj)
+            {
+                if (_activeKernelLocks.Count > 0) return;
+
+                try
+                {
+                    if (!Directory.Exists(dirPath)) return;
+
+                    var files = Directory.GetFiles(dirPath);
+                    foreach (var file in files)
+                    {
+                        string ext = Path.GetExtension(file).ToLowerInvariant();
+                        string fileName = Path.GetFileName(file);
+
+                        if (fileName.StartsWith("TahtaUpdate", StringComparison.OrdinalIgnoreCase) ||
+                            fileName.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) ||
+                            fileName.EndsWith(".log", StringComparison.OrdinalIgnoreCase) ||
+                            fileName.EndsWith(".sig", StringComparison.OrdinalIgnoreCase) ||
+                            fileName.EndsWith(".new", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        if (ext == ".dll" || ext == ".exe" || ext == ".json" || ext == ".config" || ext == ".lock")
+                        {
+                            try
+                            {
+                                var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.None);
+                                _activeKernelLocks.Add(fs);
+                            }
+                            catch { }
+                        }
+                    }
+
+                    string anchor = Path.Combine(dirPath, ".protection.lock");
+                    try
+                    {
+                        var fsAnchor = new FileStream(anchor, FileMode.OpenOrCreate, FileAccess.Read, FileShare.Read);
+                        _activeKernelLocks.Add(fsAnchor);
+                    }
+                    catch { }
+                }
+                catch { }
+            }
+        }
+
+        private static void ReleaseCoreFileLocks()
+        {
+            lock (_lockObj)
+            {
+                foreach (var stream in _activeKernelLocks)
+                {
+                    try { stream.Dispose(); } catch { }
+                }
+                _activeKernelLocks.Clear();
+            }
+        }
+
+        // =========================================================================
+        // GÖREV YÖNETİCİSİ KALICI KISITLAMASI & AKTİF AVCISI
+        // =========================================================================
+
+        private static void EnforceDisableTaskMgr()
+        {
+            try
+            {
+                using var rk = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\System");
+                rk?.SetValue("DisableTaskMgr", 1, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            try
+            {
+                using var rkLm = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System");
+                rkLm?.SetValue("DisableTaskMgr", 1, RegistryValueKind.DWord);
+            }
+            catch { }
+        }
+
+        private static void StartTaskManagerKiller()
+        {
+            if (_isKillerRunning) return;
+            _isKillerRunning = true;
+
+            _taskManagerKillerThread = new Thread(() =>
+            {
+                string[] forbiddenProcesses = { "taskmgr", "procexp", "procexp64", "processhacker", "ProcessHacker" };
+                int loopCounter = 0;
+
+                while (_isKillerRunning)
+                {
+                    try
+                    {
+                        foreach (var name in forbiddenProcesses)
+                        {
+                            var procs = Process.GetProcessesByName(name);
+                            if (procs.Length > 0)
+                            {
+                                foreach (var p in procs)
+                                {
+                                    try
+                                    {
+                                        p.Kill();
+                                        p.Dispose();
+                                    }
+                                    catch { }
+                                }
+                            }
+                        }
+
+                        loopCounter++;
+                        if (loopCounter % 40 == 0)
+                        {
+                            EnforceDisableTaskMgr();
+                        }
+                    }
+                    catch { }
+
+                    Thread.Sleep(50);
+                }
+            })
+            {
+                IsBackground = true,
+                Priority = ThreadPriority.AboveNormal,
+                Name = "Watchdog_TaskManagerKiller"
+            };
+
+            _taskManagerKillerThread.Start();
+        }
+
+        private static void StopTaskManagerKiller()
+        {
+            _isKillerRunning = false;
+        }
+
+        // =========================================================================
+        // DOSYA BÜTÜNLÜĞÜ VE ONARIM
+        // =========================================================================
+
         public static bool IsAppCorrupted(string appDir, out string reason)
         {
             reason = string.Empty;
@@ -242,14 +574,9 @@ namespace WatchdogService
             return false;
         }
 
-        /// <summary>
-        /// Hasar tespiti durumunda onarımı tetikler.
-        /// TahtaRepair.exe mevcutsa tam ekran kurtarma modunda onu çalıştırır;
-        /// TahtaRepair.exe de silinmişse bekçi doğrudan sunucudan en güncel paketi indirip onarımı tamamlar.
-        /// </summary>
         private static void TriggerRepair(string appDir, string reason)
         {
-            LogDebug($"[BÜTÜNLÜK İHLALİ] {reason}. Onarım mekanizması devreye giriyor...");
+            LogDebug($"[ONARIM BAŞLATILIYOR] {reason}");
 
             string repairExe = Path.Combine(appDir, "TahtaRepair.exe");
             if (!File.Exists(repairExe))
@@ -257,7 +584,6 @@ namespace WatchdogService
                 repairExe = @"C:\ProgramData\AkilliTahtaKilitSistemi\TahtaRepair.exe";
             }
 
-            // 1. ADIM: TahtaRepair.exe mevcutsa çalıştır
             if (File.Exists(repairExe))
             {
                 try
@@ -271,38 +597,29 @@ namespace WatchdogService
                             WorkingDirectory = Path.GetDirectoryName(repairExe) ?? appDir
                         };
                         Process.Start(repairInfo);
-                        LogDebug($"TahtaRepair.exe başarıyla tetiklendi. Parametre: --auto-recovery \"{appDir}\"");
                         Thread.Sleep(5000);
                         return;
                     }
                 }
                 catch (Exception ex)
                 {
-                    LogDebug($"TahtaRepair.exe başlatılamadı ({ex.Message}). Acil durum onarımı devreye giriyor.");
+                    LogDebug($"TahtaRepair.exe başlatılamadı ({ex.Message}).");
                 }
             }
 
-            // 2. ADIM: TahtaRepair.exe yoksa veya silinmişse -> Bekçi doğrudan sunucudan en güncel paketi indirip kurtarır!
             ExecuteEmergencyRecovery(appDir);
         }
 
-        /// <summary>
-        /// TahtaRepair.exe bile silinmişse devreye giren en üst düzey yedek onarım motoru.
-        /// Sunucudan (Oracle VM veya Fallback Cloud) en son yayın paketini çeker, açar ve sistemi ayağa kaldırır.
-        /// </summary>
         private static void ExecuteEmergencyRecovery(string appDir)
         {
-            LogDebug("[ACİL DURUM ONARIMI] TahtaRepair bulunamadı veya hasarlı. Watchdog doğrudan sunucu ile eşitleniyor...");
+            LogDebug("[ACİL DURUM ONARIMI] Sunucudan paket indiriliyor...");
 
-            // Watchdog ve updater çakışmasını önle
             using (Mutex updateMutex = new Mutex(true, @"Global\TahtaGuncelleniyor", out bool createdNew))
             {
                 try
                 {
-                    // Çalışan Kiosk sürecini durdur
                     KillProcess("KioskLockApp");
 
-                    // En son sürüm bilgisini sunuculardan sorgula
                     var (downloadUrl, version) = FetchLatestReleaseInfoAsync().GetAwaiter().GetResult();
 
                     if (string.IsNullOrEmpty(downloadUrl))
@@ -311,19 +628,15 @@ namespace WatchdogService
                         return;
                     }
 
-                    LogDebug($"[ACİL DURUM ONARIMI] En güncel sürüm bulundu: v{version}. İndiriliyor: {downloadUrl}");
-
                     string tempZip = Path.Combine(Path.GetTempPath(), $"TahtaEmergency_{version}_{Guid.NewGuid():N}.zip");
                     DownloadFile(downloadUrl, tempZip);
 
                     if (!File.Exists(tempZip) || new FileInfo(tempZip).Length < 1024)
                     {
-                        LogDebug("[ACİL DURUM ONARIMI HATA] İndirilen paket geçersiz veya bozuk!");
+                        LogDebug("[ACİL DURUM ONARIMI HATA] İndirilen paket geçersiz!");
                         return;
                     }
 
-                    // Dosyaları çıkart
-                    LogDebug($"[ACİL DURUM ONARIMI] Paket {appDir} dizinine çıkartılıyor...");
                     using (ZipArchive archive = ZipFile.OpenRead(tempZip))
                     {
                         foreach (ZipArchiveEntry entry in archive.Entries)
@@ -337,7 +650,6 @@ namespace WatchdogService
                                 Directory.CreateDirectory(destDir);
                             }
 
-                            // Çalışan Watchdog exe'si kilitli olacağından WatchdogService.exe.new olarak bırakabiliriz
                             if (entry.Name.Equals("WatchdogService.exe", StringComparison.OrdinalIgnoreCase))
                             {
                                 try
@@ -368,12 +680,10 @@ namespace WatchdogService
 
                     try { File.Delete(tempZip); } catch { }
 
-                    LogDebug("[ACİL DURUM ONARIMI] Dosyalar başarıyla geri yüklendi. Kiosk yeniden başlatılıyor.");
-
-                    // Klasör korumasını yeniden sağla
                     EnforceFolderProtection(appDir);
+                    LockAllCoreFiles(appDir);
+                    SyncShadowVault(appDir);
 
-                    // KioskLockApp'i başlat
                     string kioskExe = Path.Combine(appDir, "KioskLockApp.exe");
                     if (File.Exists(kioskExe))
                     {
@@ -393,7 +703,6 @@ namespace WatchdogService
 
         private static async Task<(string downloadUrl, string version)> FetchLatestReleaseInfoAsync()
         {
-            // 1. Oracle Cloud Always Free VM
             try
             {
                 var primary = await QueryAppVersionServer(SUPABASE_URL, SUPABASE_KEY);
@@ -401,7 +710,6 @@ namespace WatchdogService
             }
             catch { }
 
-            // 2. Cloud Supabase Fallback
             try
             {
                 var fallback = await QueryAppVersionServer(FALLBACK_URL, FALLBACK_KEY);
@@ -458,7 +766,6 @@ namespace WatchdogService
         {
             try
             {
-                // 1. Registry'den oku
                 using (var rk = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", false))
                 {
                     if (rk != null)
@@ -475,11 +782,9 @@ namespace WatchdogService
             }
             catch { }
 
-            // 2. Standart ProgramData
             string defaultDir = @"C:\ProgramData\AkilliTahtaKilitSistemi";
             if (Directory.Exists(defaultDir)) return defaultDir;
 
-            // 3. Çalıştığı klasör
             return AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
         }
 
@@ -510,6 +815,31 @@ namespace WatchdogService
             try
             {
                 if (!File.Exists(kioskExePath)) return;
+
+                // 1. Önce HKLM'de (Tüm Kullanıcılar) kayıt var mı kontrol et
+                bool existsInHklm = false;
+                try
+                {
+                    using var rkLm = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", false);
+                    if (rkLm?.GetValue(rkName) != null)
+                    {
+                        existsInHklm = true;
+                    }
+                }
+                catch { }
+
+                // Eğer HKLM'de zaten kayıtlıysa, HKCU'daki mükerrer kaydı sil ki Windows çift açmasın!
+                if (existsInHklm)
+                {
+                    try
+                    {
+                        using var rkCu = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
+                        rkCu?.DeleteValue(rkName, false);
+                    }
+                    catch { }
+                    return;
+                }
+
                 using var rk = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
                 if (rk != null)
                 {
@@ -520,6 +850,23 @@ namespace WatchdogService
                         LogDebug($"Başlangıç kayıt defteri anahtarı güvenceye alındı: {kioskExePath}");
                     }
                 }
+            }
+            catch { }
+        }
+
+        private static void DisableWindowsStartupDelay()
+        {
+            try
+            {
+                using var rk = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize");
+                rk?.SetValue("StartupDelayInMSec", 0, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            try
+            {
+                using var rkLm = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Serialize");
+                rkLm?.SetValue("StartupDelayInMSec", 0, RegistryValueKind.DWord);
             }
             catch { }
         }
@@ -557,17 +904,20 @@ namespace WatchdogService
                     }
                     catch { }
 
-                    // Varsa eski çakışan DENY kuralını kaldır
-                    RunHiddenCmd($"icacls \"{targetDir}\" /remove:d *S-1-5-32-545 /C /Q");
+                    // Varsa eski çakışan DENY kurallarını temizle
+                    RunHiddenCmd($"icacls \"{targetDir}\" /remove:d *S-1-5-32-544 /remove:d *S-1-5-32-545 /remove:d *S-1-1-0 /C /Q");
 
-                    // Ana klasör: SYSTEM ve Administrators Tam Yetki (F), Users sadece Okuma & Çalıştırma (RX)
-                    RunHiddenCmd($"icacls \"{targetDir}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX /C /Q");
+                    // SYSTEM Tam Yetki (F), Administrators Değiştirme (M), Users Sadece Okuma & Çalıştırma (RX)
+                    RunHiddenCmd($"icacls \"{targetDir}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)M /grant:r *S-1-5-32-545:(OI)(CI)RX /C /Q");
+
+                    // Administrators ve Users için AÇIK DENY (Silme Yasağı: DE, DC)
+                    RunHiddenCmd($"icacls \"{targetDir}\" /deny *S-1-5-32-544:(OI)(CI)(DE,DC) /deny *S-1-5-32-545:(OI)(CI)(DE,DC) /C /Q");
 
                     // Medya klasörünün mirasını ayır ve Users için Değiştirme (M) izni ver
                     if (Directory.Exists(mediaDir))
                     {
                         RunHiddenCmd($"icacls \"{mediaDir}\" /inheritance:d /C /Q");
-                        RunHiddenCmd($"icacls \"{mediaDir}\" /remove:d *S-1-5-32-545 /C /Q");
+                        RunHiddenCmd($"icacls \"{mediaDir}\" /remove:d *S-1-5-32-544 /remove:d *S-1-5-32-545 /remove:d *S-1-1-0 /C /Q");
                         RunHiddenCmd($"icacls \"{mediaDir}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)M /C /Q");
                     }
                 }

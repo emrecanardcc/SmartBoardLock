@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -47,6 +47,11 @@ namespace KioskLockApp.Services
 
                         // Updater'ın çalışıp Mutex'i alabilmesi için 1 saniye mola ver
                         await Task.Delay(1000);
+
+                        // Anti-tamper kilitlerini ve dosya akışlarını güncelleme için serbest bırak
+                        try { FolderSecurityHelper.ReleaseCoreFileLocks(); } catch { }
+                        try { FolderSecurityHelper.StopTaskManagerKiller(); } catch { }
+                        try { Core.ProcessSecurity.UnprotectCurrentProcess(); } catch { }
 
                         // Kendini kapat ki dosyalar ezilebilsin
                         Environment.Exit(0);

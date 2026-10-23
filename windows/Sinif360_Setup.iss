@@ -61,12 +61,12 @@ Source: "C:\Projeler\AkilliTahtaSistemi\dist\v2.1.2_publish\*"; DestDir: "{app}"
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 
 [Registry]
-; BAŞLANGIÇ (Tüm Kullanıcılar - HKLM): Hem ana kilit hem bekçi servisi başlangıca eklenir
+; BAŞLANGIÇ (Tüm Kullanıcılar - HKLM): Hem ana kilit hem bekçi servisi tekil olarak başlangıca eklenir
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "AkilliTahtaKilitSistemi"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "AkilliTahtaWatchdog"; ValueData: """{app}\{#MyWatchdogExeName}"""; Flags: uninsdeletevalue
-
-; BAŞLANGIÇ (Geçerli Kullanıcı - HKCU): Watchdog ve Kiosk güvenliği için kullanıcı kancası
-Root: HKCU; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "AkilliTahtaKilitSistemi"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue
+; BAŞLANGIÇ GECİKMESİ SIFIRLAMA (Windows Explorer 10-15 saniyelik başlangıç gecikmesini sıfırlar)
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Serialize"; ValueType: dword; ValueName: "StartupDelayInMSec"; ValueData: 0; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize"; ValueType: dword; ValueName: "StartupDelayInMSec"; ValueData: 0; Flags: uninsdeletevalue
 
 [Run]
 ; Kurulum tamamlandığında önce bekçi servisini, ardından kilit uygulamasını arka planda başlatır
@@ -221,14 +221,17 @@ begin
     ForceDirectories(ExpandConstant('{app}\Media\Default'));
     ForceDirectories(ExpandConstant('{app}\Media\Announcements'));
     // 2. İzinleri sıfırla ve varsa eski DENY kuralını kaldır
-    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /remove:d *S-1-5-32-545 /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    // 3. SYSTEM ve Administrators için Tam Denetim, Standart Kullanıcılar (Öğrenciler) için Salt Okuma/Çalıştırma (RX)
-    //    (RX yetkisi altında öğrenciler dosyaları silemez, değiştiremez veya yeniden adlandıramaz)
-    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)RX /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    // 4. Medya (Afiş/Duyuru önbelleği) klasörünün mirasını ayır ve Users için Değiştirme (M) izni tanımla
-    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}\Media') + '" /inheritance:d /remove:d *S-1-5-32-545 /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)M /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    // 5. Klasörü Sistem ve Gizli olarak işaretle (Dosya Gezgini'nde varsayılan görünmez)
+    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /remove:d *S-1-5-32-544 /remove:d *S-1-5-32-545 /remove:d *S-1-1-0 /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // 3. SYSTEM için Tam Denetim, Administrators için Değiştirme (M), Users için Salt Okuma/Çalıştırma (RX)
+    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)M /grant:r *S-1-5-32-545:(OI)(CI)RX /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // 4. Administrators ve Users için AÇIK DENY (Silme Yasağı: DE, DC)
+    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /deny *S-1-5-32-544:(OI)(CI)(DE,DC) /deny *S-1-5-32-545:(OI)(CI)(DE,DC) /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // 5. Medya (Afiş/Duyuru önbelleği) klasörünün mirasını ayır ve Users için Değiştirme (M) izni tanımla
+    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}\Media') + '" /inheritance:d /remove:d *S-1-5-32-544 /remove:d *S-1-5-32-545 /remove:d *S-1-1-0 /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)M /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // 6. Klasörü Sistem ve Gizli olarak işaretle (Dosya Gezgini'nde varsayılan görünmez)
     Exec('cmd.exe', '/c attrib +s +h "' + ExpandConstant('{app}') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // 7. Windows Logon Zamanlanmış Görevi Tanımla (Oturum açıldığı AN 0ms gecikmeyle en yüksek yetkiyle başlar)
+    Exec('schtasks.exe', '/create /tn "Sinif360_InstantKiosk" /tr "\"' + ExpandConstant('{app}\{#MyAppExeName}') + '\"" /sc onlogon /rl highest /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;
 
@@ -267,6 +270,15 @@ begin
     RegDeleteValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'AkilliTahtaWatchdog');
     RegDeleteValue(HKEY_CURRENT_USER, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'AkilliTahtaKilitSistemi');
     RegDeleteValue(HKEY_CURRENT_USER, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'AkilliTahtaWatchdog');
+
+    // 3.5 ADIM: Görev Yöneticisi kısıtlamalarını ve dosya NTFS kilitlerini kaldır
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Policies\System', 'DisableTaskMgr');
+    RegDeleteValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System', 'DisableTaskMgr');
+    Exec('schtasks.exe', '/delete /tn "Sinif360_InstantKiosk" /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /remove:d *S-1-5-32-544 /remove:d *S-1-5-32-545 /remove:d *S-1-1-0 /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /grant *S-1-5-32-544:(OI)(CI)F /grant *S-1-5-32-545:(OI)(CI)M /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('cmd.exe', '/c attrib -s -h "' + ExpandConstant('{app}') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('cmd.exe', '/c rmdir /s /q "C:\ProgramData\Microsoft\Crypto\Keys\Sinif360_Vault"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
     // 4. ADIM: Sonradan oluşan log, afiş, temp zip dosyalarını ve klasörü tamamen temizle
     DelTree(ExpandConstant('{app}'), True, True, True);
