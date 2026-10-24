@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/app_version_model.dart';
 import '../../data/models/board_model.dart';
@@ -360,7 +361,7 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
           ),
           child: Row(
             children: [
-              // 1. Aktif Sürüm
+              // 1. Sunucu ve Panel Sürümü
               Expanded(
                 child: Row(
                   children: [
@@ -370,7 +371,7 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
                         color: AppColors.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.rocket_launch_rounded,
+                      child: const Icon(Icons.dns_rounded,
                           color: AppColors.primary, size: 22),
                     ),
                     const SizedBox(width: 12),
@@ -378,24 +379,64 @@ class _SuperVersionsScreenState extends State<SuperVersionsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Aktif Hedef Sürüm',
+                          Text('Sunucu & Panel',
                               style: GoogleFonts.inter(
                                   fontSize: 11,
                                   color: AppColors.textLight,
                                   fontWeight: FontWeight.w500)),
                           Text(
-                              _latestVersionNumber != null
-                                  ? 'v$_latestVersionNumber'
-                                  : 'Belirlenmedi',
+                              AppConstants.serverVersion,
                               style: GoogleFonts.inter(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w800,
-                                  color: AppColors.textDark),
+                                  color: AppColors.primary),
                               overflow: TextOverflow.ellipsis),
                         ],
                       ),
                     ),
                   ],
+                ),
+              ),
+              Container(width: 1, height: 36, color: AppColors.border),
+              // 2. Aktif Hedef Tahta Sürümü
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.rocket_launch_rounded,
+                            color: Color(0xFF8B5CF6), size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Tahta Hedef Sürüm',
+                                style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: AppColors.textLight,
+                                    fontWeight: FontWeight.w500)),
+                            Text(
+                                _latestVersionNumber != null
+                                    ? 'v$_latestVersionNumber'
+                                    : 'Belirlenmedi',
+                                style: GoogleFonts.inter(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textDark),
+                                overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               Container(width: 1, height: 36, color: AppColors.border),

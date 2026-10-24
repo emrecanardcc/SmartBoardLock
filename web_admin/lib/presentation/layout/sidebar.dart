@@ -1,6 +1,7 @@
 // lib/presentation/layout/sidebar.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 
 class SidebarItem {
@@ -117,6 +118,11 @@ class AppSidebar extends StatelessWidget {
 
           const Divider(color: Color(0xFF1E293B), height: 1),
           const SizedBox(height: 8),
+
+          // Sunucu Sürüm Bilgisi
+          _SidebarServerVersion(isCollapsed: isCollapsed),
+
+          const SizedBox(height: 4),
 
           // Daralt / Genişlet butonu
           Padding(
@@ -304,6 +310,93 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarServerVersion extends StatelessWidget {
+  final bool isCollapsed;
+  const _SidebarServerVersion({required this.isCollapsed});
+
+  @override
+  Widget build(BuildContext context) {
+    if (isCollapsed) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Tooltip(
+          message:
+              'Sınıf360 Sunucu: ${AppConstants.serverVersion}\nDurum: ${AppConstants.serverStatus}\n${AppConstants.serverHost}',
+          child: Container(
+            height: 32,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.bgSidebarHover,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              AppConstants.serverVersion,
+              style: const TextStyle(
+                color: AppColors.sidebarText,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF131D2E),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFF1E293B)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: AppColors.success,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Sunucu ${AppConstants.serverVersion}',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    'Sistem Güncel',
+                    style: TextStyle(
+                      color: AppColors.sidebarText,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.cloud_done_rounded,
+              color: AppColors.success,
+              size: 16,
+            ),
+          ],
         ),
       ),
     );

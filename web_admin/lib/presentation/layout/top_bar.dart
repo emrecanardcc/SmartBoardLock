@@ -1,6 +1,7 @@
 // lib/presentation/layout/top_bar.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/user_profile_model.dart';
 import '../../data/providers/auth_provider.dart';
@@ -46,6 +47,11 @@ class _TopBarState extends State<TopBar> {
 
           // Realtime bağlantı göstergesi
           _RealtimeIndicator(connected: _isRealtimeConnected),
+
+          const SizedBox(width: 12),
+
+          // Sunucu Sürüm Rozeti
+          const _ServerVersionBadge(),
 
           const SizedBox(width: 16),
 
@@ -341,6 +347,48 @@ class _UserChip extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ServerVersionBadge extends StatelessWidget {
+  const _ServerVersionBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message:
+          'Sınıf360 Sunucu & Panel Sürümü: ${AppConstants.serverVersion}\nSunucu: ${AppConstants.serverHost}\nSon Güncelleme: ${AppConstants.serverReleaseDate}\nDurum: ${AppConstants.serverStatus}',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.25),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.dns_rounded,
+              size: 13,
+              color: AppColors.primary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Sunucu: ${AppConstants.serverVersion}',
+              style: const TextStyle(
+                color: AppColors.primary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
