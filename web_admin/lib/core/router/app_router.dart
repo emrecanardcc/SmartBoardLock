@@ -16,6 +16,7 @@ import '../../presentation/screens/teachers_manage_screen.dart';
 import '../../presentation/screens/media_manage_screen.dart';
 import '../../presentation/screens/license_manage_screen.dart';
 import '../../presentation/screens/downloads_screen.dart';
+import '../../presentation/screens/database_analytics_screen.dart';
 
 class AppRouter {
   static GoRouter createRouter(BuildContext context) {
@@ -41,7 +42,8 @@ class AppRouter {
         if (!authProvider.isSuperAdmin) {
           if (state.uri.path == '/schools' ||
               state.uri.path == '/versions' ||
-              state.uri.path == '/issues') {
+              state.uri.path == '/issues' ||
+              state.uri.path == '/database') {
             return '/dashboard';
           }
         }
@@ -84,6 +86,8 @@ class AppRouter {
               title = 'Sürüm & Güncelleme';
             } else if (path == '/issues') {
               title = 'Sorun Bildirimleri';
+            } else if (path == '/database') {
+              title = 'Veritabanı & Analitik';
             } else if (path == '/license') {
               title = 'Kurumsal Lisans';
             } else if (path == '/downloads') {
@@ -143,6 +147,11 @@ class AppRouter {
               path: '/issues',
               name: 'issues',
               builder: (context, state) => const SuperIssuesScreen(),
+            ),
+            GoRoute(
+              path: '/database',
+              name: 'database',
+              builder: (context, state) => const DatabaseAnalyticsScreen(),
             ),
           ],
         ),

@@ -7,6 +7,7 @@ import '../../data/models/user_profile_model.dart';
 import '../../data/providers/auth_provider.dart';
 import '../../data/providers/school_selector_provider.dart';
 import '../../data/repositories/admin_repository.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../widgets/tips_guide_dialog.dart';
 
 class TopBar extends StatefulWidget {
@@ -67,6 +68,11 @@ class _TopBarState extends State<TopBar> {
             ),
             onPressed: () => showTipsGuideDialog(context, isSuperAdmin: authProvider.isSuperAdmin),
           ),
+
+          if (authProvider.isSuperAdmin) ...[
+            const SizedBox(width: 12),
+            const _StudioLaunchButton(),
+          ],
 
           const SizedBox(width: 14),
 
@@ -388,6 +394,36 @@ class _ServerVersionBadge extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _StudioLaunchButton extends StatelessWidget {
+  const _StudioLaunchButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Supabase Veritabanı Studio Panelini Aç (Tek Tıkla Giriş)',
+      child: ElevatedButton.icon(
+        icon: const Icon(Icons.bolt_rounded, size: 16, color: Color(0xFFFACC15)),
+        label: const Text(
+          '⚡ Veritabanı Studio',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF0F172A),
+          foregroundColor: Colors.white,
+          side: const BorderSide(color: Color(0xFF334155)),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          elevation: 0,
+        ),
+        onPressed: () async {
+          final uri = Uri.parse(AppConstants.studioLaunchUrl);
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        },
       ),
     );
   }

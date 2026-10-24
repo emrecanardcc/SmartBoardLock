@@ -9,6 +9,7 @@ import '../models/user_profile_model.dart';
 import '../models/app_version_model.dart';
 import '../models/broadcast_package_model.dart';
 import '../models/support_ticket_model.dart';
+import '../models/database_analytics_model.dart';
 import '../../core/constants/app_constants.dart';
 
 class AdminRepository {
@@ -1655,5 +1656,51 @@ class AdminRepository {
   /// Destek talebini siler
   Future<void> deleteSupportTicket(String ticketId) async {
     await _db.from('support_tickets').delete().eq('id', ticketId);
+  }
+
+  // =========================================================================
+  // VERİTABANI ANALİTİK & TELEMETRİ METOTLARI
+  // =========================================================================
+
+  /// Veritabanı Telemetri ve Analitik verilerini çeker (<10ms RPC)
+  Future<DatabaseAnalyticsModel> getDatabaseAnalytics() async {
+    final res = await _db.rpc('admin_get_database_analytics');
+    if (res is Map<String, dynamic>) {
+      return DatabaseAnalyticsModel.fromMap(res);
+    }
+    if (res is Map) {
+      return DatabaseAnalyticsModel.fromMap(Map<String, dynamic>.from(res));
+    }
+    if (res is String) {
+      final decoded = jsonDecode(res);
+      if (decoded is Map<String, dynamic>) {
+        return DatabaseAnalyticsModel.fromMap(decoded);
+      }
+      if (decoded is Map) {
+        return DatabaseAnalyticsModel.fromMap(Map<String, dynamic>.from(decoded));
+      }
+    }
+    throw Exception('Geçersiz veritabanı analitik yanıtı');
+  }
+
+  /// Aktif veritabanı oturumunu sonlandırır
+  Future<bool> cancelBackendProcess(int targetPid) async {
+    final res = await _db.rpc('admin_cancel_backend', params: {'target_pid': targetPid});
+    if (res is Map && res['success'] == true) return true;
+    return false;
+  }
+
+  /// Veritabanı istatistik sayaçlarını sıfırlar
+  Future<bool> resetDatabaseStats() async {
+    final res = await _db.rpc('admin_reset_stats');
+    if (res is Map && res['success'] == true) return true;
+    return false;
+  }
+
+  /// Belirtilen tablo için PostgreSQL ANALYZE işlemini tetikler
+  Future<bool> triggerTableAnalyze(String tableName) async {
+    final res = await _db.rpc('admin_trigger_analyze', params: {'table_name': tableName});
+    if (res is Map && res['success'] == true) return true;
+    return false;
   }
 }
