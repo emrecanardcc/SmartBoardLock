@@ -74,8 +74,15 @@ class _TopBarState extends State<TopBar> {
   }
 
   String _getSchoolName(UserProfileModel? user, SchoolSelectorProvider selector) {
+    if (user != null && !user.isSuperAdmin) {
+      if (user.schoolName != null && user.schoolName!.isNotEmpty) {
+        return user.schoolName!;
+      }
+      if (selector.selectedSchool != null) return selector.selectedSchool!.name;
+      return 'Okul Yönetimi';
+    }
     if (selector.selectedSchool != null) return selector.selectedSchool!.name;
-    return 'Sınıf360';
+    return 'Sınıf360 (Tüm Sistem)';
   }
 }
 

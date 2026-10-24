@@ -50,9 +50,14 @@ class WebAdminApp extends StatelessWidget {
               previous ?? AuthProvider(repo),
         ),
 
-        // Süper Admin okul seçici
-        ChangeNotifierProvider<SchoolSelectorProvider>(
+        // Süper Admin okul seçici (Kullanıcı oturumuyla senkronize çalışır)
+        ChangeNotifierProxyProvider<AuthProvider, SchoolSelectorProvider>(
           create: (_) => SchoolSelectorProvider(),
+          update: (context, auth, previous) {
+            final selector = previous ?? SchoolSelectorProvider();
+            selector.syncWithAuth(auth);
+            return selector;
+          },
         ),
       ],
       child: const _AppWithRouter(),

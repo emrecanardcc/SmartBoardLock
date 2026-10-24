@@ -44,6 +44,11 @@ const List<SidebarItem> _sidebarItems = [
     route: '/license',
   ),
   SidebarItem(
+    label: 'Uygulama İndir',
+    icon: Icons.download_rounded,
+    route: '/downloads',
+  ),
+  SidebarItem(
     label: 'Okul Yönetimi',
     icon: Icons.school_rounded,
     route: '/schools',

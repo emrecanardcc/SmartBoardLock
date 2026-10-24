@@ -81,6 +81,13 @@ class AdminRepository {
   /// Tüm okulları, bağlı tahta ve öğretmen sayılarıyla birlikte ultra-hızlı çeker
   Future<List<SchoolModel>> getSchools() async {
     try {
+      final caller = await getCurrentUserProfile();
+      if (caller != null && !caller.isSuperAdmin) {
+        if (caller.schoolId == null) return [];
+        final school = await getSchoolDetails(caller.schoolId!);
+        return school != null ? [school] : [];
+      }
+
       // 3 paralel sorgu: Okullar, tüm tahtaların okul id'leri ve tüm profiller (_db ile RLS'siz saf service-role)
       final results = await Future.wait([
         _db.from('schools').select().order('name', ascending: true),
@@ -143,6 +150,10 @@ class AdminRepository {
     String? licenseNotes,
   }) async {
     try {
+      final caller = await getCurrentUserProfile();
+      if (caller == null || !caller.isSuperAdmin) {
+        throw Exception('Yetkisiz işlem: Bu işlem yalnızca Sistem Yöneticisi tarafından yapılabilir.');
+      }
       final payload = <String, dynamic>{
         'name': name.trim(),
         'city': city.trim(),
@@ -171,6 +182,10 @@ class AdminRepository {
     String? licenseNotes,
   }) async {
     try {
+      final caller = await getCurrentUserProfile();
+      if (caller == null || !caller.isSuperAdmin) {
+        throw Exception('Yetkisiz işlem: Bu işlem yalnızca Sistem Yöneticisi tarafından yapılabilir.');
+      }
       final payload = <String, dynamic>{
         'name': name.trim(),
         'city': city.trim(),
@@ -196,6 +211,10 @@ class AdminRepository {
     String? licenseNotes,
   }) async {
     try {
+      final caller = await getCurrentUserProfile();
+      if (caller == null || !caller.isSuperAdmin) {
+        throw Exception('Yetkisiz işlem: Bu işlem yalnızca Sistem Yöneticisi tarafından yapılabilir.');
+      }
       final payload = <String, dynamic>{
         'is_licensed': isLicensed,
         'license_expires_at': licenseExpiresAt.toIso8601String(),
@@ -214,6 +233,10 @@ class AdminRepository {
 
   Future<void> deleteSchool(String schoolId) async {
     try {
+      final caller = await getCurrentUserProfile();
+      if (caller == null || !caller.isSuperAdmin) {
+        throw Exception('Yetkisiz işlem: Bu işlem yalnızca Sistem Yöneticisi tarafından yapılabilir.');
+      }
       await _db.from('schools').delete().eq('id', schoolId);
     } catch (e) {
       debugPrint('deleteSchool error: $e');
@@ -254,7 +277,7 @@ class AdminRepository {
     try {
       final results = await Future.wait<dynamic>([
         _db.from('schools').select().eq('id', schoolId).maybeSingle(),
-        _db.from('boards').select('id, is_online, is_locked').eq('school_id', schoolId),
+        _db.from('boards').select('id, is_unlocked, last_ping_at, is_active').eq('school_id', schoolId),
         _db.from('user_profiles').select('id, role').eq('school_id', schoolId),
       ]);
 
@@ -300,12 +323,17 @@ class AdminRepository {
         .map((rows) => rows.map((m) => BoardModel.fromMap(m)).toList());
   }
 
-  /// Tüm tahtaları çek (Sistem Yöneticisi için filtre yok)
+  /// Tüm tahtaları çek (Sistem Yöneticisi için filtre yok; Müdürler için sadece kendi okulu)
   Future<List<BoardModel>> getBoards(String? schoolId) async {
     try {
+      final caller = await getCurrentUserProfile();
+      String? effectiveSchoolId = schoolId;
+      if (caller != null && !caller.isSuperAdmin) {
+        effectiveSchoolId = caller.schoolId;
+      }
       var query = _db.from('boards').select();
-      if (schoolId != null) {
-        query = query.eq('school_id', schoolId);
+      if (effectiveSchoolId != null) {
+        query = query.eq('school_id', effectiveSchoolId);
       }
       final data = await query.order('name', ascending: true);
       return (data as List)
@@ -322,6 +350,13 @@ class AdminRepository {
     required bool newUnlocked,
     required String actorName,
   }) async {
+    final caller = await getCurrentUserProfile();
+    if (caller != null && !caller.isSuperAdmin) {
+      final board = await _db.from('boards').select('school_id').eq('id', boardId).maybeSingle();
+      if (board == null || board['school_id'] != caller.schoolId) {
+        throw Exception('Yetkisiz işlem: Yalnızca kendi okulunuzdaki tahtaları kilitleyebilir/açabilirsiniz.');
+      }
+    }
     final updateData = <String, dynamic>{'is_unlocked': newUnlocked};
     if (newUnlocked) {
       updateData['last_unlocked_by'] = actorName;
@@ -335,13 +370,19 @@ class AdminRepository {
     required String schoolId,
     required String actorName,
   }) async {
+    final caller = await getCurrentUserProfile();
+    String effectiveSchoolId = schoolId;
+    if (caller != null && !caller.isSuperAdmin) {
+      if (caller.schoolId == null) throw Exception('Yetkisiz işlem: Okulunuz tanımlı değil.');
+      effectiveSchoolId = caller.schoolId!;
+    }
     await _db
         .from('boards')
         .update({
           'is_unlocked': false,
           'last_locked_by': 'Yönetici (Web Panel)',
         })
-        .eq('school_id', schoolId)
+        .eq('school_id', effectiveSchoolId)
         .eq('is_active', true);
   }
 
@@ -349,13 +390,19 @@ class AdminRepository {
     required String schoolId,
     required String actorName,
   }) async {
+    final caller = await getCurrentUserProfile();
+    String effectiveSchoolId = schoolId;
+    if (caller != null && !caller.isSuperAdmin) {
+      if (caller.schoolId == null) throw Exception('Yetkisiz işlem: Okulunuz tanımlı değil.');
+      effectiveSchoolId = caller.schoolId!;
+    }
     await _db
         .from('boards')
         .update({
           'is_unlocked': true,
           'last_unlocked_by': 'Yönetici (Web Panel)',
         })
-        .eq('school_id', schoolId)
+        .eq('school_id', effectiveSchoolId)
         .eq('is_active', true);
   }
 
@@ -367,6 +414,13 @@ class AdminRepository {
     int? autoLockMinutes,
     required bool isActive,
   }) async {
+    final caller = await getCurrentUserProfile();
+    if (caller != null && !caller.isSuperAdmin) {
+      final board = await _db.from('boards').select('school_id').eq('id', boardId).maybeSingle();
+      if (board == null || board['school_id'] != caller.schoolId) {
+        throw Exception('Yetkisiz işlem: Yalnızca kendi okulunuzdaki tahtaları güncelleyebilirsiniz.');
+      }
+    }
     final data = <String, dynamic>{
       'name': name.trim(),
       'grade': grade?.trim() ?? '',
@@ -380,6 +434,13 @@ class AdminRepository {
   }
 
   Future<void> deleteBoard(String boardId) async {
+    final caller = await getCurrentUserProfile();
+    if (caller != null && !caller.isSuperAdmin) {
+      final board = await _db.from('boards').select('school_id').eq('id', boardId).maybeSingle();
+      if (board == null || board['school_id'] != caller.schoolId) {
+        throw Exception('Yetkisiz işlem: Yalnızca kendi okulunuzdaki tahtaları silebilirsiniz.');
+      }
+    }
     await _db.from('boards').delete().eq('id', boardId);
   }
 
@@ -442,6 +503,15 @@ class AdminRepository {
     String? branch,
     int? autoLockMinutes,
   }) async {
+    final caller = await getCurrentUserProfile();
+    String effectiveSchoolId = schoolId;
+    if (caller != null && !caller.isSuperAdmin) {
+      if (caller.schoolId == null) {
+        throw Exception('Yetkisiz işlem: Hesabınıza tanımlı bir okul bulunamadı.');
+      }
+      effectiveSchoolId = caller.schoolId!;
+    }
+
     // 1. Pairing kaydını bul
     final pairingData = await _client
         .from('board_pairings')
@@ -459,7 +529,7 @@ class AdminRepository {
 
     // 3. Boards tablosuna ekle
     final insertData = <String, dynamic>{
-      'school_id': schoolId,
+      'school_id': effectiveSchoolId,
       'name': name.trim(),
       'grade': grade?.trim() ?? '',
       'branch': branch?.trim() ?? '',
@@ -532,11 +602,16 @@ class AdminRepository {
   /// Okul müdürlerini (admin) listenin EN BAŞINA koyar, ardından öğretmenleri alfabetik sıralar.
   Future<List<UserProfileModel>> getUsers(String? schoolId) async {
     try {
-      final cleanSchoolId = (schoolId != null &&
+      final caller = await getCurrentUserProfile();
+      String? cleanSchoolId = (schoolId != null &&
               schoolId.trim().isNotEmpty &&
               schoolId.trim() != 'null')
           ? schoolId.trim()
           : null;
+
+      if (caller != null && !caller.isSuperAdmin) {
+        cleanSchoolId = caller.schoolId;
+      }
 
       // 1. Profil, okul listesi ve e-posta haritasını (varsa cache'den) tamamen paralel çek (_db ile RLS'siz saf service-role)
       final results = await Future.wait<dynamic>([
@@ -606,6 +681,18 @@ class AdminRepository {
     required String schoolId,
     required String role,
   }) async {
+    final caller = await getCurrentUserProfile();
+    String effectiveSchoolId = schoolId;
+    String effectiveRole = role;
+
+    if (caller != null && !caller.isSuperAdmin) {
+      if (caller.schoolId == null || caller.schoolId!.isEmpty) {
+        throw Exception('Yetkisiz işlem: Hesabınıza tanımlı bir okul bulunamadı.');
+      }
+      effectiveSchoolId = caller.schoolId!;
+      effectiveRole = 'teacher'; // Okul yöneticisi yalnızca öğretmen ekleyebilir
+    }
+
     // 1. Auth kullanıcısı oluştur (service role)
     final response = await _adminClient.auth.admin.createUser(
       AdminUserAttributes(
@@ -620,8 +707,8 @@ class AdminRepository {
     // 2. user_profiles'a ekle (_db saf service-role)
     await _db.from('user_profiles').insert({
       'id': newUserId,
-      'school_id': schoolId,
-      'role': role,
+      'school_id': effectiveSchoolId,
+      'role': effectiveRole,
       'full_name': fullName.trim(),
     });
     _cachedEmailMap = null;
@@ -633,6 +720,17 @@ class AdminRepository {
     required String newPassword,
   }) async {
     try {
+      final caller = await getCurrentUserProfile();
+      if (caller != null && !caller.isSuperAdmin) {
+        final target = await _db.from('user_profiles').select('school_id, role').eq('id', userId).maybeSingle();
+        if (target == null || target['school_id'] != caller.schoolId) {
+          throw Exception('Yetkisiz işlem: Yalnızca kendi okulunuzdaki personelin şifresini değiştirebilirsiniz.');
+        }
+        if (target['role'] == 'admin' && userId != caller.id) {
+          throw Exception('Yetkisiz işlem: Diğer yöneticilerin şifresini değiştiremezsiniz.');
+        }
+      }
+
       await _adminClient.auth.admin.updateUserById(
         userId,
         attributes: AdminUserAttributes(password: newPassword.trim()),
@@ -649,6 +747,17 @@ class AdminRepository {
     required String newEmail,
   }) async {
     try {
+      final caller = await getCurrentUserProfile();
+      if (caller != null && !caller.isSuperAdmin) {
+        final target = await _db.from('user_profiles').select('school_id, role').eq('id', userId).maybeSingle();
+        if (target == null || target['school_id'] != caller.schoolId) {
+          throw Exception('Yetkisiz işlem: Yalnızca kendi okulunuzdaki personelin e-postasını değiştirebilirsiniz.');
+        }
+        if (target['role'] == 'admin' && userId != caller.id) {
+          throw Exception('Yetkisiz işlem: Diğer yöneticilerin e-postasını değiştiremezsiniz.');
+        }
+      }
+
       await _adminClient.auth.admin.updateUserById(
         userId,
         attributes: AdminUserAttributes(
@@ -670,6 +779,22 @@ class AdminRepository {
     required String role,
     String? schoolId,
   }) async {
+    final caller = await getCurrentUserProfile();
+    if (caller != null && !caller.isSuperAdmin) {
+      final target = await _db.from('user_profiles').select('school_id, role').eq('id', userId).maybeSingle();
+      if (target == null || target['school_id'] != caller.schoolId) {
+        throw Exception('Yetkisiz işlem: Yalnızca kendi okulunuzdaki kullanıcıları düzenleyebilirsiniz.');
+      }
+      if (target['role'] == 'admin' && userId != caller.id) {
+        throw Exception('Yetkisiz işlem: Diğer yöneticilerin profilini düzenleyemezsiniz.');
+      }
+      // Müdür rol veya okul değiştiremez, sadece ismi güncelleyebilir
+      await _db.from('user_profiles').update({
+        'full_name': fullName.trim(),
+      }).eq('id', userId);
+      return;
+    }
+
     final updateData = <String, dynamic>{
       'full_name': fullName.trim(),
       'role': role,
@@ -685,6 +810,17 @@ class AdminRepository {
   /// Kullanıcıyı ve profilini sistemden kalıcı olarak sil
   Future<void> deleteUser(String userId) async {
     try {
+      final caller = await getCurrentUserProfile();
+      if (caller != null && !caller.isSuperAdmin) {
+        final target = await _db.from('user_profiles').select('school_id, role').eq('id', userId).maybeSingle();
+        if (target == null || target['school_id'] != caller.schoolId) {
+          throw Exception('Yetkisiz işlem: Yalnızca kendi okulunuzdaki kullanıcıları silebilirsiniz.');
+        }
+        if (target['role'] == 'admin') {
+          throw Exception('Yetkisiz işlem: Okul yöneticilerini silemezsiniz.');
+        }
+      }
+
       // Önce profil kaydını sil
       await _db.from('user_profiles').delete().eq('id', userId);
       // Ardından Auth kullanıcısını sil
@@ -729,6 +865,10 @@ class AdminRepository {
     required String versionNumber,
     required String downloadUrl,
   }) async {
+    final caller = await getCurrentUserProfile();
+    if (caller == null || !caller.isSuperAdmin) {
+      throw Exception('Yetkisiz işlem: Sürüm yönetimi yalnızca Sistem Yöneticisine aittir.');
+    }
     await _db.from('app_versions').insert({
       'version_number': versionNumber.trim(),
       'download_url': downloadUrl.trim(),
@@ -740,6 +880,10 @@ class AdminRepository {
     required String versionNumber,
     required String downloadUrl,
   }) async {
+    final caller = await getCurrentUserProfile();
+    if (caller == null || !caller.isSuperAdmin) {
+      throw Exception('Yetkisiz işlem: Sürüm yönetimi yalnızca Sistem Yöneticisine aittir.');
+    }
     await _db.from('app_versions').update({
       'version_number': versionNumber.trim(),
       'download_url': downloadUrl.trim(),
@@ -752,6 +896,10 @@ class AdminRepository {
     String? downloadUrl,
     String? versionNumber,
   }) async {
+    final caller = await getCurrentUserProfile();
+    if (caller == null || !caller.isSuperAdmin) {
+      throw Exception('Yetkisiz işlem: Sürüm yönetimi yalnızca Sistem Yöneticisine aittir.');
+    }
     try {
       // 1. Storage'daki ilişkili güncelleme paketini temizle
       if (downloadUrl != null && downloadUrl.isNotEmpty) {

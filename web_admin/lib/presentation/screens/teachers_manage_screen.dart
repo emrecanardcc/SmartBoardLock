@@ -131,7 +131,11 @@ class _TeachersManageScreenState extends State<TeachersManageScreen> {
         : _schools;
 
     String currentSchoolName = 'Okulunuz';
-    if (effectiveSchoolId != null) {
+    if (!isSuperAdmin &&
+        authProvider.currentUser?.schoolName != null &&
+        authProvider.currentUser!.schoolName!.isNotEmpty) {
+      currentSchoolName = authProvider.currentUser!.schoolName!;
+    } else if (effectiveSchoolId != null) {
       final matched =
           schools.where((s) => s.id == effectiveSchoolId).firstOrNull;
       if (matched != null) {

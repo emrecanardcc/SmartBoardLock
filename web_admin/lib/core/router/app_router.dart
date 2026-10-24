@@ -15,6 +15,7 @@ import '../../presentation/screens/super_issues_screen.dart';
 import '../../presentation/screens/teachers_manage_screen.dart';
 import '../../presentation/screens/media_manage_screen.dart';
 import '../../presentation/screens/license_manage_screen.dart';
+import '../../presentation/screens/downloads_screen.dart';
 
 class AppRouter {
   static GoRouter createRouter(BuildContext context) {
@@ -85,6 +86,8 @@ class AppRouter {
               title = 'Sorun Bildirimleri';
             } else if (path == '/license') {
               title = 'Kurumsal Lisans';
+            } else if (path == '/downloads') {
+              title = 'Uygulama İndir';
             } else {
               title = 'Sınıf360';
             }
@@ -120,6 +123,11 @@ class AppRouter {
               path: '/license',
               name: 'license',
               builder: (context, state) => const LicenseManageScreen(),
+            ),
+            GoRoute(
+              path: '/downloads',
+              name: 'downloads',
+              builder: (context, state) => const DownloadsScreen(),
             ),
             GoRoute(
               path: '/schools',
