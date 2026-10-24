@@ -321,5 +321,126 @@ void main() {
       expect(model.peakHours.first.percentage, equals(95));
       expect(model.executiveHealth.healthScore, equals(99.9));
     });
+
+    test('Live Oracle VM production telemetry payload parsed accurately', () {
+      final livePayload = {
+        'storage': {
+          'total_gb': 44.96,
+          'used_gb': 11.41,
+          'free_gb': 33.54,
+          'used_percent': 25.4,
+          'database_size_bytes': 15191187,
+          'database_size_pretty': '14 MB',
+          'storage_files_pretty': '5318 kB',
+          'system_files_pretty': '11.41 GB'
+        },
+        'cpu': {
+          'cores': 4,
+          'model': 'Neoverse-N1 (Ampere ARM 4 Çekirdek Cloud vCPU)',
+          'status': 'Normal & Dengeli',
+          'usage_percent': 11.8
+        },
+        'ram': {
+          'total_gb': 23.43,
+          'used_gb': 2.18,
+          'free_gb': 21.25,
+          'used_percent': 9.3,
+          'status': 'Geniş Kapasite'
+        },
+        'realtime': {
+          'total_boards': 105,
+          'connected_boards': 27,
+          'max_board_capacity': 200,
+          'board_usage_percent': 25.7,
+          'connected_users': 193,
+          'max_user_capacity': 1000,
+          'total_schools': 5,
+          'licensed_schools': 5
+        },
+        'school_comparison': [
+          {
+            'id': '828a7757-475d-4bfa-9cb8-13017db74241',
+            'name': 'Çukurambar Safa Okulları',
+            'city': 'Ankara',
+            'is_licensed': true,
+            'total_boards': 31,
+            'online_boards': 20,
+            'total_users': 71,
+            'total_pairings': 106,
+            'requests': 37305,
+            'percentage': 60.5
+          },
+          {
+            'id': 'bff5ec60-5daa-4181-9322-a0f03cab0ec2',
+            'name': 'Gölbaşı Safa Okulları',
+            'city': 'Ankara',
+            'is_licensed': true,
+            'total_boards': 28,
+            'online_boards': 3,
+            'total_users': 61,
+            'total_pairings': 109,
+            'requests': 12060,
+            'percentage': 19.6
+          }
+        ],
+        'platform_distribution': {
+          'windows_percent': 93.5,
+          'windows_requests': 132480,
+          'mobile_percent': 5.5,
+          'mobile_requests': 7740,
+          'web_percent': 1.0,
+          'web_requests': 1400
+        },
+        'peak_hours': [
+          {
+            'time_range': '08:00 - 09:00',
+            'title': 'Ders Başlangıcı & İlk Yoklama',
+            'intensity': 'En Yüksek',
+            'percentage': 100
+          }
+        ],
+        'executive_health': {
+          'health_score': 99.2,
+          'status': 'Kusursuz & Kesintisiz',
+          'uptime_pretty': '7 gün 4 saat',
+          'all_services_healthy': true
+        }
+      };
+
+      final model = DatabaseAnalyticsModel.fromMap(livePayload);
+
+      expect(model.storage.totalGb, equals(44.96));
+      expect(model.storage.usedGb, equals(11.41));
+      expect(model.storage.freeGb, equals(33.54));
+      expect(model.storage.usedPercent, equals(25.4));
+      expect(model.storage.databaseSizePretty, equals('14 MB'));
+      expect(model.storage.storageFilesPretty, equals('5318 kB'));
+
+      expect(model.cpu.cores, equals(4));
+      expect(model.cpu.usagePercent, equals(11.8));
+      expect(model.cpu.model, contains('Neoverse-N1'));
+
+      expect(model.ram.totalGb, equals(23.43));
+      expect(model.ram.usedGb, equals(2.18));
+      expect(model.ram.freeGb, equals(21.25));
+      expect(model.ram.usedPercent, equals(9.3));
+
+      expect(model.realtime.totalBoards, equals(105));
+      expect(model.realtime.connectedBoards, equals(27));
+      expect(model.realtime.connectedUsers, equals(193));
+      expect(model.realtime.totalSchools, equals(5));
+
+      expect(model.schoolComparison.length, equals(2));
+      expect(model.schoolComparison.first.name, equals('Çukurambar Safa Okulları'));
+      expect(model.schoolComparison.first.requests, equals(37305));
+
+      expect(model.platformDistribution.windowsPercent, equals(93.5));
+      expect(model.platformDistribution.mobilePercent, equals(5.5));
+      expect(model.platformDistribution.webPercent, equals(1.0));
+
+      expect(model.executiveHealth.healthScore, equals(99.2));
+      expect(model.executiveHealth.uptimePretty, equals('7 gün 4 saat'));
+      expect(model.executiveHealth.allServicesHealthy, isTrue);
+    });
   });
 }

@@ -359,9 +359,9 @@ class SystemStorageModel {
         : ((used / effectiveTotal) * 100);
 
     return SystemStorageModel(
-      totalGb: effectiveTotal,
-      usedGb: double.parse(used.toStringAsFixed(1)),
-      freeGb: double.parse(free.clamp(0.0, effectiveTotal).toStringAsFixed(1)),
+      totalGb: double.parse(effectiveTotal.toStringAsFixed(2)),
+      usedGb: double.parse(used.toStringAsFixed(2)),
+      freeGb: double.parse(free.clamp(0.0, effectiveTotal).toStringAsFixed(2)),
       usedPercent: double.parse(percent.clamp(0.0, 100.0).toStringAsFixed(1)),
       databaseSizeBytes: (map.containsKey('database_size_bytes') && map['database_size_bytes'] != null)
           ? _parseInt(map['database_size_bytes'])
