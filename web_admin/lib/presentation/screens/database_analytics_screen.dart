@@ -572,23 +572,61 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
 
-          // CustomPainter Çizgi / Alan Grafiği
+          // Platform Dağılımı Göstergeleri (Akıllı Tahta / Mobil / Web)
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _buildTimelinePlatformBadge('🪟 Windows Tahta', '%${data.platformDistribution.windowsPercent.toStringAsFixed(1)}', const Color(0xFF3B82F6)),
+              _buildTimelinePlatformBadge('📱 Öğretmen Mobil', '%${data.platformDistribution.mobilePercent.toStringAsFixed(1)}', const Color(0xFF10B981)),
+              _buildTimelinePlatformBadge('🌐 Web Yönetim Paneli', '%${data.platformDistribution.webPercent.toStringAsFixed(1)}', const Color(0xFFF59E0B)),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // CustomPainter Çizgi / Alan Grafiği (İnteraktif MouseRegion ile)
           Container(
             height: 220,
             width: double.infinity,
             padding: const EdgeInsets.only(top: 10, bottom: 8, right: 12),
             child: points.isEmpty
                 ? const Center(child: Text('Görüntülenecek veri bulunamadı', style: TextStyle(color: AppColors.textGrey)))
-                : CustomPaint(
-                    size: const Size(double.infinity, 220),
-                    painter: _TimelineChartPainter(
-                      points: points,
-                      hoveredIndex: _hoveredTimelineIndex,
-                      lineColor: AppColors.primary,
-                      gridColor: AppColors.border.withValues(alpha: 0.6),
-                    ),
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      return MouseRegion(
+                        onHover: (event) {
+                          if (points.length <= 1) {
+                            if (_hoveredTimelineIndex != 0) setState(() => _hoveredTimelineIndex = 0);
+                            return;
+                          }
+                          const leftPadding = 10.0;
+                          const rightPadding = 10.0;
+                          final chartWidth = constraints.maxWidth - leftPadding - rightPadding;
+                          final stepX = chartWidth / (points.length - 1);
+                          final relX = event.localPosition.dx - leftPadding;
+                          final idx = (relX / stepX).round().clamp(0, points.length - 1);
+                          if (_hoveredTimelineIndex != idx) {
+                            setState(() => _hoveredTimelineIndex = idx);
+                          }
+                        },
+                        onExit: (_) {
+                          if (_hoveredTimelineIndex != null) {
+                            setState(() => _hoveredTimelineIndex = null);
+                          }
+                        },
+                        child: CustomPaint(
+                          size: Size(constraints.maxWidth, 220),
+                          painter: _TimelineChartPainter(
+                            points: points,
+                            hoveredIndex: _hoveredTimelineIndex,
+                            lineColor: AppColors.primary,
+                            gridColor: AppColors.border.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      );
+                    },
                   ),
           ),
           const SizedBox(height: 16),
@@ -625,6 +663,39 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen> {
                 color: const Color(0xFFF59E0B),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimelinePlatformBadge(String label, String percent, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            percent,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
           ),
         ],
       ),
@@ -863,7 +934,9 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen> {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(6),
                         child: LinearProgressIndicator(
-                          value: (school.percentage / 100.0).clamp(0.02, 1.0),
+                          value: (school.percentage.isNaN || school.percentage.isInfinite)
+                              ? 0.02
+                              : (school.percentage / 100.0).clamp(0.02, 1.0),
                           minHeight: 6,
                           backgroundColor: AppColors.border,
                           valueColor: AlwaysStoppedAnimation<Color>(rankColor),
@@ -1383,7 +1456,9 @@ class _ExecutiveKpiCard extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(5),
             child: LinearProgressIndicator(
-              value: progressValue.clamp(0.01, 1.0),
+              value: (progressValue.isNaN || progressValue.isInfinite)
+                  ? 0.01
+                  : progressValue.clamp(0.01, 1.0),
               minHeight: 6,
               backgroundColor: AppColors.border,
               valueColor: AlwaysStoppedAnimation<Color>(progressBarColor),
@@ -1529,6 +1604,67 @@ class _TimelineChartPainter extends CustomPainter {
         tp.paint(canvas, Offset(pt.dx - (tp.width / 2), size.height - bottomPadding + 6));
       }
     }
+
+    // Hover Etkileşimi (Dikey çizgi, parlayan nokta ve bilgi kutucuğu)
+    if (hoveredIndex != null && hoveredIndex! >= 0 && hoveredIndex! < points.length) {
+      final hPt = coordinates[hoveredIndex!];
+      final hPointData = points[hoveredIndex!];
+
+      // Dikey rehber kılavuz çizgi
+      final guidePaint = Paint()
+        ..color = lineColor.withValues(alpha: 0.4)
+        ..strokeWidth = 1.2
+        ..style = PaintingStyle.stroke;
+      canvas.drawLine(
+        Offset(hPt.dx, topPadding),
+        Offset(hPt.dx, topPadding + chartHeight),
+        guidePaint,
+      );
+
+      // Vurgulu parlayan nokta
+      final glowPaint = Paint()
+        ..color = lineColor.withValues(alpha: 0.25)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(hPt, 8.5, glowPaint);
+      canvas.drawCircle(hPt, 4.5, pointPaint);
+      canvas.drawCircle(hPt, 4.5, pointBorderPaint..strokeWidth = 2.5);
+
+      // Tooltip kutucuğu
+      final formattedRequests = NumberFormat('#,##0', 'tr_TR').format(hPointData.requests);
+      final tooltipText = '${hPointData.label} • $formattedRequests İstek (${hPointData.activeBoards} Tahta)';
+      final tooltipSpan = TextSpan(
+        text: tooltipText,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+      final tp = TextPainter(
+        text: tooltipSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      const padX = 8.0;
+      const padY = 4.0;
+      final boxWidth = tp.width + (padX * 2);
+      final boxHeight = tp.height + (padY * 2);
+
+      double tipX = hPt.dx - (boxWidth / 2);
+      tipX = tipX.clamp(leftPadding, size.width - rightPadding - boxWidth);
+      double tipY = hPt.dy - boxHeight - 10;
+      if (tipY < topPadding) {
+        tipY = hPt.dy + 10;
+      }
+
+      final tipRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(tipX, tipY, boxWidth, boxHeight),
+        const Radius.circular(6),
+      );
+      final tipBgPaint = Paint()..color = const Color(0xFF1E293B);
+      canvas.drawRRect(tipRect, tipBgPaint);
+      tp.paint(canvas, Offset(tipX + padX, tipY + padY));
+    }
   }
 
   @override
@@ -1556,6 +1692,13 @@ class _DonutChartPainter extends CustomPainter {
     const strokeWidth = 16.0;
 
     final rect = Rect.fromCircle(center: center, radius: radius);
+
+    // Arka plan kılavuz halkası
+    final bgPaint = Paint()
+      ..color = const Color(0xFFE2E8F0)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+    canvas.drawArc(rect, 0, 2 * math.pi, false, bgPaint);
 
     final total = (windowsPercent + mobilePercent + webPercent);
     final safeTotal = total > 0 ? total : 100.0;

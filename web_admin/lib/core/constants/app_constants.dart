@@ -66,9 +66,4 @@ class AppConstants {
   static const String serverHost = 'Oracle Cloud (130.61.78.192)';
   static const String serverReleaseDate = '24 Ekim 2026';
   static const String serverStatus = 'Aktif & Güncel';
-
-  // Supabase Studio 1-Click Bilgileri
-  static const String studioToken = '0acc0bd6f232996646fa6e77a2ff3262';
-  static const String studioDirectUrl = 'http://130.61.78.192:8000';
-  static String get studioLaunchUrl => '$studioDirectUrl/?studio_token=$studioToken';
 }

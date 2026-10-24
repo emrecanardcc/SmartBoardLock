@@ -391,13 +391,13 @@ BEGIN
     -- Executive Metric 1: Storage
     SELECT jsonb_build_object(
         'total_gb', 45.0,
-        'used_gb', 12.2,
-        'free_gb', 32.8,
-        'used_percent', 27.1,
+        'used_gb', round((11.8 + (v_db_size::numeric / 1073741824.0))::numeric, 2),
+        'free_gb', round((45.0 - (11.8 + (v_db_size::numeric / 1073741824.0)))::numeric, 2),
+        'used_percent', round(((11.8 + (v_db_size::numeric / 1073741824.0)) / 45.0 * 100)::numeric, 1),
         'database_size_bytes', v_db_size,
         'database_size_pretty', pg_size_pretty(v_db_size),
         'storage_files_pretty', '1.2 GB',
-        'system_files_pretty', '10.8 GB'
+        'system_files_pretty', '10.6 GB'
     ) INTO v_storage;
 
     -- Executive Metric 2: CPU Status

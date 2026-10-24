@@ -344,19 +344,26 @@ class SystemStorageModel {
     int fallbackDbSizeBytes = 0,
     String fallbackDbSizePretty = '0 MB',
   }) {
-    final total = _parseDouble(map['total_gb']) > 0 ? _parseDouble(map['total_gb']) : 45.0;
-    final used = _parseDouble(map['used_gb']) > 0 ? _parseDouble(map['used_gb']) : 12.2;
-    final free = _parseDouble(map['free_gb']) > 0 ? _parseDouble(map['free_gb']) : (total - used);
-    final percent = _parseDouble(map['used_percent']) > 0
+    final total = (map.containsKey('total_gb') && map['total_gb'] != null)
+        ? _parseDouble(map['total_gb'])
+        : 45.0;
+    final effectiveTotal = total > 0 ? total : 45.0;
+    final used = (map.containsKey('used_gb') && map['used_gb'] != null)
+        ? _parseDouble(map['used_gb'])
+        : 12.2;
+    final free = (map.containsKey('free_gb') && map['free_gb'] != null)
+        ? _parseDouble(map['free_gb'])
+        : (effectiveTotal - used);
+    final percent = (map.containsKey('used_percent') && map['used_percent'] != null)
         ? _parseDouble(map['used_percent'])
-        : ((used / total) * 100);
+        : ((used / effectiveTotal) * 100);
 
     return SystemStorageModel(
-      totalGb: total,
-      usedGb: used,
-      freeGb: double.parse(free.toStringAsFixed(1)),
-      usedPercent: double.parse(percent.toStringAsFixed(1)),
-      databaseSizeBytes: _parseInt(map['database_size_bytes']) > 0
+      totalGb: effectiveTotal,
+      usedGb: double.parse(used.toStringAsFixed(1)),
+      freeGb: double.parse(free.clamp(0.0, effectiveTotal).toStringAsFixed(1)),
+      usedPercent: double.parse(percent.clamp(0.0, 100.0).toStringAsFixed(1)),
+      databaseSizeBytes: (map.containsKey('database_size_bytes') && map['database_size_bytes'] != null)
           ? _parseInt(map['database_size_bytes'])
           : fallbackDbSizeBytes,
       databaseSizePretty: map['database_size_pretty']?.toString() ?? fallbackDbSizePretty,
@@ -380,11 +387,15 @@ class SystemCpuModel {
   });
 
   factory SystemCpuModel.fromMap(Map<String, dynamic> map) {
-    final usage = _parseDouble(map['usage_percent']) > 0 ? _parseDouble(map['usage_percent']) : 6.4;
+    final usage = (map.containsKey('usage_percent') && map['usage_percent'] != null)
+        ? _parseDouble(map['usage_percent'])
+        : 6.4;
     return SystemCpuModel(
-      cores: _parseInt(map['cores']) > 0 ? _parseInt(map['cores']) : 4,
+      cores: (map.containsKey('cores') && map['cores'] != null)
+          ? _parseInt(map['cores'])
+          : 4,
       model: map['model']?.toString() ?? 'Ampere ARM 4 Çekirdek Cloud vCPU',
-      usagePercent: double.parse(usage.toStringAsFixed(1)),
+      usagePercent: double.parse(usage.clamp(0.0, 100.0).toStringAsFixed(1)),
       status: map['status']?.toString() ?? 'Normal & Dengeli',
     );
   }
@@ -406,18 +417,25 @@ class SystemRamModel {
   });
 
   factory SystemRamModel.fromMap(Map<String, dynamic> map) {
-    final total = _parseDouble(map['total_gb']) > 0 ? _parseDouble(map['total_gb']) : 24.0;
-    final used = _parseDouble(map['used_gb']) > 0 ? _parseDouble(map['used_gb']) : 1.82;
-    final free = _parseDouble(map['free_gb']) > 0 ? _parseDouble(map['free_gb']) : (total - used);
-    final percent = _parseDouble(map['used_percent']) > 0
+    final total = (map.containsKey('total_gb') && map['total_gb'] != null)
+        ? _parseDouble(map['total_gb'])
+        : 24.0;
+    final effectiveTotal = total > 0 ? total : 24.0;
+    final used = (map.containsKey('used_gb') && map['used_gb'] != null)
+        ? _parseDouble(map['used_gb'])
+        : 1.82;
+    final free = (map.containsKey('free_gb') && map['free_gb'] != null)
+        ? _parseDouble(map['free_gb'])
+        : (effectiveTotal - used);
+    final percent = (map.containsKey('used_percent') && map['used_percent'] != null)
         ? _parseDouble(map['used_percent'])
-        : ((used / total) * 100);
+        : ((used / effectiveTotal) * 100);
 
     return SystemRamModel(
-      totalGb: total,
+      totalGb: effectiveTotal,
       usedGb: double.parse(used.toStringAsFixed(2)),
-      freeGb: double.parse(free.toStringAsFixed(2)),
-      usedPercent: double.parse(percent.toStringAsFixed(1)),
+      freeGb: double.parse(free.clamp(0.0, effectiveTotal).toStringAsFixed(2)),
+      usedPercent: double.parse(percent.clamp(0.0, 100.0).toStringAsFixed(1)),
       status: map['status']?.toString() ?? 'Geniş Kapasite',
     );
   }
@@ -449,24 +467,35 @@ class RealtimeOverviewModel {
     int fallbackConnections = 0,
     int fallbackMax = 500,
   }) {
-    final connBoards = _parseInt(map['connected_boards']) > 0
+    final connBoards = (map.containsKey('connected_boards') && map['connected_boards'] != null)
         ? _parseInt(map['connected_boards'])
         : (fallbackConnections > 0 ? fallbackConnections : 27);
-    final totBoards = _parseInt(map['total_boards']) > 0 ? _parseInt(map['total_boards']) : 102;
-    final maxBoards = _parseInt(map['max_board_capacity']) > 0
+    final totBoards = (map.containsKey('total_boards') && map['total_boards'] != null)
+        ? _parseInt(map['total_boards'])
+        : 102;
+    final maxBoards = (map.containsKey('max_board_capacity') && map['max_board_capacity'] != null)
         ? _parseInt(map['max_board_capacity'])
         : fallbackMax;
-    final usageP = maxBoards > 0 ? (connBoards / maxBoards) * 100 : 5.4;
+    final effectiveMax = maxBoards > 0 ? maxBoards : 500;
+    final usageP = (connBoards / effectiveMax) * 100;
 
     return RealtimeOverviewModel(
       connectedBoards: connBoards,
       totalBoards: totBoards,
-      maxBoardCapacity: maxBoards,
-      boardUsagePercent: double.parse(usageP.toStringAsFixed(1)),
-      connectedUsers: _parseInt(map['connected_users']) > 0 ? _parseInt(map['connected_users']) : 193,
-      maxUserCapacity: _parseInt(map['max_user_capacity']) > 0 ? _parseInt(map['max_user_capacity']) : 1000,
-      totalSchools: _parseInt(map['total_schools']) > 0 ? _parseInt(map['total_schools']) : 5,
-      licensedSchools: _parseInt(map['licensed_schools']) > 0 ? _parseInt(map['licensed_schools']) : 5,
+      maxBoardCapacity: effectiveMax,
+      boardUsagePercent: double.parse(usageP.clamp(0.0, 100.0).toStringAsFixed(1)),
+      connectedUsers: (map.containsKey('connected_users') && map['connected_users'] != null)
+          ? _parseInt(map['connected_users'])
+          : 193,
+      maxUserCapacity: (map.containsKey('max_user_capacity') && map['max_user_capacity'] != null)
+          ? _parseInt(map['max_user_capacity'])
+          : 1000,
+      totalSchools: (map.containsKey('total_schools') && map['total_schools'] != null)
+          ? _parseInt(map['total_schools'])
+          : 5,
+      licensedSchools: (map.containsKey('licensed_schools') && map['licensed_schools'] != null)
+          ? _parseInt(map['licensed_schools'])
+          : 5,
     );
   }
 }
@@ -505,10 +534,11 @@ class UsageTimelineModel {
   factory UsageTimelineModel.fromMap(Map<String, dynamic> map) {
     List<UsageTimelinePoint> parseList(dynamic list, List<UsageTimelinePoint> fallback) {
       if (list is List && list.isNotEmpty) {
-        return list
-            .whereType<Map<String, dynamic>>()
-            .map((m) => UsageTimelinePoint.fromMap(m))
+        final parsed = list
+            .whereType<Map>()
+            .map((m) => UsageTimelinePoint.fromMap(Map<String, dynamic>.from(m)))
             .toList();
+        if (parsed.isNotEmpty) return parsed;
       }
       return fallback;
     }
@@ -612,22 +642,22 @@ class PlatformDistributionModel {
 
   factory PlatformDistributionModel.fromMap(Map<String, dynamic> map) {
     return PlatformDistributionModel(
-      windowsPercent: _parseDouble(map['windows_percent']) > 0
+      windowsPercent: (map.containsKey('windows_percent') && map['windows_percent'] != null)
           ? _parseDouble(map['windows_percent'])
           : 58.0,
-      windowsRequests: _parseInt(map['windows_requests']) > 0
+      windowsRequests: (map.containsKey('windows_requests') && map['windows_requests'] != null)
           ? _parseInt(map['windows_requests'])
           : 81200,
-      mobilePercent: _parseDouble(map['mobile_percent']) > 0
+      mobilePercent: (map.containsKey('mobile_percent') && map['mobile_percent'] != null)
           ? _parseDouble(map['mobile_percent'])
           : 32.0,
-      mobileRequests: _parseInt(map['mobile_requests']) > 0
+      mobileRequests: (map.containsKey('mobile_requests') && map['mobile_requests'] != null)
           ? _parseInt(map['mobile_requests'])
           : 44800,
-      webPercent: _parseDouble(map['web_percent']) > 0
+      webPercent: (map.containsKey('web_percent') && map['web_percent'] != null)
           ? _parseDouble(map['web_percent'])
           : 10.0,
-      webRequests: _parseInt(map['web_requests']) > 0
+      webRequests: (map.containsKey('web_requests') && map['web_requests'] != null)
           ? _parseInt(map['web_requests'])
           : 14000,
     );
@@ -778,51 +808,45 @@ class DatabaseAnalyticsModel {
           .map((m) => DailyHistoryModel.fromMap(m))
           .toList(),
       storage: SystemStorageModel.fromMap(
-        map['storage'] is Map<String, dynamic>
-            ? map['storage'] as Map<String, dynamic>
-            : {},
+        _asMap(map['storage']),
         fallbackDbSizeBytes: serverHealth.databaseSizeBytes,
         fallbackDbSizePretty: serverHealth.databaseSizePretty,
       ),
-      cpu: SystemCpuModel.fromMap(
-        map['cpu'] is Map<String, dynamic> ? map['cpu'] as Map<String, dynamic> : {},
-      ),
-      ram: SystemRamModel.fromMap(
-        map['ram'] is Map<String, dynamic> ? map['ram'] as Map<String, dynamic> : {},
-      ),
+      cpu: SystemCpuModel.fromMap(_asMap(map['cpu'])),
+      ram: SystemRamModel.fromMap(_asMap(map['ram'])),
       realtime: RealtimeOverviewModel.fromMap(
-        map['realtime'] is Map<String, dynamic>
-            ? map['realtime'] as Map<String, dynamic>
-            : {},
+        _asMap(map['realtime']),
         fallbackConnections: connectionPool.activeConnections,
         fallbackMax: 500,
       ),
-      usageTimeline: UsageTimelineModel.fromMap(
-        map['usage_timeline'] is Map<String, dynamic>
-            ? map['usage_timeline'] as Map<String, dynamic>
-            : {},
-      ),
-      schoolComparison: (map['school_comparison'] as List<dynamic>? ?? [])
-          .whereType<Map<String, dynamic>>()
+      usageTimeline: UsageTimelineModel.fromMap(_asMap(map['usage_timeline'])),
+      schoolComparison: _asMapList(map['school_comparison'])
           .map((m) => SchoolComparisonModel.fromMap(m))
           .toList(),
-      platformDistribution: PlatformDistributionModel.fromMap(
-        map['platform_distribution'] is Map<String, dynamic>
-            ? map['platform_distribution'] as Map<String, dynamic>
-            : {},
-      ),
-      peakHours: (map['peak_hours'] as List<dynamic>? ?? [])
-          .whereType<Map<String, dynamic>>()
+      platformDistribution: PlatformDistributionModel.fromMap(_asMap(map['platform_distribution'])),
+      peakHours: _asMapList(map['peak_hours'])
           .map((m) => PeakHourModel.fromMap(m))
           .toList(),
       executiveHealth: ExecutiveHealthModel.fromMap(
-        map['executive_health'] is Map<String, dynamic>
-            ? map['executive_health'] as Map<String, dynamic>
-            : {},
+        _asMap(map['executive_health']),
         fallbackUptime: serverHealth.uptimePretty,
       ),
     );
   }
+}
+
+Map<String, dynamic> _asMap(dynamic val) {
+  if (val is Map<String, dynamic>) return val;
+  if (val is Map) return Map<String, dynamic>.from(val);
+  return {};
+}
+
+List<Map<String, dynamic>> _asMapList(dynamic val) {
+  if (val is! List) return [];
+  return val
+      .whereType<Map>()
+      .map((item) => Map<String, dynamic>.from(item))
+      .toList();
 }
 
 // Helper parsing functions

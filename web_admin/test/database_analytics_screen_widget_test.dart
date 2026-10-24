@@ -1,4 +1,5 @@
 // test/database_analytics_screen_widget_test.dart
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -283,10 +284,67 @@ void main() {
       expect(find.text('Akıllı Tahta (Windows)'), findsOneWidget);
       expect(find.text('Öğretmen & İdare (Mobil)'), findsOneWidget);
       expect(find.text('Yönetim Paneli (Web)'), findsOneWidget);
-      expect(find.text('%58.0'), findsOneWidget);
-      expect(find.text('%32.0'), findsOneWidget);
-      expect(find.text('%10.0'), findsOneWidget);
+      expect(find.text('%58.0'), findsNWidgets(2));
+      expect(find.text('%32.0'), findsNWidgets(2));
+      expect(find.text('%10.0'), findsNWidgets(2));
 
+      // Timeline platform badges
+      expect(find.text('🪟 Windows Tahta'), findsOneWidget);
+      expect(find.text('📱 Öğretmen Mobil'), findsOneWidget);
+      expect(find.text('🌐 Web Yönetim Paneli'), findsOneWidget);
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Interactive chart hover and zero-data edge cases render cleanly', (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(createTestWidget(const Size(1400, 900)));
+      await tester.pumpAndSettle();
+
+      // Find CustomPaint of the chart and simulate mouse pointer hover
+      final customPaints = find.byType(CustomPaint);
+      expect(customPaints, findsWidgets);
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(gesture.removePointer);
+
+      await gesture.moveTo(tester.getCenter(customPaints.at(1)));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Gracefully handles empty data without NaN crash', (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final emptyAnalytics = DatabaseAnalyticsModel.fromMap({});
+      final fakeRepo = FakeAdminRepository(emptyAnalytics);
+
+      await tester.pumpWidget(
+        Provider<AdminRepository>.value(
+          value: fakeRepo,
+          child: const MaterialApp(
+            home: SizedBox(
+              width: double.infinity,
+              height: double.infinity,
+              child: DatabaseAnalyticsScreen(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sistem & Kullanım Analitiği'), findsOneWidget);
+      expect(find.text('Sunucu Depolama'), findsOneWidget);
+      expect(find.text('⚡ Veritabanı Studio'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   });

@@ -1,14 +1,44 @@
 // test/database_analytics_model_test.dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:web_admin/core/constants/app_constants.dart';
 import 'package:web_admin/data/models/database_analytics_model.dart';
 
 void main() {
   group('DatabaseAnalyticsModel Unit Tests', () {
-    test('AppConstants studioLaunchUrl should contain studioToken and IP', () {
-      expect(AppConstants.studioToken, equals('0acc0bd6f232996646fa6e77a2ff3262'));
-      expect(AppConstants.studioLaunchUrl, contains('studio_token=0acc0bd6f232996646fa6e77a2ff3262'));
-      expect(AppConstants.studioLaunchUrl, contains('130.61.78.192:8000'));
+    test('Executive models zero-safety and precision check', () {
+      final realtime = RealtimeOverviewModel.fromMap({
+        'connected_boards': 0,
+        'total_boards': 50,
+        'max_board_capacity': 500,
+        'connected_users': 0,
+        'total_schools': 0,
+        'licensed_schools': 0,
+      });
+
+      expect(realtime.connectedBoards, equals(0));
+      expect(realtime.totalBoards, equals(50));
+      expect(realtime.boardUsagePercent, equals(0.0));
+      expect(realtime.connectedUsers, equals(0));
+      expect(realtime.totalSchools, equals(0));
+
+      final platform = PlatformDistributionModel.fromMap({
+        'windows_percent': 100.0,
+        'windows_requests': 5000,
+        'mobile_percent': 0.0,
+        'mobile_requests': 0,
+        'web_percent': 0.0,
+        'web_requests': 0,
+      });
+
+      expect(platform.windowsPercent, equals(100.0));
+      expect(platform.mobilePercent, equals(0.0));
+      expect(platform.webPercent, equals(0.0));
+
+      final cpu = SystemCpuModel.fromMap({
+        'cores': 8,
+        'usage_percent': 0.0,
+      });
+      expect(cpu.cores, equals(8));
+      expect(cpu.usagePercent, equals(0.0));
     });
 
     test('ServerHealthModel parses correctly and computes uptime', () {

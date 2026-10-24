@@ -87,7 +87,7 @@ class AppRouter {
             } else if (path == '/issues') {
               title = 'Sorun Bildirimleri';
             } else if (path == '/database') {
-              title = 'Veritabanı & Analitik';
+              title = 'Sistem & Kullanım Analitiği';
             } else if (path == '/license') {
               title = 'Kurumsal Lisans';
             } else if (path == '/downloads') {
