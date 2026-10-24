@@ -1,7 +1,6 @@
 // lib/presentation/layout/sidebar.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -69,8 +68,8 @@ const List<SidebarItem> _sidebarItems = [
     superAdminOnly: true,
   ),
   SidebarItem(
-    label: 'Veritabanı & Analitik',
-    icon: Icons.storage_rounded,
+    label: 'Sistem & Kullanım Analitiği',
+    icon: Icons.insights_rounded,
     route: '/database',
     superAdminOnly: true,
   ),
@@ -125,12 +124,6 @@ class AppSidebar extends StatelessWidget {
 
           const Divider(color: Color(0xFF1E293B), height: 1),
           const SizedBox(height: 8),
-
-          // Veritabanı Studio Hızlı Başlatma (Süper Admin)
-          if (isSuperAdmin) ...[
-            _SidebarStudioButton(isCollapsed: isCollapsed),
-            const SizedBox(height: 6),
-          ],
 
           // Sunucu Sürüm Bilgisi
           _SidebarServerVersion(isCollapsed: isCollapsed),
@@ -416,105 +409,3 @@ class _SidebarServerVersion extends StatelessWidget {
   }
 }
 
-class _SidebarStudioButton extends StatelessWidget {
-  final bool isCollapsed;
-  const _SidebarStudioButton({required this.isCollapsed});
-
-  @override
-  Widget build(BuildContext context) {
-    if (isCollapsed) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Tooltip(
-          message: '⚡ Veritabanı Studio (Tek Tıkla Giriş)',
-          child: InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () async {
-              final uri = Uri.parse(AppConstants.studioLaunchUrl);
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
-            },
-            child: Container(
-              height: 40,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFF334155)),
-              ),
-              child: const Icon(
-                Icons.bolt_rounded,
-                color: Color(0xFFFACC15),
-                size: 20,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () async {
-          final uri = Uri.parse(AppConstants.studioLaunchUrl);
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xFF131D2E),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFF334155)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Icon(
-                  Icons.bolt_rounded,
-                  color: Color(0xFFFACC15),
-                  size: 16,
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Veritabanı Studio',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Text(
-                      '⚡ Tek Tıkla Giriş',
-                      style: TextStyle(
-                        color: Color(0xFFFACC15),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.open_in_new_rounded,
-                color: AppColors.sidebarText,
-                size: 14,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

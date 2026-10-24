@@ -198,6 +198,98 @@ void main() {
       expect(empty.tableStats, isEmpty);
       expect(empty.liveProcesses, isEmpty);
       expect(empty.dailyHistory, isEmpty);
+      expect(empty.storage.totalGb, equals(45.0));
+      expect(empty.storage.usedGb, equals(12.2));
+      expect(empty.cpu.cores, equals(4));
+      expect(empty.ram.totalGb, equals(24.0));
+      expect(empty.realtime.maxBoardCapacity, equals(500));
+      expect(empty.platformDistribution.windowsPercent, equals(58.0));
+      expect(empty.executiveHealth.healthScore, equals(99.8));
+    });
+
+    test('Executive models parse accurately with custom backend payload', () {
+      final model = DatabaseAnalyticsModel.fromMap({
+        'storage': {
+          'total_gb': 48.0,
+          'used_gb': 12.0,
+          'free_gb': 36.0,
+          'used_percent': 25.0,
+          'database_size_bytes': 15000000,
+          'database_size_pretty': '15 MB',
+          'storage_files_pretty': '1.5 GB',
+          'system_files_pretty': '10.5 GB',
+        },
+        'cpu': {
+          'cores': 4,
+          'model': 'Ampere ARM A1',
+          'usage_percent': 7.5,
+          'status': 'Normal & Dengeli',
+        },
+        'ram': {
+          'total_gb': 24.0,
+          'used_gb': 2.0,
+          'free_gb': 22.0,
+          'used_percent': 8.3,
+          'status': 'Geniş Kapasite',
+        },
+        'realtime': {
+          'connected_boards': 30,
+          'total_boards': 102,
+          'max_board_capacity': 500,
+          'board_usage_percent': 6.0,
+          'connected_users': 195,
+          'max_user_capacity': 1000,
+          'total_schools': 5,
+          'licensed_schools': 5,
+        },
+        'school_comparison': [
+          {
+            'id': 'sch-1',
+            'name': 'Çukurambar Safa',
+            'city': 'Ankara',
+            'is_licensed': true,
+            'total_boards': 28,
+            'online_boards': 20,
+            'total_users': 71,
+            'requests': 50000,
+            'percentage': 35.0,
+          }
+        ],
+        'platform_distribution': {
+          'windows_percent': 60.0,
+          'windows_requests': 90000,
+          'mobile_percent': 30.0,
+          'mobile_requests': 45000,
+          'web_percent': 10.0,
+          'web_requests': 15000,
+        },
+        'peak_hours': [
+          {
+            'time_range': '08:30 - 09:30',
+            'title': 'Ders Başlangıcı',
+            'intensity': 'En Yüksek',
+            'percentage': 95,
+          }
+        ],
+        'executive_health': {
+          'health_score': 99.9,
+          'status': 'Kusursuz',
+          'uptime_pretty': '10 gün',
+          'all_services_healthy': true,
+        },
+      });
+
+      expect(model.storage.totalGb, equals(48.0));
+      expect(model.storage.freeGb, equals(36.0));
+      expect(model.cpu.cores, equals(4));
+      expect(model.cpu.usagePercent, equals(7.5));
+      expect(model.ram.usedGb, equals(2.0));
+      expect(model.realtime.connectedBoards, equals(30));
+      expect(model.schoolComparison.length, equals(1));
+      expect(model.schoolComparison.first.name, equals('Çukurambar Safa'));
+      expect(model.platformDistribution.windowsPercent, equals(60.0));
+      expect(model.peakHours.first.percentage, equals(95));
+      expect(model.executiveHealth.healthScore, equals(99.9));
     });
   });
 }

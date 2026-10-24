@@ -59,70 +59,107 @@ DatabaseAnalyticsModel createTestAnalytics() {
       'avg_latency_ms': 0.034,
       'total_queries_tracked': 45,
     },
-    'slowest_queries': [
+    'storage': {
+      'total_gb': 45.0,
+      'used_gb': 12.2,
+      'free_gb': 32.8,
+      'used_percent': 27.1,
+      'database_size_bytes': 20971520,
+      'database_size_pretty': '20 MB',
+      'storage_files_pretty': '1.2 GB',
+      'system_files_pretty': '10.8 GB',
+    },
+    'cpu': {
+      'cores': 4,
+      'model': 'Ampere ARM 4 Çekirdek Cloud vCPU',
+      'usage_percent': 5.4,
+      'status': 'Normal & Dengeli',
+    },
+    'ram': {
+      'total_gb': 24.0,
+      'used_gb': 1.82,
+      'free_gb': 22.18,
+      'used_percent': 7.6,
+      'status': 'Geniş Kapasite',
+    },
+    'realtime': {
+      'connected_boards': 27,
+      'total_boards': 102,
+      'max_board_capacity': 500,
+      'board_usage_percent': 5.4,
+      'connected_users': 193,
+      'max_user_capacity': 1000,
+      'total_schools': 5,
+      'licensed_schools': 5,
+    },
+    'usage_timeline': {
+      'daily': [
+        {'label': '08:00', 'requests': 1940, 'active_boards': 22},
+        {'label': '10:00', 'requests': 4250, 'active_boards': 28},
+        {'label': '12:00', 'requests': 2900, 'active_boards': 26},
+        {'label': '14:00', 'requests': 4310, 'active_boards': 28},
+      ],
+      'weekly': [
+        {'label': 'Pazartesi', 'requests': 34200, 'active_boards': 28},
+        {'label': 'Salı', 'requests': 36800, 'active_boards': 28},
+      ],
+      'monthly': [
+        {'label': '1. Hafta', 'requests': 182400, 'active_boards': 28},
+        {'label': '2. Hafta', 'requests': 194200, 'active_boards': 28},
+      ],
+    },
+    'school_comparison': [
       {
-        'queryid': 101,
-        'query': 'SELECT * FROM boards WHERE school_id = \$1',
-        'calls': 500,
-        'total_exec_time': 1250.0,
-        'mean_exec_time': 2.5,
-        'max_exec_time': 15.0,
-        'min_exec_time': 0.8,
-        'rows': 50,
-      }
-    ],
-    'frequent_queries': [
+        'id': 'sch-1',
+        'name': 'Çukurambar Safa Okulları',
+        'city': 'Ankara',
+        'is_licensed': true,
+        'total_boards': 28,
+        'online_boards': 20,
+        'total_users': 71,
+        'requests': 74850,
+        'percentage': 35.8,
+      },
       {
-        'queryid': 202,
-        'query': 'SELECT id, is_active FROM boards',
-        'calls': 150000,
-        'total_exec_time': 3000.0,
-        'mean_exec_time': 0.02,
-        'max_exec_time': 1.2,
-        'min_exec_time': 0.01,
-        'rows': 150,
-      }
+        'id': 'sch-2',
+        'name': 'Gölbaşı Safa Okulları',
+        'city': 'Ankara',
+        'is_licensed': true,
+        'total_boards': 28,
+        'online_boards': 4,
+        'total_users': 61,
+        'requests': 60120,
+        'percentage': 28.7,
+      },
     ],
-    'table_stats': [
+    'platform_distribution': {
+      'windows_percent': 58.0,
+      'windows_requests': 81200,
+      'mobile_percent': 32.0,
+      'mobile_requests': 44800,
+      'web_percent': 10.0,
+      'web_requests': 14000,
+    },
+    'peak_hours': [
       {
-        'table_name': 'boards',
-        'row_count': 120,
-        'dead_row_count': 5,
-        'bloat_ratio': 4.0,
-        'total_size_bytes': 524288,
-        'total_size_pretty': '512 kB',
-        'table_size_bytes': 262144,
-        'index_size_bytes': 262144,
-        'seq_scans': 250,
-        'index_scans': 15000,
-      }
-    ],
-    'live_processes': [
+        'time_range': '08:30 - 09:30',
+        'title': 'Ders Başlangıcı & İlk Yoklama',
+        'intensity': 'En Yüksek',
+        'percentage': 92,
+      },
       {
-        'pid': 4567,
-        'usename': 'postgres',
-        'client_addr': '130.61.78.192',
-        'state': 'active',
-        'query': 'SELECT count(*) FROM boards',
-        'duration_seconds': 0.12,
-        'wait_event': null,
-      }
+        'time_range': '12:30 - 13:30',
+        'title': 'Öğle Molası & Ders Geçişi',
+        'intensity': 'Yüksek',
+        'percentage': 70,
+      },
     ],
-    'daily_history': [
-      {
-        'metric_date': '2026-10-24',
-        'total_queries': 45,
-        'total_calls': 3500000,
-        'total_exec_time': 120000.5,
-        'avg_latency_ms': 0.034,
-        'active_connections': 4,
-        'database_size_bytes': 20971520,
-        'database_size_pretty': '20 MB',
-        'cache_hit_ratio': 99.50,
-        'transactions_committed': 125000,
-        'transactions_rolled_back': 350,
-      }
-    ],
+    'executive_health': {
+      'health_score': 99.8,
+      'status': 'Kusursuz & Kesintisiz',
+      'uptime_pretty': '7 gün 5 saat',
+      'all_services_healthy': true,
+    },
   });
 }
 
@@ -144,8 +181,8 @@ Widget createTestWidget(Size size, {double textScale = 1.0}) {
 }
 
 void main() {
-  group('DatabaseAnalyticsScreen Responsive & Overflow Tests', () {
-    testWidgets('Renders without overflow on Ultra-Wide screens (1920x1080)', (tester) async {
+  group('DatabaseAnalyticsScreen Executive Dashboard Tests', () {
+    testWidgets('Renders executive dashboard without overflow on Ultra-Wide (1920x1080)', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -154,13 +191,27 @@ void main() {
       await tester.pumpWidget(createTestWidget(const Size(1920, 1080)));
       await tester.pumpAndSettle();
 
-      expect(find.text('Veritabanı & Telemetri Analitiği'), findsOneWidget);
-      expect(find.text('⚡ Veritabanı Studio'), findsWidgets);
-      expect(find.text('Toplam İstek & QPS'), findsOneWidget);
+      // Executive Header
+      expect(find.text('Sistem & Kullanım Analitiği'), findsOneWidget);
+
+      // Verify 1-click database studio button is completely REMOVED as requested
+      expect(find.text('⚡ Veritabanı Studio'), findsNothing);
+
+      // 4 Executive KPI Cards
+      expect(find.text('Sunucu Depolama'), findsOneWidget);
+      expect(find.text('İşlemci (CPU) Yükü'), findsOneWidget);
+      expect(find.text('Bellek (RAM) Durumu'), findsOneWidget);
+      expect(find.text('Canlı Bağlı Cihazlar'), findsOneWidget);
+
+      // Charts and Comparisons
+      expect(find.text('Okul Bazlı Kullanım ve Kıyaslama'), findsOneWidget);
+      expect(find.text('Platform & Cihaz Kullanımı'), findsOneWidget);
+      expect(find.text('Günün En Yoğun Saatleri (Ders Saatleri Yoğunluğu)'), findsOneWidget);
+
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Renders without overflow on Medium Desktop / 125% DPI Laptop (1200x800)', (tester) async {
+    testWidgets('Renders without overflow on Medium Desktop / 125% DPI (1200x800)', (tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.25;
       addTearDown(tester.view.resetPhysicalSize);
@@ -169,8 +220,9 @@ void main() {
       await tester.pumpWidget(createTestWidget(const Size(960, 640), textScale: 1.25));
       await tester.pumpAndSettle();
 
-      expect(find.text('Veritabanı & Telemetri Analitiği'), findsOneWidget);
-      expect(find.text('Bağlantı Havuzu'), findsOneWidget);
+      expect(find.text('Sistem & Kullanım Analitiği'), findsOneWidget);
+      expect(find.text('Sunucu Depolama'), findsOneWidget);
+      expect(find.text('⚡ Veritabanı Studio'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
@@ -183,11 +235,11 @@ void main() {
       await tester.pumpWidget(createTestWidget(const Size(800, 600)));
       await tester.pumpAndSettle();
 
-      expect(find.text('Veritabanı & Telemetri Analitiği'), findsOneWidget);
+      expect(find.text('Sistem & Kullanım Analitiği'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Switches tabs cleanly between Tables, Queries, and Connection Info', (tester) async {
+    testWidgets('Switches timeline mode between Günlük, Haftalık, and Aylık', (tester) async {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -196,21 +248,44 @@ void main() {
       await tester.pumpWidget(createTestWidget(const Size(1400, 900)));
       await tester.pumpAndSettle();
 
-      // Default tab: Tablolar & Depolama
-      expect(find.text('boards'), findsOneWidget);
+      // Default: Günlük
+      expect(find.text('Bugünün Saatlik İstek ve Kullanım Trafiği'), findsOneWidget);
 
-      // Switch to Sorgu Analitiği
-      await tester.ensureVisible(find.text('Sorgu Analitiği'));
-      await tester.tap(find.text('Sorgu Analitiği'));
+      // Switch to Haftalık
+      await tester.tap(find.text('Haftalık'));
       await tester.pumpAndSettle();
-      expect(find.text('En Çok Zaman Alan Sorgular (En Yavaş)'), findsOneWidget);
+      expect(find.text('Haftalık İstek ve Kullanım Dağılımı'), findsOneWidget);
 
-      // Switch to Bağlantı & Konsol Bilgisi
-      await tester.ensureVisible(find.text('Bağlantı & Konsol Bilgisi'));
-      await tester.tap(find.text('Bağlantı & Konsol Bilgisi'));
+      // Switch to Aylık
+      await tester.tap(find.text('Aylık'));
       await tester.pumpAndSettle();
-      expect(find.text('Doğrudan PostgreSQL (Port 5432)'), findsOneWidget);
-      expect(find.text('Supavisor Pooler (Port 6543)'), findsOneWidget);
+      expect(find.text('Aylık Sistem Geneli İstek Hacmi'), findsOneWidget);
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Displays school rankings and platform usage breakdown correctly', (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(createTestWidget(const Size(1400, 900)));
+      await tester.pumpAndSettle();
+
+      // School rankings
+      expect(find.text('Çukurambar Safa Okulları'), findsOneWidget);
+      expect(find.text('Gölbaşı Safa Okulları'), findsOneWidget);
+      expect(find.text('%35.8 Pay'), findsOneWidget);
+      expect(find.text('%28.7 Pay'), findsOneWidget);
+
+      // Platform distribution
+      expect(find.text('Akıllı Tahta (Windows)'), findsOneWidget);
+      expect(find.text('Öğretmen & İdare (Mobil)'), findsOneWidget);
+      expect(find.text('Yönetim Paneli (Web)'), findsOneWidget);
+      expect(find.text('%58.0'), findsOneWidget);
+      expect(find.text('%32.0'), findsOneWidget);
+      expect(find.text('%10.0'), findsOneWidget);
 
       expect(tester.takeException(), isNull);
     });
