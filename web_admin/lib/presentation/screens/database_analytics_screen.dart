@@ -399,177 +399,213 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen>
   }
 
   Widget _buildHeader(DatabaseAnalyticsModel data) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.storage_rounded,
-              color: AppColors.primary,
-              size: 28,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Text(
-                      'Veritabanı & Telemetri Analitiği',
-                      style: TextStyle(
-                        color: AppColors.textDark,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 20,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: _isAutoRefresh
-                            ? AppColors.success.withValues(alpha: 0.15)
-                            : AppColors.textGrey.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration: BoxDecoration(
-                              color: _isAutoRefresh ? AppColors.success : AppColors.textGrey,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            _isAutoRefresh ? 'CANLI AKIŞ (3 sn)' : 'DURAKLATILDI',
-                            style: TextStyle(
-                              color: _isAutoRefresh ? AppColors.success : AppColors.textGrey,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 1180;
+
+        final actionButtons = Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            // Otomatik Yenileme Switch
+            Tooltip(
+              message: _isAutoRefresh
+                  ? 'Canlı Akışı Duraklat'
+                  : 'Canlı Akışı Başlat (Her 3 saniyede otomatik yeniler)',
+              child: OutlinedButton.icon(
+                icon: Icon(
+                  _isAutoRefresh ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  size: 16,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'PostgreSQL 17.6 (Oracle Always Free) • Uptime: ${data.serverHealth.uptimePretty} • Son Güncelleme: ${DateFormat('HH:mm:ss').format(_lastFetchTime ?? DateTime.now())}',
-                  style: const TextStyle(
-                    color: AppColors.textGrey,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Aksiyon Butonları
-          Wrap(
-            spacing: 10,
-            children: [
-              // Otomatik Yenileme Switch
-              Tooltip(
-                message: _isAutoRefresh
-                    ? 'Canlı Akışı Duraklat'
-                    : 'Canlı Akışı Başlat (Her 3 saniyede otomatik yeniler)',
-                child: OutlinedButton.icon(
-                  icon: Icon(
-                    _isAutoRefresh ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    size: 16,
-                  ),
-                  label: Text(_isAutoRefresh ? 'Duraklat' : 'Devam Et'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _isAutoRefresh ? AppColors.textMedium : AppColors.primary,
-                    side: const BorderSide(color: AppColors.border),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: () {
-                    setState(() => _isAutoRefresh = !_isAutoRefresh);
-                  },
-                ),
-              ),
-              // Sayaçları Sıfırla
-              OutlinedButton.icon(
-                icon: const Icon(Icons.restart_alt_rounded, size: 16, color: AppColors.warning),
-                label: const Text('Sayaçları Sıfırla'),
+                label: Text(_isAutoRefresh ? 'Duraklat' : 'Devam Et'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textMedium,
+                  foregroundColor: _isAutoRefresh ? AppColors.textMedium : AppColors.primary,
                   side: const BorderSide(color: AppColors.border),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-                onPressed: _resetStats,
-              ),
-              // Manuel Yenile
-              OutlinedButton.icon(
-                icon: const Icon(Icons.refresh_rounded, size: 16, color: AppColors.primary),
-                label: const Text('Yenile'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textMedium,
-                  side: const BorderSide(color: AppColors.border),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                onPressed: () => _fetchAnalytics(initial: false),
-              ),
-              // ⚡ Studio Panelini Aç Butonu
-              ElevatedButton.icon(
-                icon: const Icon(Icons.bolt_rounded, size: 16, color: Color(0xFFFACC15)),
-                label: const Text(
-                  '⚡ Veritabanı Studio',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F172A),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                ),
-                onPressed: () async {
-                  final uri = Uri.parse(AppConstants.studioLaunchUrl);
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                onPressed: () {
+                  setState(() => _isAutoRefresh = !_isAutoRefresh);
                 },
+              ),
+            ),
+            // Sayaçları Sıfırla
+            OutlinedButton.icon(
+              icon: const Icon(Icons.restart_alt_rounded, size: 16, color: AppColors.warning),
+              label: const Text('Sayaçları Sıfırla'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textMedium,
+                side: const BorderSide(color: AppColors.border),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: _resetStats,
+            ),
+            // Manuel Yenile
+            OutlinedButton.icon(
+              icon: const Icon(Icons.refresh_rounded, size: 16, color: AppColors.primary),
+              label: const Text('Yenile'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textMedium,
+                side: const BorderSide(color: AppColors.border),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () => _fetchAnalytics(initial: false),
+            ),
+            // ⚡ Studio Panelini Aç Butonu
+            ElevatedButton.icon(
+              icon: const Icon(Icons.bolt_rounded, size: 16, color: Color(0xFFFACC15)),
+              label: const Text(
+                '⚡ Veritabanı Studio',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F172A),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              onPressed: () async {
+                final uri = Uri.parse(AppConstants.studioLaunchUrl);
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+            ),
+          ],
+        );
+
+        final titleSection = Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.storage_rounded,
+                color: AppColors.primary,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 10,
+                    runSpacing: 6,
+                    children: [
+                      const Text(
+                        'Veritabanı & Telemetri Analitiği',
+                        style: TextStyle(
+                          color: AppColors.textDark,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _isAutoRefresh
+                              ? AppColors.success.withValues(alpha: 0.15)
+                              : AppColors.textGrey.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 7,
+                              height: 7,
+                              decoration: BoxDecoration(
+                                color: _isAutoRefresh ? AppColors.success : AppColors.textGrey,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _isAutoRefresh ? 'CANLI AKIŞ (3 sn)' : 'DURAKLATILDI',
+                              style: TextStyle(
+                                color: _isAutoRefresh ? AppColors.success : AppColors.textGrey,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'PostgreSQL 17.6 (Oracle Always Free) • Uptime: ${data.serverHealth.uptimePretty} • Son Güncelleme: ${DateFormat('HH:mm:ss').format(_lastFetchTime ?? DateTime.now())}',
+                    style: const TextStyle(
+                      color: AppColors.textGrey,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.bgCard,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-        ],
-      ),
+          child: isCompact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    titleSection,
+                    const SizedBox(height: 16),
+                    actionButtons,
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(child: titleSection),
+                    const SizedBox(width: 16),
+                    actionButtons,
+                  ],
+                ),
+        );
+      },
     );
   }
 
   Widget _buildHeroCards(DatabaseAnalyticsModel data, NumberFormat numFormat) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth > 1200
+        final crossAxisCount = constraints.maxWidth > 1400
             ? 6
-            : constraints.maxWidth > 800
+            : constraints.maxWidth > 850
                 ? 3
-                : 2;
+                : constraints.maxWidth > 550
+                    ? 2
+                    : 1;
+
+        final aspectRatio = constraints.maxWidth > 1400
+            ? 1.45
+            : constraints.maxWidth > 850
+                ? 1.75
+                : constraints.maxWidth > 550
+                    ? 1.4
+                    : 2.4;
 
         return GridView.count(
           crossAxisCount: crossAxisCount,
@@ -577,7 +613,7 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen>
           mainAxisSpacing: 14,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 1.6,
+          childAspectRatio: aspectRatio,
           children: [
             // 1. Toplam İstek & QPS
             _buildKpiCard(
@@ -777,15 +813,18 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen>
                 ),
               ),
               const SizedBox(width: 10),
-              const Text(
-                'Canlı İstek & TPS Dalga Monitörü (Realtime Telemetri)',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
+              const Expanded(
+                child: Text(
+                  'Canlı İstek & TPS Dalga Monitörü (Realtime Telemetri)',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
@@ -794,6 +833,7 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen>
                   border: Border.all(color: const Color(0xFF334155)),
                 ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(Icons.speed_rounded, size: 14, color: Color(0xFFFACC15)),
                     const SizedBox(width: 6),
@@ -836,9 +876,15 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen>
                 '← 90 saniye önce',
                 style: TextStyle(color: Color(0xFF64748B), fontSize: 10),
               ),
-              Text(
-                'Pencereler: 3 sn örnekleme • Maks: ${maxQps.toStringAsFixed(1)} req/s',
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 10),
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    'Pencereler: 3 sn örnekleme • Maks: ${maxQps.toStringAsFixed(1)} req/s',
+                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 10),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
               const Text(
                 'Şimdi (Canlı) →',
@@ -1054,7 +1100,11 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            alignment: WrapAlignment.spaceBetween,
             children: [
               SegmentedButton<bool>(
                 segments: const [
@@ -1074,7 +1124,6 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen>
                   setState(() => _showSlowestQueries = val.first);
                 },
               ),
-              const Spacer(),
               Text(
                 'pg_stat_statements izlemesi • ${queries.length} sorgu listelendi',
                 style: const TextStyle(color: AppColors.textGrey, fontSize: 12),
@@ -1121,11 +1170,14 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen>
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            'Çağrı: ${numFormat.format(q.calls)}  •  Toplam: ${q.totalExecTime.toStringAsFixed(1)} ms  •  Maks: ${q.maxExecTime.toStringAsFixed(1)} ms  •  Satır: ${numFormat.format(q.rows)}',
-                            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                          Expanded(
+                            child: Text(
+                              'Çağrı: ${numFormat.format(q.calls)}  •  Toplam: ${q.totalExecTime.toStringAsFixed(1)} ms  •  Maks: ${q.maxExecTime.toStringAsFixed(1)} ms  •  Satır: ${numFormat.format(q.rows)}',
+                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          const Spacer(),
+                          const SizedBox(width: 8),
                           IconButton(
                             icon: const Icon(Icons.copy_rounded, color: Color(0xFF94A3B8), size: 16),
                             tooltip: 'SQL Kodunu Kopyala',
@@ -1163,8 +1215,11 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 4,
             children: [
               Text(
                 'pg_stat_activity Monitörü • ${processes.length} aktif oturum',
@@ -1277,13 +1332,16 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 4,
             children: const [
               Text(
                 '14 Günlük İstek & Telemetri Geçmişi',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
               ),
-              Spacer(),
               Text(
                 'Her gece 23:59 UTC pg_cron ile otomatik kaydedilir',
                 style: TextStyle(color: AppColors.textGrey, fontSize: 12),
@@ -1292,24 +1350,26 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen>
           ),
           const SizedBox(height: 16),
           // Basit bar göstergesi
-          if (history.isNotEmpty)
-            Container(
-              height: 120,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: history.reversed.map((h) {
-                  final maxCalls = history.map((e) => e.totalCalls).reduce(math.max);
-                  final ratio = maxCalls > 0 ? (h.totalCalls / maxCalls).clamp(0.08, 1.0) : 0.1;
+          if (history.isNotEmpty) ...[
+            Builder(
+              builder: (context) {
+                final maxCalls = history.map((e) => e.totalCalls).reduce(math.max);
+                return Container(
+                  height: 120,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: history.reversed.map((h) {
+                      final ratio = maxCalls > 0 ? (h.totalCalls / maxCalls).clamp(0.08, 1.0) : 0.1;
 
-                  return Tooltip(
-                    message: '${h.metricDate}\n${numFormat.format(h.totalCalls)} istek\nGecikme: ${h.avgLatencyMs} ms',
+                      return Tooltip(
+                        message: '${h.metricDate}\n${numFormat.format(h.totalCalls)} istek\nGecikme: ${h.avgLatencyMs} ms',
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
@@ -1336,7 +1396,10 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen>
                   );
                 }).toList(),
               ),
-            ),
+            );
+          },
+        ),
+      ],
           const SizedBox(height: 16),
           Expanded(
             child: SingleChildScrollView(
@@ -1391,43 +1454,55 @@ class _DatabaseAnalyticsScreenState extends State<DatabaseAnalyticsScreen>
             style: TextStyle(color: AppColors.textGrey, fontSize: 13),
           ),
           const SizedBox(height: 20),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Kart 1: Doğrudan PostgreSQL
-              Expanded(
-                child: _buildConnectionCard(
-                  title: 'Doğrudan PostgreSQL (Port 5432)',
-                  badge: 'Direct Connect',
-                  badgeColor: AppColors.primary,
-                  items: [
-                    _ConnField('Host', '130.61.78.192'),
-                    _ConnField('Port', '5432'),
-                    _ConnField('Database', 'postgres'),
-                    _ConnField('User', 'postgres'),
-                    _ConnField('Şifre', 'Supabase DB Parolası (Oracle Cloud)'),
-                    _ConnField('SSL Mode', 'Prefer / Require'),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth <= 850;
+              final directCard = _buildConnectionCard(
+                title: 'Doğrudan PostgreSQL (Port 5432)',
+                badge: 'Direct Connect',
+                badgeColor: AppColors.primary,
+                items: [
+                  _ConnField('Host', '130.61.78.192'),
+                  _ConnField('Port', '5432'),
+                  _ConnField('Database', 'postgres'),
+                  _ConnField('User', 'postgres'),
+                  _ConnField('Şifre', 'Supabase DB Parolası (Oracle Cloud)'),
+                  _ConnField('SSL Mode', 'Prefer / Require'),
+                ],
+              );
+              final poolerCard = _buildConnectionCard(
+                title: 'Supavisor Pooler (Port 6543)',
+                badge: 'Transaction Pool',
+                badgeColor: AppColors.accent,
+                items: [
+                  _ConnField('Host', '130.61.78.192'),
+                  _ConnField('Port', '6543'),
+                  _ConnField('Database', 'postgres'),
+                  _ConnField('User', 'postgres'),
+                  _ConnField('Havuzlama Modu', 'Transaction (Yüksek Eşzamanlılık)'),
+                  _ConnField('Maks Bağlantı', '1000+ Sanal İstemci'),
+                ],
+              );
+
+              if (isNarrow) {
+                return Column(
+                  children: [
+                    directCard,
+                    const SizedBox(height: 16),
+                    poolerCard,
                   ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Kart 2: Supavisor Pooler
-              Expanded(
-                child: _buildConnectionCard(
-                  title: 'Supavisor Pooler (Port 6543)',
-                  badge: 'Transaction Pool',
-                  badgeColor: AppColors.accent,
-                  items: [
-                    _ConnField('Host', '130.61.78.192'),
-                    _ConnField('Port', '6543'),
-                    _ConnField('Database', 'postgres'),
-                    _ConnField('User', 'postgres'),
-                    _ConnField('Havuzlama Modu', 'Transaction (Yüksek Eşzamanlılık)'),
-                    _ConnField('Maks Bağlantı', '1000+ Sanal İstemci'),
-                  ],
-                ),
-              ),
-            ],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: directCard),
+                  const SizedBox(width: 16),
+                  Expanded(child: poolerCard),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 20),
           // Kart 3: 1-Click Studio Bilgisi
@@ -1593,7 +1668,7 @@ class _StreamingChartPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (points.isEmpty) return;
+    if (points.length < 2) return;
 
     final gridPaint = Paint()
       ..color = const Color(0xFF1E293B)

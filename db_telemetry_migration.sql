@@ -35,7 +35,7 @@ DROP POLICY IF EXISTS "system_database_daily_metrics_read" ON public.system_data
 CREATE POLICY "system_database_daily_metrics_read" 
 ON public.system_database_daily_metrics
 FOR SELECT
-TO authenticated, service_role
+TO service_role
 USING (true);
 
 DROP POLICY IF EXISTS "system_database_daily_metrics_write" ON public.system_database_daily_metrics;
@@ -459,12 +459,21 @@ BEGIN
 END;
 $$;
 
--- 9. Permissions
-GRANT EXECUTE ON FUNCTION public.snapshot_database_daily_metrics() TO authenticated, service_role, postgres;
-GRANT EXECUTE ON FUNCTION public.admin_get_database_analytics() TO authenticated, service_role, postgres;
-GRANT EXECUTE ON FUNCTION public.admin_cancel_backend(int) TO authenticated, service_role, postgres;
-GRANT EXECUTE ON FUNCTION public.admin_reset_stats() TO authenticated, service_role, postgres;
-GRANT EXECUTE ON FUNCTION public.admin_trigger_analyze(text) TO authenticated, service_role, postgres;
+-- 9. Permissions (Strictly Service Role & Postgres only)
+REVOKE ALL ON FUNCTION public.snapshot_database_daily_metrics() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.admin_get_database_analytics() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.admin_cancel_backend(int) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.admin_reset_stats() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.admin_trigger_analyze(text) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.snapshot_database_daily_metrics() TO service_role, postgres;
+GRANT EXECUTE ON FUNCTION public.admin_get_database_analytics() TO service_role, postgres;
+GRANT EXECUTE ON FUNCTION public.admin_cancel_backend(int) TO service_role, postgres;
+GRANT EXECUTE ON FUNCTION public.admin_reset_stats() TO service_role, postgres;
+GRANT EXECUTE ON FUNCTION public.admin_trigger_analyze(text) TO service_role, postgres;
+
+REVOKE ALL ON TABLE public.system_database_daily_metrics FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.system_database_daily_metrics TO service_role, postgres;
 
 -- 10. Initial execution & past 7 days seed if table empty
 SELECT public.snapshot_database_daily_metrics();

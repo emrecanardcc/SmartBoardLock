@@ -49,13 +49,27 @@ class AdminRepository {
     );
   }
 
+  UserProfileModel? _cachedUserProfile;
+  DateTime? _userProfileCachedAt;
+
   // ─────────────────────────── AUTH ────────────────────────────────────────
 
-  /// Mevcut kullanıcının profilini çeker (user_profiles tablosu)
-  Future<UserProfileModel?> getCurrentUserProfile() async {
+  /// Mevcut kullanıcının profilini çeker (user_profiles tablosu, 30 sn önbellekli)
+  Future<UserProfileModel?> getCurrentUserProfile({bool forceRefresh = false}) async {
     try {
       final user = _client.auth.currentUser;
-      if (user == null) return null;
+      if (user == null) {
+        _cachedUserProfile = null;
+        return null;
+      }
+
+      if (!forceRefresh &&
+          _cachedUserProfile != null &&
+          _cachedUserProfile!.id == user.id &&
+          _userProfileCachedAt != null &&
+          DateTime.now().difference(_userProfileCachedAt!).inSeconds < 30) {
+        return _cachedUserProfile;
+      }
 
       final data = await _db
           .from('user_profiles')
@@ -66,7 +80,9 @@ class AdminRepository {
       if (data == null) return null;
       final map = Map<String, dynamic>.from(data as Map);
       map['email'] = user.email;
-      return UserProfileModel.fromMap(map);
+      _cachedUserProfile = UserProfileModel.fromMap(map);
+      _userProfileCachedAt = DateTime.now();
+      return _cachedUserProfile;
     } catch (e) {
       debugPrint('getCurrentUserProfile error: $e');
       return null;
@@ -74,6 +90,8 @@ class AdminRepository {
   }
 
   Future<void> signOut() async {
+    _cachedUserProfile = null;
+    _userProfileCachedAt = null;
     await _client.auth.signOut();
   }
 
@@ -1664,6 +1682,11 @@ class AdminRepository {
 
   /// Veritabanı Telemetri ve Analitik verilerini çeker (<10ms RPC)
   Future<DatabaseAnalyticsModel> getDatabaseAnalytics() async {
+    final caller = await getCurrentUserProfile();
+    if (caller == null || !caller.isSuperAdmin) {
+      throw Exception('Bu işlem için sadece Süper Admin yetkisi geçerlidir.');
+    }
+
     final res = await _db.rpc('admin_get_database_analytics');
     if (res is Map<String, dynamic>) {
       return DatabaseAnalyticsModel.fromMap(res);
@@ -1685,6 +1708,11 @@ class AdminRepository {
 
   /// Aktif veritabanı oturumunu sonlandırır
   Future<bool> cancelBackendProcess(int targetPid) async {
+    final caller = await getCurrentUserProfile();
+    if (caller == null || !caller.isSuperAdmin) {
+      throw Exception('Bu işlem için sadece Süper Admin yetkisi geçerlidir.');
+    }
+
     final res = await _db.rpc('admin_cancel_backend', params: {'target_pid': targetPid});
     if (res is Map && res['success'] == true) return true;
     return false;
@@ -1692,6 +1720,11 @@ class AdminRepository {
 
   /// Veritabanı istatistik sayaçlarını sıfırlar
   Future<bool> resetDatabaseStats() async {
+    final caller = await getCurrentUserProfile();
+    if (caller == null || !caller.isSuperAdmin) {
+      throw Exception('Bu işlem için sadece Süper Admin yetkisi geçerlidir.');
+    }
+
     final res = await _db.rpc('admin_reset_stats');
     if (res is Map && res['success'] == true) return true;
     return false;
@@ -1699,6 +1732,11 @@ class AdminRepository {
 
   /// Belirtilen tablo için PostgreSQL ANALYZE işlemini tetikler
   Future<bool> triggerTableAnalyze(String tableName) async {
+    final caller = await getCurrentUserProfile();
+    if (caller == null || !caller.isSuperAdmin) {
+      throw Exception('Bu işlem için sadece Süper Admin yetkisi geçerlidir.');
+    }
+
     final res = await _db.rpc('admin_trigger_analyze', params: {'table_name': tableName});
     if (res is Map && res['success'] == true) return true;
     return false;
