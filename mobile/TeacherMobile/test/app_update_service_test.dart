@@ -5,6 +5,7 @@ void main() {
   group('AppUpdateService Version Comparison Tests', () {
     test('isVersionOlder accurately identifies older versions', () {
       expect(AppUpdateService.isVersionOlder('2.1.1', '2.1.2'), isTrue);
+      expect(AppUpdateService.isVersionOlder('2.1.2', '2.1.3'), isTrue);
       expect(AppUpdateService.isVersionOlder('2.0.9', '2.1.0'), isTrue);
       expect(AppUpdateService.isVersionOlder('1.9.9', '2.0.0'), isTrue);
       expect(AppUpdateService.isVersionOlder('2.1.0', '2.1.1'), isTrue);
@@ -12,6 +13,7 @@ void main() {
 
     test('isVersionOlder returns false for equal or newer versions', () {
       expect(AppUpdateService.isVersionOlder('2.1.2', '2.1.2'), isFalse);
+      expect(AppUpdateService.isVersionOlder('2.1.3', '2.1.3'), isFalse);
       expect(AppUpdateService.isVersionOlder('2.1.3', '2.1.2'), isFalse);
       expect(AppUpdateService.isVersionOlder('3.0.0', '2.1.2'), isFalse);
       expect(AppUpdateService.isVersionOlder('2.2.0', '2.1.9'), isFalse);

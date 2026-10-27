@@ -26,8 +26,8 @@ class AppUpdateInfo {
 /// Supabase `mobile_app_versions` tablosundan canlı sürüm gereksinimlerini denetler.
 class AppUpdateService {
   /// Bu uygulamanın mevcut sürümü (pubspec.yaml ile senkron)
-  static const String currentAppVersion = '2.1.2';
-  static const int currentBuildNumber = 3;
+  static const String currentAppVersion = '2.1.3';
+  static const int currentBuildNumber = 4;
 
   /// İki semantik sürüm dizesini kıyaslar (Örn: '2.1.1' < '2.1.2' -> true)
   static bool isVersionOlder(String current, String target) {

@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'login_screen.dart';
 import 'admin_teachers_screen.dart';
 import '../widgets/report_issue_dialog.dart';
@@ -740,6 +741,16 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
               },
             ),
             _buildSettingsActionItem(
+              icon: Icons.download_for_offline_rounded,
+              iconColor: const Color(0xFF6366F1),
+              title: 'Kurulum & İndirme Dosyaları',
+              subtitle: 'Windows tahta kurulum (.exe) ve Android APK',
+              onTap: () {
+                Navigator.pop(ctx);
+                _showDownloadsModal(context);
+              },
+            ),
+            _buildSettingsActionItem(
               icon: Icons.bug_report_rounded,
               iconColor: dangerRed,
               title: 'Sorun / Arıza Bildir',
@@ -952,6 +963,202 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
     );
   }
 
+  void _showDownloadsModal(BuildContext context) {
+    const String windowsUrl = 'http://130.61.78.192/Sinif360_Setup.exe';
+    const String mobileApkUrl = 'http://130.61.78.192/Sinif360_TeacherMobile.apk';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: primaryBlue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.download_for_offline_rounded, color: primaryBlue, size: 24),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Kurulum & İndirme Dosyaları',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textDark),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Akıllı tahta ve mobil uygulama bağlantıları',
+                        style: TextStyle(fontSize: 12, color: textGrey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Windows Kurulum Kartı
+            _buildDownloadCard(
+              title: 'Akıllı Tahta Kurulum Dosyası',
+              subtitle: 'Windows 10/11 - Sınıf360 Kilit & Arka Plan Hizmeti',
+              filename: 'Sinif360_Setup.exe',
+              url: windowsUrl,
+              icon: Icons.desktop_windows_rounded,
+              color: primaryBlue,
+            ),
+            const SizedBox(height: 12),
+
+            // Android APK Kartı
+            _buildDownloadCard(
+              title: 'Öğretmen Mobil Uygulaması',
+              subtitle: 'Android APK - Doğrudan Yükleme Dosyası',
+              filename: 'Sinif360_TeacherMobile.apk',
+              url: mobileApkUrl,
+              icon: Icons.android_rounded,
+              color: successGreen,
+            ),
+            const SizedBox(height: 16),
+
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: bgLight,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline_rounded, size: 18, color: textGrey),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Bağlantıyı kopyalayarak okul bilişim sorumlusuna veya öğretmenlerinize WhatsApp/E-posta ile gönderebilirsiniz.',
+                      style: TextStyle(fontSize: 11, color: textGrey, height: 1.3),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDownloadCard({
+    required String title,
+    required String subtitle,
+    required String filename,
+    required String url,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: bgLight,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textDark)),
+                    const SizedBox(height: 1),
+                    Text(subtitle, style: const TextStyle(fontSize: 11, color: textGrey)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    side: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  icon: const Icon(Icons.copy_rounded, size: 16, color: textDark),
+                  label: const Text('Linki Kopyala', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textDark)),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: url));
+                    _showModernSnackbar('$filename bağlantısı panoya kopyalandı.', isSuccess: true, bgColor: textDark);
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: color,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    elevation: 0,
+                  ),
+                  icon: const Icon(Icons.download_rounded, size: 16, color: Colors.white),
+                  label: const Text('İndir', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                  onPressed: () async {
+                    try {
+                      final uri = Uri.parse(url);
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    } catch (_) {
+                      _showModernSnackbar('İndirme başlatılamadı. Linki kopyalamayı deneyin.', isSuccess: false, bgColor: dangerRed);
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoadingProfile) return const Scaffold(backgroundColor: bgLight, body: Center(child: CircularProgressIndicator(color: primaryBlue)));
@@ -993,7 +1200,7 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!_isSchoolLicensed) _buildLicenseWarningBanner(),
+          if (!_isSchoolLicensed || (_remainingLicenseDays <= 15 && _remainingLicenseDays > 0)) _buildLicenseWarningBanner(),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
             child: Column(
@@ -1181,20 +1388,38 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(isUnlocked ? 'Son Açan: $lastUnlockedBy' : 'Son Kilitleyen: $lastLockedBy', style: const TextStyle(color: textGrey, fontSize: 12)),
-                                        const SizedBox(height: 4),
-                                        Row(
-                                          children: [
-                                            Container(width: 8, height: 8, decoration: BoxDecoration(color: isActive ? successGreen : dangerRed, shape: BoxShape.circle)),
-                                            const SizedBox(width: 6),
-                                            Text(isActive ? 'Sistemde Aktif' : 'Pasife Alındı', style: TextStyle(color: isActive ? successGreen : dangerRed, fontSize: 12, fontWeight: FontWeight.bold)),
-                                          ],
-                                        ),
-                                      ],
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Tooltip(
+                                            message: isUnlocked ? 'Son Açan: $lastUnlockedBy' : 'Son Kilitleyen: $lastLockedBy',
+                                            child: Text(
+                                              isUnlocked ? 'Son Açan: $lastUnlockedBy' : 'Son Kilitleyen: $lastLockedBy',
+                                              style: const TextStyle(color: textGrey, fontSize: 12),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              Container(width: 8, height: 8, decoration: BoxDecoration(color: isActive ? successGreen : dangerRed, shape: BoxShape.circle)),
+                                              const SizedBox(width: 6),
+                                              Flexible(
+                                                child: Text(
+                                                  isActive ? 'Sistemde Aktif' : 'Pasife Alındı',
+                                                  style: TextStyle(color: isActive ? successGreen : dangerRed, fontSize: 12, fontWeight: FontWeight.bold),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
+                                    const SizedBox(width: 12),
                                     ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: isUnlocked ? dangerRed : successGreen,
@@ -1228,34 +1453,42 @@ class _AdminBoardsScreenState extends State<AdminBoardsScreen> {
   }
 
   Widget _buildLicenseWarningBanner() {
+    final isExpiringSoon = _isSchoolLicensed && _remainingLicenseDays <= 15 && _remainingLicenseDays > 0;
+    final bannerColor = isExpiringSoon ? warningOrange : dangerRed;
+    final bannerTitle = isExpiringSoon ? 'Kurumsal Lisansınız Yakında Sona Erecek' : 'Kurum Lisansı Sona Ermiştir';
+    final bannerDesc = isExpiringSoon
+        ? 'Lisansınızın bitmesine $_remainingLicenseDays gün kaldı. Kesintisiz akıllı tahta yönetimi için lütfen yenileyiniz.\nİletişim: emrecanardc.dev@gmail.com'
+        : 'Akıllı tahtalar açık tutulmaktadır; kilit kontrolü duraklatılmıştır.\nLisans yenileme için: emrecanardc.dev@gmail.com';
+    final bannerIcon = isExpiringSoon ? Icons.access_time_rounded : Icons.gpp_bad_rounded;
+
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 8, 20, 4),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: dangerRed.withValues(alpha: 0.1),
+        color: bannerColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: dangerRed.withValues(alpha: 0.3)),
+        border: Border.all(color: bannerColor.withValues(alpha: 0.3)),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.gpp_bad_rounded, color: dangerRed, size: 28),
-          SizedBox(width: 12),
+          Icon(bannerIcon, color: bannerColor, size: 28),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Kurum Lisansı Sona Ermiştir',
+                  bannerTitle,
                   style: TextStyle(
-                    color: dangerRed,
+                    color: bannerColor,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
                 Text(
-                  'Akıllı tahtalar açık tutulmaktadır; kilit kontrolü duraklatılmıştır.\nLisans yenileme için: emrecanardc.dev@gmail.com',
-                  style: TextStyle(
+                  bannerDesc,
+                  style: const TextStyle(
                     color: textDark,
                     fontSize: 11,
                     height: 1.3,

@@ -706,6 +706,8 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen> {
                                       fontWeight: FontWeight.w800,
                                       fontSize: 16,
                                     ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: 4),
                                   Container(
