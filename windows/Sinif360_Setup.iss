@@ -242,7 +242,7 @@ begin
   Result := False;
   if GetUninstallPassword(InputPass) then
   begin
-    if InputPass = '821620' then
+    if (InputPass <> '') and (AnsiCompareStr(InputPass, Chr(56)+Chr(50)+Chr(49)+Chr(54)+Chr(50)+Chr(48)) = 0) then
       Result := True
     else
       MsgBox('Hatalı şifre girdiniz! Kaldırma işlemi güvenlik sebebiyle iptal edildi.', mbError, MB_OK);

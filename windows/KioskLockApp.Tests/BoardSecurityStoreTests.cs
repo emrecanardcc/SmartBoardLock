@@ -62,12 +62,12 @@ namespace KioskLockApp.Tests
         }
 
         [TestMethod]
-        public void VerifyPassword_WhenNoPasswordStored_AcceptsDefaultFallbacks()
+        public void VerifyPassword_WhenNoPasswordStored_RejectsAccess()
         {
             BoardSecurityStore.ClearPassword(_testRootKey);
 
-            Assert.IsTrue(BoardSecurityStore.VerifyPassword("360360", _testRootKey));
-            Assert.IsTrue(BoardSecurityStore.VerifyPassword("123456", _testRootKey));
+            Assert.IsFalse(BoardSecurityStore.VerifyPassword("360360", _testRootKey));
+            Assert.IsFalse(BoardSecurityStore.VerifyPassword("123456", _testRootKey));
             Assert.IsFalse(BoardSecurityStore.VerifyPassword("random_wrong_password", _testRootKey));
         }
 

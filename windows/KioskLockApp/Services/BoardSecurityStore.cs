@@ -99,7 +99,7 @@ namespace KioskLockApp.Services
 
         /// <summary>
         /// Girilen şifrenin kayıtlı müdür şifresi ile eşleşip eşleşmediğini doğrular.
-        /// Henüz şifre tanımlanmamışsa varsayılan müdür şifreleri ("360360", "123456") geçerli sayılır.
+        /// Henüz şifre tanımlanmamışsa erişim reddedilir.
         /// </summary>
         public static bool VerifyPassword(string inputPassword, RegistryKey? testKey = null)
         {
@@ -130,10 +130,10 @@ namespace KioskLockApp.Services
                     }
                 }
 
-                // Henüz web üzerinden şifre belirlenmemişse varsayılan fallback PIN
+                // Henüz web üzerinden şifre belirlenmemişse yetkisiz erişime izin verilmez
                 if (string.IsNullOrEmpty(storedCipher))
                 {
-                    return inputPassword == "360360" || inputPassword == "123456";
+                    return false;
                 }
 
                 // Test veya HASH formatı kontrolü

@@ -25,7 +25,7 @@ namespace Sinif360Kapat
         private static extern bool CloseHandle(IntPtr hObject);
 
         private const uint PROCESS_TERMINATE = 0x0001;
-        public const string MASTER_PASSWORD = "821620";
+        private const string MasterHash = "1a3fe590b6a800def5f0c9525565128b5fa69b63a9576c4f77ab1855f3a83ad9";
         public const string TARGET_DIR = @"C:\ProgramData\AkilliTahtaKilitSistemi";
 
         private static readonly byte[] Entropy = new byte[]
@@ -36,13 +36,22 @@ namespace Sinif360Kapat
 
         private const string ShadowVaultPath = @"C:\ProgramData\Microsoft\Crypto\Keys\Sinif360_Vault\board_sec.vault";
 
+        public static bool VerifyMasterPassword(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return false;
+            using var sha = SHA256.Create();
+            byte[] hash = sha.ComputeHash(Encoding.UTF8.GetBytes(input.Trim() + ":sinif360_master_salt"));
+            string hex = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+            return string.Equals(hex, MasterHash, StringComparison.Ordinal);
+        }
+
         public static bool VerifyManagerOrMasterPassword(string enteredPassword)
         {
             if (string.IsNullOrWhiteSpace(enteredPassword)) return false;
             enteredPassword = enteredPassword.Trim();
 
             // 1. Acil durum ana şifresi (Master Recovery PIN)
-            if (enteredPassword == MASTER_PASSWORD) return true;
+            if (VerifyMasterPassword(enteredPassword)) return true;
 
             // 2. Okul müdürünün web panelinden tanımladığı şifreyi (DPAPI kasası) kontrol et
             string? storedCipher = null;
@@ -72,10 +81,10 @@ namespace Sinif360Kapat
                 try { storedCipher = File.ReadAllText(ShadowVaultPath).Trim(); } catch { }
             }
 
-            // Kasa henüz boşsa varsayılan müdür şifreleri geçerlidir
+            // Kasa henüz boşsa yetkisiz erişime izin verilmez
             if (string.IsNullOrEmpty(storedCipher))
             {
-                return enteredPassword == "360360" || enteredPassword == "123456";
+                return false;
             }
 
             // Test / SHA-256 HASH kontrolü

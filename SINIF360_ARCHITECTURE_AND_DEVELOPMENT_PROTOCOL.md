@@ -15,7 +15,7 @@ Ekosistem 3 ana platformdan ve 1 merkezi sunucudan oluşur:
 
 ```mermaid
 flowchart TD
-    subgraph Cloud ["Merkezi Bulut & Sunucu (Oracle Cloud VM: 130.61.78.192)"]
+    subgraph Cloud ["Merkezi Bulut & Sunucu (Self-Hosted Supabase Production)"]
         DB[(PostgreSQL / Supabase)]
         STORAGE[Storage: updates/, wallpapers/, media/]
         AUTH[Supabase Auth & RLS]
@@ -61,7 +61,7 @@ flowchart TD
   2. `web_admin/lib/core/constants/app_constants.dart`: `appVersion = 'X.Y.Z'`, `serverVersion = 'vX.Y.Z'`, `serverReleaseDate = '...'`
   3. `web_admin/pubspec.yaml`: `version: X.Y.Z+1`
   4. `web_admin/test/school_selector_and_downloads_test.dart`: `expect(DownloadsScreen.currentVersion, 'vX.Y.Z');`
-* İndirilecek fiziki dosyalar Oracle VM sunucusunda (`/home/ubuntu/downloads/Sinif360_Setup.exe` ve `Sinif360_TeacherMobile.apk`) eksiksiz olarak bulunmalıdır.
+* İndirilecek fiziki dosyalar sunucuda (`downloads/Sinif360_Setup.exe` ve `Sinif360_TeacherMobile.apk`) eksiksiz olarak bulunmalıdır.
 
 ---
 
@@ -69,7 +69,7 @@ flowchart TD
 
 1. **Yerel Test İlkesi:**
    - Web panelinde yapılan tüm değişiklikler öncelikle yerel ortamda (`localhost`) test edilir (`flutter run -d chrome`).
-   - `AppConstants.supabaseUrl`, yerel çalışmada doğrudan `http://130.61.78.192:8000` sunucusuna bağlanır.
+   - `AppConstants.supabaseUrl`, yerel çalışmada doğrudan yapılandırılmış merkezi sunucuya bağlanır.
 2. **Kullanıcı Onayı Olmadan Canlıya Yükleme YASAKTIR:**
    - Kullanıcı açıkça *"Canlıya al"* veya *"Cloudflare'e deploy et"* talimatı vermedikçe `https://panel-sinif360.pages.dev` üzerine dağıtım yapılamaz.
 3. **Canlı Yayına Alma Protokolü:**
@@ -78,7 +78,7 @@ flowchart TD
    - `flutter build web --release --no-tree-shake-icons` *(İkon fontlarının bozulmasını engellemek için `--no-tree-shake-icons` zorunludur)*
    - `Copy-Item "web\_worker.js" "build\web\_worker.js" -Force` *(Mixed-Content ve WebSocket proxy için hayati zorunluluktur)*
    - `npx wrangler pages deploy build/web --project-name=panel-sinif360 --branch=main --commit-dirty=true`
-   - Oracle VM aynasının senkronizasyonu: `web_admin_bundle.tar.gz` oluşturulup `/home/ubuntu/downloads/admin/` dizinine açılır.
+   - Sunucu web aynasının senkronizasyonu: `web_admin_bundle.tar.gz` oluşturulup ayna sunucu dizinine açılır.
 
 ---
 
