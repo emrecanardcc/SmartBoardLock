@@ -10,7 +10,7 @@ class DownloadsScreen extends StatelessWidget {
 
   static const String windowsSetupUrl = 'http://130.61.78.192/Sinif360_Setup.exe';
   static const String androidApkUrl = 'http://130.61.78.192/Sinif360_TeacherMobile.apk';
-  static const String currentVersion = 'v2.1.2';
+  static const String currentVersion = 'v2.1.3';
 
   Future<void> _downloadFile(BuildContext context, String url, String filename) async {
     try {
@@ -505,8 +505,6 @@ class DownloadsScreen extends StatelessWidget {
           _buildInfoRow(Icons.check_circle_outline_rounded, 'Android 8.0 (Oreo) ve üzeri tüm cihazlar'),
           const SizedBox(height: 8),
           _buildInfoRow(Icons.qr_code_scanner_rounded, 'Dinamik QR kod ve 30 saniyelik TOTP ile kilit açma'),
-          const SizedBox(height: 8),
-          _buildInfoRow(Icons.info_outline_rounded, 'Google Play & App Store inceleme sürecindedir (APK anında kurulur)'),
 
           const SizedBox(height: 20),
 

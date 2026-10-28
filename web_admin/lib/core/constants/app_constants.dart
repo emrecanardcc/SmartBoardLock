@@ -61,9 +61,9 @@ class AppConstants {
 
   // Uygulama ve Sunucu Versiyon Bilgileri
   static const String appName = 'Sınıf360';
-  static const String appVersion = '2.1.2';
-  static const String serverVersion = 'v2.1.2';
+  static const String appVersion = '2.1.3';
+  static const String serverVersion = 'v2.1.3';
   static const String serverHost = 'Oracle Cloud (130.61.78.192)';
-  static const String serverReleaseDate = '24 Ekim 2026';
+  static const String serverReleaseDate = '28 Ekim 2026';
   static const String serverStatus = 'Aktif & Güncel';
 }

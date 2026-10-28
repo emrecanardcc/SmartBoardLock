@@ -148,7 +148,7 @@ void main() {
     test('Official download endpoints point to valid setup and apk links', () {
       expect(DownloadsScreen.windowsSetupUrl, contains('Sinif360_Setup.exe'));
       expect(DownloadsScreen.androidApkUrl, contains('Sinif360_TeacherMobile.apk'));
-      expect(DownloadsScreen.currentVersion, 'v2.1.2');
+      expect(DownloadsScreen.currentVersion, 'v2.1.3');
     });
   });
 }
