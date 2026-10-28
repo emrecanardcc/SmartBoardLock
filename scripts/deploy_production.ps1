@@ -64,18 +64,26 @@ ssh -i $sshKey -o StrictHostKeyChecking=no ubuntu@130.61.78.192 @"
 Write-Host "  [OK] Mobil uygulama zorunlu güncelleme şartı aktif edildi." -ForegroundColor Green
 
 # -------------------------------------------------------------
-# ADIM 3: WEB ADMİN PANELİNİ CLOUDFLARE PAGES'E YAYINLA
+# ADIM 3: WEB ADMİN PANELİNİ CLOUDFLARE PAGES & VM'E YAYINLA
 # -------------------------------------------------------------
-Write-Host "`n[3/3] Web Admin paneli derlenip Cloudflare Pages'e canlıya alınıyor..." -ForegroundColor Cyan
+Write-Host "`n[3/3] Web Admin paneli derlenip Cloudflare Pages ve VM mirror'a alınıyor..." -ForegroundColor Cyan
 
 $webAdminDir = "C:\Projeler\AkilliTahtaSistemi\web_admin"
 Push-Location $webAdminDir
 try {
+    flutter clean
     flutter pub get
-    flutter build web --release
+    flutter build web --release --no-tree-shake-icons
     Copy-Item "web\_worker.js" "build\web\_worker.js" -Force
-    cmd.exe /c "npx wrangler pages deploy build/web --project-name=panel-sinif360 --branch=main"
+    cmd.exe /c "npx wrangler pages deploy build/web --project-name=panel-sinif360 --branch=main --commit-dirty=true"
     Write-Host "  [OK] Web Admin Cloudflare Pages üzerinde canlıya alındı." -ForegroundColor Green
+
+    # VM Mirror Güncellemesi
+    tar -czf web_admin_bundle.tar.gz -C build\web .
+    scp -i $sshKey -o StrictHostKeyChecking=no web_admin_bundle.tar.gz "ubuntu@130.61.78.192:/home/ubuntu/web_admin_bundle.tar.gz"
+    ssh -i $sshKey -o StrictHostKeyChecking=no ubuntu@130.61.78.192 "tar -xzf /home/ubuntu/web_admin_bundle.tar.gz -C /home/ubuntu/downloads/admin/ && chmod -R 777 /home/ubuntu/downloads/admin/ && rm /home/ubuntu/web_admin_bundle.tar.gz"
+    Remove-Item "web_admin_bundle.tar.gz" -Force -ErrorAction SilentlyContinue
+    Write-Host "  [OK] Web Admin Oracle VM ayna sunucusuna yüklendi." -ForegroundColor Green
 }
 finally {
     Pop-Location
