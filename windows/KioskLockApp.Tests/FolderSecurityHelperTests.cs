@@ -190,6 +190,13 @@ namespace KioskLockApp.Tests
                         Assert.AreEqual(Microsoft.Win32.RegistryValueKind.DWord, rkAd.GetValueKind("NoChangingWallPaper"));
                     }
 
+                    using (var rkEdge = testRoot.OpenSubKey(@"Software\Policies\Microsoft\Windows\EdgeUI"))
+                    {
+                        Assert.IsNotNull(rkEdge, "Policies\\EdgeUI anahtarı mevcut olmalı");
+                        Assert.AreEqual(0, rkEdge.GetValue("AllowEdgeSwipe"), "AllowEdgeSwipe 0 olmalı (Edge Swipe engelli)");
+                        Assert.AreEqual(Microsoft.Win32.RegistryValueKind.DWord, rkEdge.GetValueKind("AllowEdgeSwipe"));
+                    }
+
                     // 3. Politikaları temizle (Restore)
                     FolderSecurityHelper.RestoreSystemPolicies(testRoot);
 
@@ -210,6 +217,11 @@ namespace KioskLockApp.Tests
                         Assert.IsNull(rkAd?.GetValue("NoChangingWallPaper"), "NoChangingWallPaper silinmiş olmalı");
                     }
 
+                    using (var rkEdge = testRoot.OpenSubKey(@"Software\Policies\Microsoft\Windows\EdgeUI"))
+                    {
+                        Assert.IsNull(rkEdge?.GetValue("AllowEdgeSwipe"), "AllowEdgeSwipe silinmiş olmalı");
+                    }
+
                     // 5. Canlı sistem çağrısının da istisnasız güvenle tamamlandığını doğrula
                     FolderSecurityHelper.EnforceSystemPolicies();
                     FolderSecurityHelper.RestoreSystemPolicies();
@@ -218,6 +230,70 @@ namespace KioskLockApp.Tests
                 {
                     try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(testSubKeyPath, false); } catch { }
                     FolderSecurityHelper.RestoreSystemPolicies();
+                }
+            }
+        }
+
+        [TestMethod]
+        public void Test_CustomShell_Toggle_And_WinlogonShell_Policies()
+        {
+            string testSubKeyPath = @"Software\SmartBoardLock_Test_Shell_" + Guid.NewGuid().ToString("N");
+            using (var testRoot = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(testSubKeyPath))
+            {
+                try
+                {
+                    // 1. Başlangıçta custom shell devre dışı olmalı
+                    Assert.IsFalse(FolderSecurityHelper.IsCustomShellEnabled(testRoot), "Varsayılan olarak Custom Shell devre dışı olmalı");
+
+                    // 2. Custom shell'i aktifleştir
+                    FolderSecurityHelper.SetCustomShellEnabled(true, testRoot);
+                    Assert.IsTrue(FolderSecurityHelper.IsCustomShellEnabled(testRoot), "SetCustomShellEnabled(true) sonrası IsCustomShellEnabled true olmalı");
+
+                    using (var rkWl = testRoot.OpenSubKey(FolderSecurityHelper.WINLOGON_KEY))
+                    {
+                        Assert.IsNotNull(rkWl, "Winlogon anahtarı mevcut olmalı");
+                        Assert.AreEqual(FolderSecurityHelper.CUSTOM_SHELL_APP_PATH, rkWl.GetValue("Shell"), "Winlogon Shell KioskLockApp.exe olarak ayarlanmalı");
+                    }
+
+                    // 3. EnforceSystemPolicies çağrıldığında Custom Shell açıksa Winlogon Shell korunmalı
+                    FolderSecurityHelper.EnforceSystemPolicies(testRoot);
+                    using (var rkWl = testRoot.OpenSubKey(FolderSecurityHelper.WINLOGON_KEY))
+                    {
+                        Assert.AreEqual(FolderSecurityHelper.CUSTOM_SHELL_APP_PATH, rkWl?.GetValue("Shell"), "EnforceSystemPolicies sonrası Winlogon Shell KioskLockApp olmalı");
+                    }
+
+                    // 4. Kilit açıldığında (EnsureExplorerRunning), Shell dinamik olarak explorer.exe yapılmalı
+                    FolderSecurityHelper.EnsureExplorerRunning(testRoot);
+                    using (var rkWl = testRoot.OpenSubKey(FolderSecurityHelper.WINLOGON_KEY))
+                    {
+                        Assert.AreEqual("explorer.exe", rkWl?.GetValue("Shell"), "EnsureExplorerRunning sonrası Winlogon Shell explorer.exe olmalı");
+                    }
+
+                    // 5. Tahta tekrar kilitlendiğinde (TerminateExplorerIfCustomShell), Shell KioskLockApp'e dönmeli
+                    FolderSecurityHelper.TerminateExplorerIfCustomShell(testRoot);
+                    using (var rkWl = testRoot.OpenSubKey(FolderSecurityHelper.WINLOGON_KEY))
+                    {
+                        Assert.AreEqual(FolderSecurityHelper.CUSTOM_SHELL_APP_PATH, rkWl?.GetValue("Shell"), "TerminateExplorerIfCustomShell sonrası Winlogon Shell KioskLockApp olmalı");
+                    }
+
+                    // 6. RestoreSystemPolicies Winlogon Shell'i explorer.exe'ye geri döndürmeli
+                    FolderSecurityHelper.RestoreSystemPolicies(testRoot);
+                    using (var rkWl = testRoot.OpenSubKey(FolderSecurityHelper.WINLOGON_KEY))
+                    {
+                        Assert.AreEqual("explorer.exe", rkWl?.GetValue("Shell"), "RestoreSystemPolicies sonrası Winlogon Shell explorer.exe'ye dönmeli");
+                    }
+
+                    // 7. Custom shell'i devre dışı bırak
+                    FolderSecurityHelper.SetCustomShellEnabled(false, testRoot);
+                    Assert.IsFalse(FolderSecurityHelper.IsCustomShellEnabled(testRoot), "SetCustomShellEnabled(false) sonrası IsCustomShellEnabled false olmalı");
+                    using (var rkWl = testRoot.OpenSubKey(FolderSecurityHelper.WINLOGON_KEY))
+                    {
+                        Assert.AreEqual("explorer.exe", rkWl?.GetValue("Shell"), "SetCustomShellEnabled(false) sonrası Shell explorer.exe olmalı");
+                    }
+                }
+                finally
+                {
+                    try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(testSubKeyPath, false); } catch { }
                 }
             }
         }

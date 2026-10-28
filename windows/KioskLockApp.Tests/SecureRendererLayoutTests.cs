@@ -439,6 +439,47 @@ namespace KioskLockApp.Tests
             });
         }
 
+        [TestMethod]
+        public void Test_LicenseBadge_And_VersionDisplay()
+        {
+            RunInSta(() =>
+            {
+                using (var form = new SecureRenderer(isDesignOrTestMode: true))
+                {
+                    form.Size = new Size(1920, 1080);
+                    form.Show();
+                    form.ApplyDynamicSizing();
+
+                    var fieldBadge = typeof(SecureRenderer).GetField("lblLicenseBadge", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                    var fieldVer = typeof(SecureRenderer).GetField("lblVersion", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+                    Assert.IsNotNull(fieldBadge, "lblLicenseBadge alanı mevcut olmalı");
+                    Assert.IsNotNull(fieldVer, "lblVersion alanı mevcut olmalı");
+
+                    Label? lblBadge = fieldBadge.GetValue(form) as Label;
+                    Label? lblVer = fieldVer.GetValue(form) as Label;
+
+                    Assert.IsNotNull(lblBadge, "lblLicenseBadge null olmamalı");
+                    Assert.IsNotNull(lblVer, "lblVersion null olmamalı");
+
+                    // 1. Başlangıçta lisans rozeti gizli olmalı, sürüm 2.1.4 içermeli
+                    Assert.IsFalse(lblBadge.Visible, "Varsayılan olarak lisans rozeti gizli olmalıdır");
+                    Assert.IsTrue(lblVer.Text.StartsWith("v2.1.4"), $"Sürüm etiketi v2.1.4 ile başlamalıdır, mevcut: '{lblVer.Text}'");
+
+                    // 2. Lisans geçersiz duruma düştüğünde
+                    form.UpdateLicenseBadge(false);
+                    Assert.IsTrue(lblBadge.Visible, "Lisans geçersizken uyarı rozeti görünür olmalıdır");
+                    Assert.IsTrue(lblBadge.Text.Contains("LİSANS SÜRESİ DOLDU"), $"Rozet lisans uyarısı içermelidir: '{lblBadge.Text}'");
+                    Assert.IsTrue(lblVer.Text.Contains("LİSANS GEÇERSİZ"), $"Sürüm etiketi lisans uyarısı içermelidir: '{lblVer.Text}'");
+
+                    // 3. Lisans tekrar aktifleştiğinde
+                    form.UpdateLicenseBadge(true);
+                    Assert.IsFalse(lblBadge.Visible, "Lisans geçerliyken uyarı rozeti gizlenmelidir");
+                    Assert.AreEqual("v2.1.4", lblVer.Text, "Sürüm etiketi normale dönmelidir");
+                }
+            });
+        }
+
         #region Helper Metotlar
 
         private static void CollectControlsOfType<T>(Control parent, List<T> result) where T : Control

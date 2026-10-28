@@ -48,7 +48,11 @@ namespace KioskLockApp.UI
         public SecureRenderer(bool isDesignOrTestMode = false)
         {
             this.isDesignOrTestMode = isDesignOrTestMode;
-            if (!isDesignOrTestMode) DeepWindowsHooks.InitializeHooks();
+            if (!isDesignOrTestMode)
+            {
+                DeepWindowsHooks.InitializeHooks();
+                Microsoft.Win32.SystemEvents.DisplaySettingsChanged += SystemEvents_DisplaySettingsChanged;
+            }
             this.FormBorderStyle = FormBorderStyle.None;
             this.WindowState = isDesignOrTestMode ? FormWindowState.Normal : FormWindowState.Maximized;
             this.BackColor = Color.FromArgb(245, 247, 251);
@@ -65,6 +69,7 @@ namespace KioskLockApp.UI
             currentChallengeCode = OfflineTotpEngine.GenerateChallengeCode();
             UpdateChallengeDisplay();
             RefreshMediaDisplays();
+            UpdateLicenseBadge(SecureSupabase.GetCachedLicenseStatus());
 
             if (isDesignOrTestMode)
             {
@@ -121,9 +126,10 @@ namespace KioskLockApp.UI
                 if (!string.IsNullOrEmpty(bId))
                 {
                     bool isLicensed = await SecureSupabase.CheckLicenseStatusAsync(bId);
-                    if (!isLicensed)
+                    UpdateLicenseBadge(isLicensed);
+                    if (!isLicensed && !DeepWindowsHooks.IsLocked)
                     {
-                        SilentExitOnUnlicensed();
+                        LockScreen();
                     }
                 }
             };
@@ -255,7 +261,15 @@ namespace KioskLockApp.UI
             else if (state == "UNLOCKED")
             {
                 isOfflineUnlocked = false;
-                UnlockScreen();
+                if (!SecureSupabase.GetCachedLicenseStatus())
+                {
+                    UpdateLicenseBadge(false);
+                    LockScreen();
+                }
+                else
+                {
+                    UnlockScreen();
+                }
             }
             else if (state == "LOCKED")
             {
@@ -265,8 +279,19 @@ namespace KioskLockApp.UI
             else
             {
                 bool lastKnownActive = SecureSupabase.GetRegistryValue("LastKnownIsActive", "true") == "true";
-                if (isOfflineUnlocked || !lastKnownActive) UnlockScreen();
-                else LockScreen();
+                if (!SecureSupabase.GetCachedLicenseStatus())
+                {
+                    UpdateLicenseBadge(false);
+                    LockScreen();
+                }
+                else if (isOfflineUnlocked || !lastKnownActive)
+                {
+                    UnlockScreen();
+                }
+                else
+                {
+                    LockScreen();
+                }
             }
         }
 
@@ -378,7 +403,15 @@ namespace KioskLockApp.UI
                     if (!record.IsActive || record.IsUnlocked)
                     {
                         isOfflineUnlocked = false;
-                        UnlockScreen();
+                        if (!SecureSupabase.GetCachedLicenseStatus())
+                        {
+                            UpdateLicenseBadge(false);
+                            LockScreen();
+                        }
+                        else
+                        {
+                            UnlockScreen();
+                        }
                     }
                     else
                     {
@@ -406,6 +439,16 @@ namespace KioskLockApp.UI
 
         private void VerifyPinLogic()
         {
+            if (!SecureSupabase.GetCachedLicenseStatus())
+            {
+                lblPinDisplay.Text = "LİSANS GEÇERSİZ";
+                lblPinDisplay.ForeColor = Color.FromArgb(220, 38, 38);
+                enteredPin = "";
+                UpdateLicenseBadge(false);
+                System.Threading.Tasks.Task.Delay(1500).ContinueWith(t => { if (this.IsHandleCreated) this.Invoke(new Action(() => UpdatePinDisplay())); });
+                return;
+            }
+
             if (OfflineTotpEngine.VerifyPin(enteredPin, currentChallengeCode))
             {
                 isOfflineUnlocked = true;
@@ -476,7 +519,24 @@ namespace KioskLockApp.UI
 
         private void UnlockScreen()
         {
+            if (this.InvokeRequired)
+            {
+                this.BeginInvoke(new Action(UnlockScreen));
+                return;
+            }
+
+            if (!SecureSupabase.GetCachedLicenseStatus())
+            {
+                UpdateLicenseBadge(false);
+                LockScreen();
+                return;
+            }
+
             DeepWindowsHooks.IsLocked = false;
+
+            // Explorer sürecini başlat (Custom Shell devredeyse veya kapalıysa)
+            FolderSecurityHelper.EnsureExplorerRunning();
+
             IntPtr taskbar = FindWindow("Shell_TrayWnd", null);
             if (taskbar != IntPtr.Zero) ShowWindow(taskbar, SW_SHOW);
 
@@ -492,9 +552,24 @@ namespace KioskLockApp.UI
 
         private void LockScreen()
         {
+            if (this.InvokeRequired)
+            {
+                this.BeginInvoke(new Action(LockScreen));
+                return;
+            }
+
             DeepWindowsHooks.IsLocked = true;
-            IntPtr taskbar = FindWindow("Shell_TrayWnd", null);
-            if (taskbar != IntPtr.Zero) ShowWindow(taskbar, SW_HIDE);
+
+            // Custom shell modundaysa explorer'ı temizle, değilse taskbar'ı gizle
+            if (FolderSecurityHelper.IsCustomShellEnabled())
+            {
+                FolderSecurityHelper.TerminateExplorerIfCustomShell();
+            }
+            else
+            {
+                IntPtr taskbar = FindWindow("Shell_TrayWnd", null);
+                if (taskbar != IntPtr.Zero) ShowWindow(taskbar, SW_HIDE);
+            }
 
             // YENİ: WPF için Visibility kullanılır
             if (floatingLockBtn.Visibility == System.Windows.Visibility.Visible)
@@ -504,6 +579,8 @@ namespace KioskLockApp.UI
 
             if (secondaryScreens.Count == 0 && Screen.AllScreens.Length > 1) CoverOtherScreens();
             this.Show();
+            this.TopMost = true;
+            this.BringToFront();
             SetForegroundWindow(this.Handle);
         }
 
@@ -552,9 +629,40 @@ namespace KioskLockApp.UI
             catch { }
         }
 
+        private void SystemEvents_DisplaySettingsChanged(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (this.IsDisposed || !this.IsHandleCreated) return;
+                if (this.InvokeRequired)
+                {
+                    this.BeginInvoke(new Action(() => SystemEvents_DisplaySettingsChanged(sender, e)));
+                    return;
+                }
+
+                if (DeepWindowsHooks.IsLocked)
+                {
+                    RemoveSecondaryScreens();
+                    CoverOtherScreens();
+                    this.WindowState = FormWindowState.Normal;
+                    this.Bounds = Screen.PrimaryScreen.Bounds;
+                    this.WindowState = FormWindowState.Maximized;
+                    ApplyDynamicSizing();
+                    this.TopMost = true;
+                    this.BringToFront();
+                }
+            }
+            catch { }
+        }
+
         private void SecureRenderer_FormClosing(object sender, FormClosingEventArgs e)
         {
             if (e.CloseReason == CloseReason.UserClosing) e.Cancel = true;
+            try
+            {
+                Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= SystemEvents_DisplaySettingsChanged;
+            }
+            catch { }
         }
 
         private void ResetToPairingMode()
@@ -621,19 +729,49 @@ namespace KioskLockApp.UI
             }
         }
 
-        private void SilentExitOnUnlicensed()
+        public void UpdateLicenseBadge(bool isLicensed)
         {
             try
             {
-                watchdogTimer?.Stop();
-                clockTimer?.Stop();
-                aggressiveSecurityTimer?.Stop();
-                heartbeatTimer?.Stop();
-                DeepWindowsHooks.IsLocked = false;
-                RemoveSecondaryScreens();
+                if (this.InvokeRequired)
+                {
+                    this.BeginInvoke(new Action(() => UpdateLicenseBadge(isLicensed)));
+                    return;
+                }
+
+                if (!isLicensed)
+                {
+                    if (lblLicenseBadge != null)
+                    {
+                        lblLicenseBadge.Text = "⛔ LİSANS SÜRESİ DOLDU - TAHTA KİLİTLİDİR";
+                        lblLicenseBadge.BackColor = ColDanger;
+                        lblLicenseBadge.ForeColor = Color.White;
+                        lblLicenseBadge.Visible = true;
+                    }
+
+                    if (lblVersion != null)
+                    {
+                        lblVersion.Text = $"v{appVersion} • ⚠️ LİSANS GEÇERSİZ";
+                        lblVersion.ForeColor = ColDanger;
+                        lblVersion.Font = new Font("Segoe UI", lblVersion.Font.Size, FontStyle.Bold);
+                    }
+                }
+                else
+                {
+                    if (lblLicenseBadge != null)
+                    {
+                        lblLicenseBadge.Visible = false;
+                    }
+
+                    if (lblVersion != null)
+                    {
+                        lblVersion.Text = "v" + appVersion;
+                        lblVersion.ForeColor = ColTextSec;
+                        lblVersion.Font = new Font("Segoe UI", lblVersion.Font.Size, FontStyle.Regular);
+                    }
+                }
             }
             catch { }
-            Environment.Exit(0);
         }
 
         private string GetSavedSchoolName() => SecureSupabase.GetRegistryValue("SchoolName", "Bilinmeyen Okul");

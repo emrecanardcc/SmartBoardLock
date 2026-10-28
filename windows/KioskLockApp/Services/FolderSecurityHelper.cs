@@ -21,8 +21,226 @@ namespace KioskLockApp.Services
         private static readonly List<FileStream> _activeKernelLocks = new List<FileStream>();
         private static readonly object _lockObj = new object();
         private static Thread? _taskManagerKillerThread;
-        private static volatile bool _isKillerRunning = false;
         private static Task? _protectionTask;
+        private static volatile bool _isKillerRunning;
+
+        public const string WINLOGON_KEY = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon";
+        public const string CUSTOM_SHELL_APP_PATH = @"C:\ProgramData\AkilliTahtaKilitSistemi\KioskLockApp.exe";
+        public const string SMARTBOARD_KEY = @"Software\SmartBoardLock";
+        public const string USE_CUSTOM_SHELL_VALUE = "UseCustomShell";
+
+        /// <summary>
+        /// Custom Shell (Winlogon Kabuk Değişimi) özelliğinin açık olup olmadığını kontrol eder.
+        /// Kayıt Defterinde HKLM veya HKCU altında Software\SmartBoardLock\UseCustomShell = 1 aranır.
+        /// </summary>
+        public static bool IsCustomShellEnabled(RegistryKey? testRootKey = null)
+        {
+            try
+            {
+                if (testRootKey != null)
+                {
+                    using var subKey = testRootKey.OpenSubKey(SMARTBOARD_KEY);
+                    if (subKey != null)
+                    {
+                        var val = subKey.GetValue(USE_CUSTOM_SHELL_VALUE);
+                        if (val != null) return Convert.ToInt32(val) == 1;
+                    }
+                    return false;
+                }
+
+                using (var rkLm = Registry.LocalMachine.OpenSubKey(SMARTBOARD_KEY, false))
+                {
+                    if (rkLm != null)
+                    {
+                        var val = rkLm.GetValue(USE_CUSTOM_SHELL_VALUE);
+                        if (val != null) return Convert.ToInt32(val) == 1;
+                    }
+                }
+
+                using (var rkCu = Registry.CurrentUser.OpenSubKey(SMARTBOARD_KEY, false))
+                {
+                    if (rkCu != null)
+                    {
+                        var val = rkCu.GetValue(USE_CUSTOM_SHELL_VALUE);
+                        if (val != null) return Convert.ToInt32(val) == 1;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Custom Shell yapılandırma bayrağını ve Winlogon Shell değerini belirler.
+        /// </summary>
+        public static void SetCustomShellEnabled(bool enable, RegistryKey? testRootKey = null)
+        {
+            try
+            {
+                if (testRootKey != null)
+                {
+                    using var subKey = testRootKey.CreateSubKey(SMARTBOARD_KEY);
+                    subKey?.SetValue(USE_CUSTOM_SHELL_VALUE, enable ? 1 : 0, RegistryValueKind.DWord);
+
+                    using var wlKey = testRootKey.CreateSubKey(WINLOGON_KEY);
+                    if (enable)
+                    {
+                        wlKey?.SetValue("Shell", CUSTOM_SHELL_APP_PATH, RegistryValueKind.String);
+                    }
+                    else
+                    {
+                        wlKey?.SetValue("Shell", "explorer.exe", RegistryValueKind.String);
+                    }
+                    return;
+                }
+
+                try
+                {
+                    using var rkLm = Registry.LocalMachine.CreateSubKey(SMARTBOARD_KEY);
+                    rkLm?.SetValue(USE_CUSTOM_SHELL_VALUE, enable ? 1 : 0, RegistryValueKind.DWord);
+                }
+                catch { }
+
+                try
+                {
+                    using var rkCu = Registry.CurrentUser.CreateSubKey(SMARTBOARD_KEY);
+                    rkCu?.SetValue(USE_CUSTOM_SHELL_VALUE, enable ? 1 : 0, RegistryValueKind.DWord);
+                }
+                catch { }
+
+                try
+                {
+                    using var wlKey = Registry.LocalMachine.CreateSubKey(WINLOGON_KEY);
+                    if (enable)
+                    {
+                        wlKey?.SetValue("Shell", CUSTOM_SHELL_APP_PATH, RegistryValueKind.String);
+                    }
+                    else
+                    {
+                        wlKey?.SetValue("Shell", "explorer.exe", RegistryValueKind.String);
+                    }
+                }
+                catch { }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Kilit açıldığında veya acil durumlarda Windows Explorer (Gezgin / Görev Çubuğu) sürecinin çalıştığını garanti eder.
+        /// Winlogon Shell KioskLockApp olduğunda explorer.exe sadece dosya penceresi açar; bu nedenle önce Winlogon Shell explorer.exe'ye çevrilir.
+        /// </summary>
+        public static void EnsureExplorerRunning(RegistryKey? testRootKey = null)
+        {
+            try
+            {
+                if (IsCustomShellEnabled(testRootKey))
+                {
+                    if (testRootKey != null)
+                    {
+                        using var wlKey = testRootKey.CreateSubKey(WINLOGON_KEY);
+                        wlKey?.SetValue("Shell", "explorer.exe", RegistryValueKind.String);
+                    }
+                    else
+                    {
+                        try
+                        {
+                            using var wlKey = Registry.LocalMachine.OpenSubKey(WINLOGON_KEY, true);
+                            wlKey?.SetValue("Shell", "explorer.exe", RegistryValueKind.String);
+                        }
+                        catch { }
+
+                        try
+                        {
+                            using var wlCu = Registry.CurrentUser.OpenSubKey(WINLOGON_KEY, true);
+                            wlCu?.DeleteValue("Shell", false);
+                        }
+                        catch { }
+                    }
+                }
+
+                if (Process.GetProcessesByName("explorer").Length == 0)
+                {
+                    string explorerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+                    Process.Start(new ProcessStartInfo(explorerPath) { UseShellExecute = true });
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Custom Shell devredeyken tahta kilitlendiğinde, masaüstü veya başlat menüsü görünmesin diye
+        /// Winlogon Shell değerini KioskLockApp olarak yeniden tesis eder ve explorer sürecini sonlandırır.
+        /// </summary>
+        public static void TerminateExplorerIfCustomShell(RegistryKey? testRootKey = null)
+        {
+            try
+            {
+                if (IsCustomShellEnabled(testRootKey))
+                {
+                    string kioskPath = (testRootKey != null || File.Exists(CUSTOM_SHELL_APP_PATH))
+                        ? CUSTOM_SHELL_APP_PATH
+                        : (Environment.ProcessPath?.EndsWith("KioskLockApp.exe", StringComparison.OrdinalIgnoreCase) == true
+                            ? Environment.ProcessPath
+                            : CUSTOM_SHELL_APP_PATH);
+
+                    if (testRootKey != null)
+                    {
+                        using var wlKey = testRootKey.CreateSubKey(WINLOGON_KEY);
+                        wlKey?.SetValue("Shell", kioskPath, RegistryValueKind.String);
+                    }
+                    else
+                    {
+                        try
+                        {
+                            using var wlKey = Registry.LocalMachine.OpenSubKey(WINLOGON_KEY, true);
+                            wlKey?.SetValue("Shell", kioskPath, RegistryValueKind.String);
+                        }
+                        catch { }
+
+                        try
+                        {
+                            using var wlCu = Registry.CurrentUser.OpenSubKey(WINLOGON_KEY, true);
+                            wlCu?.DeleteValue("Shell", false);
+                        }
+                        catch { }
+                    }
+
+                    foreach (var p in Process.GetProcessesByName("explorer"))
+                    {
+                        try { p.Kill(); } catch { }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// WinRE (Windows Kurtarma Ortamı) ve başlangıç onarımını devre dışı bırakır (güç keserek WinRE'ye sızma tehdidine karşı koruma).
+        /// </summary>
+        public static void EnforceBootAndRecoveryProtection()
+        {
+            try
+            {
+                RunHiddenCmd("reagentc.exe /disable");
+                RunHiddenCmd("bcdedit /set {default} recoveryenabled No");
+                RunHiddenCmd("bcdedit /set {current} bootstatuspolicy ignoreallfailures");
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Kaldırma ve onarım durumlarında standart kurtarma seçeneklerini eski haline getirir.
+        /// </summary>
+        public static void RestoreBootAndRecoveryProtection()
+        {
+            try
+            {
+                RunHiddenCmd("reagentc.exe /enable");
+                RunHiddenCmd("bcdedit /set {default} recoveryenabled Yes");
+                RunHiddenCmd("bcdedit /set {current} bootstatuspolicy default");
+            }
+            catch { }
+        }
 
         /// <summary>
         /// Sınıf360 kurulum klasörünü NTFS ve Çekirdek (Kernel) düzeyinde silinmeye ve değiştirilmeye karşı kilitler.
@@ -138,6 +356,9 @@ namespace KioskLockApp.Services
                     RunHiddenCmd($"icacls \"{mediaDir}\" /remove:d *S-1-5-32-544 /remove:d *S-1-5-32-545 /remove:d *S-1-1-0 /C /Q");
                     RunHiddenCmd($"icacls \"{mediaDir}\" /grant:r *S-1-5-18:(OI)(CI)F /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-32-545:(OI)(CI)M /C /Q");
                 }
+
+                // 6. WinRE ve Başlangıç Kurtarma Koruması (Öğrencilerin güç keserek kurtarma konsoluna girmesini engeller)
+                EnforceBootAndRecoveryProtection();
             }
             catch { }
         }
@@ -236,6 +457,7 @@ namespace KioskLockApp.Services
                 StopTaskManagerKiller();
                 RestoreSystemPolicies();
                 ReleaseCoreFileLocks();
+                RestoreBootAndRecoveryProtection();
 
                 // DENY ACE'lerini temizle
                 RunHiddenCmd($"icacls \"{dirPath}\" /remove:d *S-1-5-32-544 /remove:d *S-1-5-32-545 /remove:d *S-1-1-0 /T /C /Q");
@@ -281,6 +503,23 @@ namespace KioskLockApp.Services
                     rkAd?.SetValue("NoChangingWallPaper", 1, RegistryValueKind.DWord);
                 }
                 catch { }
+
+                try
+                {
+                    using var rkEdge = testRootKey.CreateSubKey(@"Software\Policies\Microsoft\Windows\EdgeUI");
+                    rkEdge?.SetValue("AllowEdgeSwipe", 0, RegistryValueKind.DWord);
+                }
+                catch { }
+
+                if (IsCustomShellEnabled(testRootKey))
+                {
+                    try
+                    {
+                        using var rkWl = testRootKey.CreateSubKey(WINLOGON_KEY);
+                        rkWl?.SetValue("Shell", CUSTOM_SHELL_APP_PATH, RegistryValueKind.String);
+                    }
+                    catch { }
+                }
                 return;
             }
 
@@ -333,6 +572,32 @@ namespace KioskLockApp.Services
                 rkAdLm?.SetValue("NoChangingWallPaper", 1, RegistryValueKind.DWord);
             }
             catch { }
+
+            // 7. Policies\EdgeUI (HKCU & HKLM) - Dokunmatik Ekran Kenar Kaydırma (Edge Swipe) Engeli
+            try
+            {
+                using var rkEdge = Registry.CurrentUser.CreateSubKey(@"Software\Policies\Microsoft\Windows\EdgeUI");
+                rkEdge?.SetValue("AllowEdgeSwipe", 0, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            try
+            {
+                using var rkEdgeLm = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Policies\Microsoft\Windows\EdgeUI");
+                rkEdgeLm?.SetValue("AllowEdgeSwipe", 0, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            // 8. Custom Shell (Winlogon Shell) Yapılandırması
+            if (IsCustomShellEnabled() && File.Exists(CUSTOM_SHELL_APP_PATH))
+            {
+                try
+                {
+                    using var rkWl = Registry.LocalMachine.CreateSubKey(WINLOGON_KEY);
+                    rkWl?.SetValue("Shell", CUSTOM_SHELL_APP_PATH, RegistryValueKind.String);
+                }
+                catch { }
+            }
         }
 
         /// <summary>
@@ -362,6 +627,20 @@ namespace KioskLockApp.Services
                 {
                     using var key = testRootKey.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop", true);
                     key?.DeleteValue("NoChangingWallPaper", false);
+                }
+                catch { }
+
+                try
+                {
+                    using var key = testRootKey.OpenSubKey(@"Software\Policies\Microsoft\Windows\EdgeUI", true);
+                    key?.DeleteValue("AllowEdgeSwipe", false);
+                }
+                catch { }
+
+                try
+                {
+                    using var key = testRootKey.OpenSubKey(WINLOGON_KEY, true);
+                    key?.SetValue("Shell", "explorer.exe", RegistryValueKind.String);
                 }
                 catch { }
                 return;
@@ -410,6 +689,36 @@ namespace KioskLockApp.Services
                 key?.DeleteValue("NoChangingWallPaper", false);
             }
             catch { }
+
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Policies\Microsoft\Windows\EdgeUI", true);
+                key?.DeleteValue("AllowEdgeSwipe", false);
+            }
+            catch { }
+
+            try
+            {
+                using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\EdgeUI", true);
+                key?.DeleteValue("AllowEdgeSwipe", false);
+            }
+            catch { }
+
+            try
+            {
+                using var key = Registry.LocalMachine.OpenSubKey(WINLOGON_KEY, true);
+                key?.SetValue("Shell", "explorer.exe", RegistryValueKind.String);
+            }
+            catch { }
+
+            try
+            {
+                using var keyCu = Registry.CurrentUser.OpenSubKey(WINLOGON_KEY, true);
+                keyCu?.DeleteValue("Shell", false);
+            }
+            catch { }
+
+            EnsureExplorerRunning();
         }
 
         /// <summary>

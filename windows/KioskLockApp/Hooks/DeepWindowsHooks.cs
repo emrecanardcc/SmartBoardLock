@@ -105,19 +105,10 @@ namespace KioskLockApp.Hooks
                         return (IntPtr)1;
                     }
 
-                    // Windows Tuşu Kombinasyonları: Win+R (Çalıştır), Win+X (Hızlı Menü), Win+E (Explorer), Win+D, Win+S, Win+L
+                    // Windows Tuşu Kombinasyonları: Kilitliyken TÜM Win tuşu kombinasyonları (Win+P, Win+R, Win+X, Win+E, Win+A, Win+I, Win+K, Win+Tab vb.) kesin olarak yutulur
                     if (winPressed || ((GetKeyState(0x5B) & 0x8000) != 0) || ((GetKeyState(0x5C) & 0x8000) != 0))
                     {
-                        if (vkCode == 0x52 || // 'R' (Run)
-                            vkCode == 0x58 || // 'X' (Power Menu)
-                            vkCode == 0x45 || // 'E' (Explorer)
-                            vkCode == 0x44 || // 'D' (Desktop)
-                            vkCode == 0x53 || // 'S' (Search)
-                            vkCode == 0x51 || // 'Q' (Search)
-                            vkCode == 0x4C)   // 'L' (Lock)
-                        {
-                            return (IntPtr)1;
-                        }
+                        return (IntPtr)1;
                     }
                 }
             }

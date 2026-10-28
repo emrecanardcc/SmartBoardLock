@@ -208,12 +208,9 @@ namespace WatchdogService
                     {
                         // Süreç çalışmıyor!
 
-                        // LİSANS KONTROLÜ: Lisans geçersizse bekçi KioskLockApp'i çalıştırmaz
-                        if (!IsLicenseValid())
-                        {
-                            Thread.Sleep(5000);
-                            continue;
-                        }
+                        // SÜREÇ ÇALIŞMIYOR - FAIL-SECURE KURALI:
+                        // Lisans geçersiz veya süresi dolmuş olsa bile KioskLockApp her koşulda çalıştırılır
+                        // ve ekran kilitli tutulur (öğrencilerin masaüstüne erişmesi engellenir).
 
                         // Eğer daha önce çalışıyorduysa ve şimdi kapandıysa -> Çökme tespiti
                         if (wasRunning)

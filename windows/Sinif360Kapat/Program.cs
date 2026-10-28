@@ -469,6 +469,10 @@ namespace Sinif360Kapat
                 {
                     key?.DeleteValue("NoChangingWallPaper", false);
                 }
+                using (RegistryKey? key = Registry.CurrentUser.OpenSubKey(@"Software\Policies\Microsoft\Windows\EdgeUI", true))
+                {
+                    key?.DeleteValue("AllowEdgeSwipe", false);
+                }
             }
             catch { }
 
@@ -487,6 +491,45 @@ namespace Sinif360Kapat
                 {
                     key?.DeleteValue("NoChangingWallPaper", false);
                 }
+                using (RegistryKey? key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\EdgeUI", true))
+                {
+                    key?.DeleteValue("AllowEdgeSwipe", false);
+                }
+            }
+            catch { }
+
+            // Fail-Safe: Winlogon kabuğunu varsayılan explorer.exe'ye geri döndür
+            try
+            {
+                using var wl = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon", true);
+                wl?.SetValue("Shell", "explorer.exe", RegistryValueKind.String);
+            }
+            catch { }
+
+            try
+            {
+                using var wlCu = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon", true);
+                wlCu?.DeleteValue("Shell", false);
+            }
+            catch { }
+
+            // Fail-Safe: Yöneticinin asla ekransız kalmaması için explorer.exe çalışmıyorsa başlat
+            try
+            {
+                if (Process.GetProcessesByName("explorer").Length == 0)
+                {
+                    string explorerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+                    Process.Start(new ProcessStartInfo(explorerPath) { UseShellExecute = true });
+                }
+            }
+            catch { }
+
+            // Standart Windows Kurtarma Ortamını (WinRE) ve başlangıç onarımını geri etkinleştir
+            try
+            {
+                RunHiddenCmd("reagentc.exe /enable");
+                RunHiddenCmd("bcdedit /set {default} recoveryenabled Yes");
+                RunHiddenCmd("bcdedit /set {current} bootstatuspolicy default");
             }
             catch { }
         }
@@ -540,6 +583,53 @@ namespace Sinif360Kapat
             {
                 using var rkAdLm = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop");
                 rkAdLm?.SetValue("NoChangingWallPaper", 1, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            // 7. Policies\EdgeUI (HKCU & HKLM) - Dokunmatik Ekran Kenar Kaydırma Engeli
+            try
+            {
+                using var rkEdge = Registry.CurrentUser.CreateSubKey(@"Software\Policies\Microsoft\Windows\EdgeUI");
+                rkEdge?.SetValue("AllowEdgeSwipe", 0, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            try
+            {
+                using var rkEdgeLm = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Policies\Microsoft\Windows\EdgeUI");
+                rkEdgeLm?.SetValue("AllowEdgeSwipe", 0, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            // 8. Custom Shell (Winlogon Shell)
+            try
+            {
+                bool useCustomShell = false;
+                using (var rk = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\SmartBoardLock", false))
+                {
+                    if (rk?.GetValue("UseCustomShell") != null) useCustomShell = Convert.ToInt32(rk.GetValue("UseCustomShell")) == 1;
+                }
+                if (!useCustomShell)
+                {
+                    using var rkCu = Registry.CurrentUser.OpenSubKey(@"Software\SmartBoardLock", false);
+                    if (rkCu?.GetValue("UseCustomShell") != null) useCustomShell = Convert.ToInt32(rkCu.GetValue("UseCustomShell")) == 1;
+                }
+
+                string kioskPath = Path.Combine(TARGET_DIR, "KioskLockApp.exe");
+                if (useCustomShell && File.Exists(kioskPath))
+                {
+                    using var wl = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon");
+                    wl?.SetValue("Shell", kioskPath, RegistryValueKind.String);
+                }
+            }
+            catch { }
+
+            // 9. WinRE ve Başlangıç Kurtarma Koruması
+            try
+            {
+                RunHiddenCmd("reagentc.exe /disable");
+                RunHiddenCmd("bcdedit /set {default} recoveryenabled No");
+                RunHiddenCmd("bcdedit /set {current} bootstatuspolicy ignoreallfailures");
             }
             catch { }
         }
@@ -990,7 +1080,7 @@ namespace Sinif360Kapat
             Label lblFooter = new Label
             {
                 Dock = DockStyle.Fill,
-                Text = "Sınıf360 v2.1.2 • Yetkili Yönetici & Kaldırma Konsolu",
+                Text = "Sınıf360 v2.1.4 • Yetkili Yönetici & Kaldırma Konsolu",
                 Font = new Font("Segoe UI", 8F),
                 ForeColor = Color.FromArgb(148, 163, 184),
                 TextAlign = ContentAlignment.MiddleCenter

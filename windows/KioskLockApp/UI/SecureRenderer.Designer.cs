@@ -21,6 +21,8 @@ namespace KioskLockApp.UI
 
         // Header kontrolleri
         private Label lblBrand;
+        private Label lblLicenseBadge;
+        private string appVersion = "2.1.4";
         private Label lblTime;
         private Label lblDate;
 
@@ -92,6 +94,22 @@ namespace KioskLockApp.UI
                 TextAlign = ContentAlignment.MiddleLeft
             };
             header.Controls.Add(lblBrand, 0, 0);
+
+            lblLicenseBadge = new Label
+            {
+                Text = "⛔ LİSANS SÜRESİ DOLDU - TAHTA KİLİTLİDİR",
+                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+                ForeColor = Color.White,
+                BackColor = ColDanger,
+                AutoSize = false,
+                AutoEllipsis = true,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Visible = false,
+                Margin = new Padding(S(10), S(6), S(10), S(6))
+            };
+            header.Controls.Add(lblLicenseBadge, 1, 0);
+
             root.Controls.Add(header, 0, 0);
 
             // ==================== MAIN GRID ====================
@@ -142,11 +160,10 @@ namespace KioskLockApp.UI
             pbQrCode = new PictureBox { SizeMode = PictureBoxSizeMode.Zoom, Dock = DockStyle.Fill, Margin = new Padding(S(4)) };
             lblQrSub = new Label { Text = "Uygulamadaki 'Karekod Okut' butonunu kullanın", Font = new Font("Segoe UI", 8.5f), ForeColor = ColTextSec, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopCenter };
 
-            string appVersion = "1.0.0";
             try
             {
-                appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString();
-                if (appVersion.EndsWith(".0")) appVersion = appVersion.Substring(0, appVersion.Length - 2);
+                var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+                if (ver != null) appVersion = $"{ver.Major}.{ver.Minor}.{ver.Build}";
             }
             catch { }
 
@@ -425,6 +442,7 @@ namespace KioskLockApp.UI
 
             // 3. Fontların Dinamik ve Güvenli Güncellenmesi
             if (lblBrand != null) lblBrand.Font = new Font("Segoe UI", Math.Max(13f, 22f * uniformScale), FontStyle.Bold);
+            if (lblLicenseBadge != null) lblLicenseBadge.Font = new Font("Segoe UI", Math.Max(8.5f, 10.5f * uniformScale), FontStyle.Bold);
             if (lblTime != null) lblTime.Font = new Font("Segoe UI", Math.Max(15f, 24f * uniformScale), FontStyle.Bold);
             if (lblDate != null) lblDate.Font = new Font("Segoe UI", Math.Max(8f, 11f * uniformScale), FontStyle.Regular);
 

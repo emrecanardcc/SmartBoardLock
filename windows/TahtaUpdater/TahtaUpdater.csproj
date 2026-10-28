@@ -15,7 +15,9 @@
 		<!-- Framework-Dependent (Small footprint ~8MB) -->
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<SelfContained>false</SelfContained>
-		<Version>2.1.2</Version>
+		<Version>2.1.4</Version>
+		<AssemblyVersion>2.1.4.0</AssemblyVersion>
+		<FileVersion>2.1.4.0</FileVersion>
 
 	</PropertyGroup>
 

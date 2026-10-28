@@ -1,10 +1,10 @@
 ; =====================================================================
 ; Sınıf360 / Akıllı Tahta Kilit Sistemi - Profesyonel Kurulum Scripti
-; Sürüm: 2.1.3 | Yayıncı: Emre Can ARDIÇ
+; Sürüm: 2.1.4 | Yayıncı: Emre Can ARDIÇ
 ; =====================================================================
 
 #define MyAppName "Sınıf360 Akıllı Tahta Kilit Sistemi"
-#define MyAppVersion "2.1.3"
+#define MyAppVersion "2.1.4"
 #define MyAppPublisher "Emre Can ARDIÇ"
 #define MyAppExeName "KioskLockApp.exe"
 #define MyWatchdogExeName "WatchdogService.exe"
@@ -35,7 +35,7 @@ DisableFinishedPage=yes
 ; ProgramData'ya yazabilmek ve başlangıç kancası atabilmek için yönetici izni gereklidir
 PrivilegesRequired=admin
 OutputDir=userdocs:Inno Setup Output Files
-OutputBaseFilename=Sinif360_v2.1.3_Setup
+OutputBaseFilename=Sinif360_v2.1.4_Setup
 Compression=lzma2/ultra64
 WizardStyle=modern
 CloseApplications=force
@@ -55,7 +55,7 @@ Name: "{app}"
 Name: "{app}\Media"
 
 [Files]
-Source: "C:\Projeler\AkilliTahtaSistemi\dist\v2.1.3_publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs restartreplace
+Source: "C:\Projeler\AkilliTahtaSistemi\dist\v2.1.4_publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs restartreplace
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -67,6 +67,12 @@ Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 ; BAŞLANGIÇ GECİKMESİ SIFIRLAMA (Windows Explorer 10-15 saniyelik başlangıç gecikmesini sıfırlar)
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Serialize"; ValueType: dword; ValueName: "StartupDelayInMSec"; ValueData: 0; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize"; ValueType: dword; ValueName: "StartupDelayInMSec"; ValueData: 0; Flags: uninsdeletevalue
+; OPT-IN CUSTOM SHELL: Winlogon kabuğu KioskLockApp olarak yapılandırılır (0ms masaüstü bypass)
+Root: HKLM; Subkey: "Software\SmartBoardLock"; ValueType: dword; ValueName: "UseCustomShell"; ValueData: 1; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"; ValueType: string; ValueName: "Shell"; ValueData: "{app}\{#MyAppExeName}"
+; DOKUNMATİK EKRAN KENAR KAYDIRMA (Edge Swipe) ENGELİ
+Root: HKLM; Subkey: "SOFTWARE\Policies\Microsoft\Windows\EdgeUI"; ValueType: dword; ValueName: "AllowEdgeSwipe"; ValueData: 0; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Policies\Microsoft\Windows\EdgeUI"; ValueType: dword; ValueName: "AllowEdgeSwipe"; ValueData: 0; Flags: uninsdeletevalue
 
 [Run]
 ; Kurulum tamamlandığında önce bekçi servisini, ardından kilit uygulamasını arka planda başlatır
@@ -232,6 +238,10 @@ begin
     Exec('cmd.exe', '/c attrib +s +h "' + ExpandConstant('{app}') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     // 7. Windows Logon Zamanlanmış Görevi Tanımla (Oturum açıldığı AN 0ms gecikmeyle en yüksek yetkiyle başlar)
     Exec('schtasks.exe', '/create /tn "Sinif360_InstantKiosk" /tr "\"' + ExpandConstant('{app}\{#MyAppExeName}') + '\"" /sc onlogon /rl highest /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // 8. WinRE ve Başlangıç Kurtarma Koruması (Öğrencilerin güç keserek kurtarma moduna geçmesini engeller)
+    Exec('cmd.exe', '/c reagentc.exe /disable', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('cmd.exe', '/c bcdedit /set {default} recoveryenabled No', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('cmd.exe', '/c bcdedit /set {current} bootstatuspolicy ignoreallfailures', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;
 
@@ -276,15 +286,26 @@ begin
     RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Policies\System', 'DisableLockWorkstation');
     RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Policies\Explorer', 'NoRun');
     RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop', 'NoChangingWallPaper');
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Policies\Microsoft\Windows\EdgeUI', 'AllowEdgeSwipe');
     RegDeleteValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System', 'DisableTaskMgr');
     RegDeleteValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System', 'DisableLockWorkstation');
     RegDeleteValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer', 'NoRun');
     RegDeleteValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop', 'NoChangingWallPaper');
+    RegDeleteValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Policies\Microsoft\Windows\EdgeUI', 'AllowEdgeSwipe');
+
+    // Winlogon kabuğunu varsayılan explorer.exe'ye geri çevir
+    RegWriteStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon', 'Shell', 'explorer.exe');
+    RegDeleteValue(HKEY_CURRENT_USER, 'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon', 'Shell');
+
+    Exec('cmd.exe', '/c reagentc.exe /enable', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('cmd.exe', '/c bcdedit /set {default} recoveryenabled Yes', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('cmd.exe', '/c bcdedit /set {current} bootstatuspolicy default', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec('schtasks.exe', '/delete /tn "Sinif360_InstantKiosk" /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /remove:d *S-1-5-32-544 /remove:d *S-1-5-32-545 /remove:d *S-1-1-0 /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /grant *S-1-5-32-544:(OI)(CI)F /grant *S-1-5-32-545:(OI)(CI)M /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec('cmd.exe', '/c attrib -s -h "' + ExpandConstant('{app}') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec('cmd.exe', '/c rmdir /s /q "C:\ProgramData\Microsoft\Crypto\Keys\Sinif360_Vault"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('explorer.exe', '', '', SW_SHOW, ewNoWait, ResultCode);
 
     // 4. ADIM: Sonradan oluşan log, afiş, temp zip dosyalarını ve klasörü tamamen temizle
     DelTree(ExpandConstant('{app}'), True, True, True);

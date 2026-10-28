@@ -180,9 +180,7 @@ namespace KioskLockApp
 
                     if (!isLicensed)
                     {
-                        System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] EXITING: Not licensed\n");
-                        Environment.Exit(0);
-                        return;
+                        System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] FAIL-SECURE: License invalid/expired, keeping lock active with warning badge\n");
                     }
                 }
                 else
@@ -197,13 +195,15 @@ namespace KioskLockApp
                             bool onlineStatus = await SecureSupabase.CheckLicenseStatusAsync(boardId);
                             if (!onlineStatus)
                             {
-                                System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] Background license check failed/revoked, exiting.\n");
-                                Environment.Exit(0);
+                                System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] FAIL-SECURE: Background license check revoked, maintaining lock\n");
                             }
                         }
                         catch { }
                     });
                 }
+
+                // Custom Shell modundaysa açılışta masaüstü/görev çubuğunun açık kalmadığını garanti et
+                FolderSecurityHelper.TerminateExplorerIfCustomShell();
 
                 System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] Launching SecureRenderer\n");
                 try

@@ -65,6 +65,21 @@ namespace WatchdogService
                 rkAdLm?.SetValue("NoChangingWallPaper", 1, RegistryValueKind.DWord);
             }
             catch { }
+
+            // 7. Policies\EdgeUI (HKCU & HKLM) - Touchscreen Edge Swipe Block
+            try
+            {
+                using var rkEdge = Registry.CurrentUser.CreateSubKey(@"Software\Policies\Microsoft\Windows\EdgeUI");
+                rkEdge?.SetValue("AllowEdgeSwipe", 0, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            try
+            {
+                using var rkEdgeLm = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Policies\Microsoft\Windows\EdgeUI");
+                rkEdgeLm?.SetValue("AllowEdgeSwipe", 0, RegistryValueKind.DWord);
+            }
+            catch { }
         }
 
         public static void RestoreSystemPolicies()
@@ -110,6 +125,34 @@ namespace WatchdogService
             {
                 using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop", true);
                 key?.DeleteValue("NoChangingWallPaper", false);
+            }
+            catch { }
+
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Policies\Microsoft\Windows\EdgeUI", true);
+                key?.DeleteValue("AllowEdgeSwipe", false);
+            }
+            catch { }
+
+            try
+            {
+                using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\EdgeUI", true);
+                key?.DeleteValue("AllowEdgeSwipe", false);
+            }
+            catch { }
+
+            try
+            {
+                using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon", true);
+                key?.SetValue("Shell", "explorer.exe", RegistryValueKind.String);
+            }
+            catch { }
+
+            try
+            {
+                using var keyCu = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon", true);
+                keyCu?.DeleteValue("Shell", false);
             }
             catch { }
         }

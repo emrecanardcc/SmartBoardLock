@@ -56,11 +56,11 @@ namespace KioskLockApp.Services
             try
             {
                 var ver = Assembly.GetExecutingAssembly().GetName().Version;
-                return ver != null ? $"{ver.Major}.{ver.Minor}.{ver.Build}" : "2.1.2";
+                return ver != null ? $"{ver.Major}.{ver.Minor}.{ver.Build}" : "2.1.4";
             }
             catch
             {
-                return "2.1.2";
+                return "2.1.4";
             }
         }
 
