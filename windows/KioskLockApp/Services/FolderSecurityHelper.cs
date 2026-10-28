@@ -48,8 +48,8 @@ namespace KioskLockApp.Services
                 // 1. Kritik çekirdek dosya kilitlerini ANINDA al (Donanım/Kernel seviyesi - 2 ms)
                 LockAllCoreFiles(targetDir);
 
-                // 2. Görev Yöneticisi kısıtlamasını kalıcı olarak kayıt defterine işle (1 ms)
-                EnforceDisableTaskMgr();
+                // 2. Sistem güvenlik politikalarını kalıcı olarak kayıt defterine işle (1 ms)
+                EnforceSystemPolicies();
 
                 // 3. Windows 10-15 saniyelik başlangıç gecikmesini sıfırla (0 ms açılış)
                 DisableWindowsStartupDelay();
@@ -233,6 +233,8 @@ namespace KioskLockApp.Services
                 // Arka planda devam eden icacls görevi varsa tamamlanmasını bekle
                 try { _protectionTask?.Wait(4000); } catch { }
 
+                StopTaskManagerKiller();
+                RestoreSystemPolicies();
                 ReleaseCoreFileLocks();
 
                 // DENY ACE'lerini temizle
@@ -248,24 +250,175 @@ namespace KioskLockApp.Services
         }
 
         /// <summary>
-        /// Kayıt Defteri üzerinden Görev Yöneticisi'ni devre dışı bırakır (DisableTaskMgr = 1).
-        /// Hem HKCU hem HKLM seviyesinde yazılır.
+        /// Kritik Windows sistem politikalarını hem HKCU hem de HKLM düzeyinde kayıt defterine yazar:
+        /// 1. Policies\System\DisableTaskMgr = 1 (Görev Yöneticisi açılmasını engeller)
+        /// 2. Policies\System\DisableLockWorkstation = 1 (Win+L kilit ekranını engeller)
+        /// 3. Policies\Explorer\NoRun = 1 (Win+R / Çalıştır iletişim kutusunu engeller)
+        /// 4. Policies\ActiveDesktop\NoChangingWallPaper = 1 (Masaüstü duvar kâğıdı değiştirilmesini engeller)
         /// </summary>
-        public static void EnforceDisableTaskMgr()
+        public static void EnforceSystemPolicies(RegistryKey? testRootKey = null)
         {
+            if (testRootKey != null)
+            {
+                try
+                {
+                    using var rkSys = testRootKey.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\System");
+                    rkSys?.SetValue("DisableTaskMgr", 1, RegistryValueKind.DWord);
+                    rkSys?.SetValue("DisableLockWorkstation", 1, RegistryValueKind.DWord);
+                }
+                catch { }
+
+                try
+                {
+                    using var rkExp = testRootKey.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer");
+                    rkExp?.SetValue("NoRun", 1, RegistryValueKind.DWord);
+                }
+                catch { }
+
+                try
+                {
+                    using var rkAd = testRootKey.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop");
+                    rkAd?.SetValue("NoChangingWallPaper", 1, RegistryValueKind.DWord);
+                }
+                catch { }
+                return;
+            }
+
+            // 1. Policies\System (HKCU)
             try
             {
-                using var rk = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\System");
-                rk?.SetValue("DisableTaskMgr", 1, RegistryValueKind.DWord);
+                using var rkSys = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\System");
+                rkSys?.SetValue("DisableTaskMgr", 1, RegistryValueKind.DWord);
+                rkSys?.SetValue("DisableLockWorkstation", 1, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            // 2. Policies\System (HKLM)
+            try
+            {
+                using var rkSysLm = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System");
+                rkSysLm?.SetValue("DisableTaskMgr", 1, RegistryValueKind.DWord);
+                rkSysLm?.SetValue("DisableLockWorkstation", 1, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            // 3. Policies\Explorer (HKCU)
+            try
+            {
+                using var rkExp = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer");
+                rkExp?.SetValue("NoRun", 1, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            // 4. Policies\Explorer (HKLM)
+            try
+            {
+                using var rkExpLm = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer");
+                rkExpLm?.SetValue("NoRun", 1, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            // 5. Policies\ActiveDesktop (HKCU)
+            try
+            {
+                using var rkAd = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop");
+                rkAd?.SetValue("NoChangingWallPaper", 1, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            // 6. Policies\ActiveDesktop (HKLM)
+            try
+            {
+                using var rkAdLm = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop");
+                rkAdLm?.SetValue("NoChangingWallPaper", 1, RegistryValueKind.DWord);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Kısıtlayıcı sistem politikalarını hem HKCU hem de HKLM kovanlarından temizler.
+        /// Kilit açma (Unlock) ve kaldırma (Uninstall) senaryolarında çağrılır.
+        /// </summary>
+        public static void RestoreSystemPolicies(RegistryKey? testRootKey = null)
+        {
+            if (testRootKey != null)
+            {
+                try
+                {
+                    using var key = testRootKey.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\System", true);
+                    key?.DeleteValue("DisableTaskMgr", false);
+                    key?.DeleteValue("DisableLockWorkstation", false);
+                }
+                catch { }
+
+                try
+                {
+                    using var key = testRootKey.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", true);
+                    key?.DeleteValue("NoRun", false);
+                }
+                catch { }
+
+                try
+                {
+                    using var key = testRootKey.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop", true);
+                    key?.DeleteValue("NoChangingWallPaper", false);
+                }
+                catch { }
+                return;
+            }
+
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\System", true);
+                key?.DeleteValue("DisableTaskMgr", false);
+                key?.DeleteValue("DisableLockWorkstation", false);
             }
             catch { }
 
             try
             {
-                using var rkLm = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System");
-                rkLm?.SetValue("DisableTaskMgr", 1, RegistryValueKind.DWord);
+                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", true);
+                key?.DeleteValue("NoRun", false);
             }
             catch { }
+
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop", true);
+                key?.DeleteValue("NoChangingWallPaper", false);
+            }
+            catch { }
+
+            try
+            {
+                using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System", true);
+                key?.DeleteValue("DisableTaskMgr", false);
+                key?.DeleteValue("DisableLockWorkstation", false);
+            }
+            catch { }
+
+            try
+            {
+                using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer", true);
+                key?.DeleteValue("NoRun", false);
+            }
+            catch { }
+
+            try
+            {
+                using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop", true);
+                key?.DeleteValue("NoChangingWallPaper", false);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Kayıt Defteri üzerinden Görev Yöneticisi'ni devre dışı bırakır (DisableTaskMgr = 1).
+        /// Hem HKCU hem HKLM seviyesinde yazılır.
+        /// </summary>
+        public static void EnforceDisableTaskMgr()
+        {
+            EnforceSystemPolicies();
         }
 
         /// <summary>
@@ -326,7 +479,7 @@ namespace KioskLockApp.Services
                         loopCounter++;
                         if (loopCounter % 40 == 0)
                         {
-                            EnforceDisableTaskMgr();
+                            EnforceSystemPolicies();
                             DisableWindowsStartupDelay();
                         }
                     }

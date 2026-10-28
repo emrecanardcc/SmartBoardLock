@@ -167,6 +167,7 @@ class AdminRepository {
     bool isLicensed = true,
     DateTime? licenseExpiresAt,
     String? licenseNotes,
+    String? boardAdminPassword,
   }) async {
     try {
       final caller = await getCurrentUserProfile();
@@ -180,6 +181,9 @@ class AdminRepository {
         'license_expires_at': (licenseExpiresAt ?? DateTime.now().add(const Duration(days: 365))).toIso8601String(),
         'license_notes': licenseNotes?.trim(),
       };
+      if (boardAdminPassword != null && boardAdminPassword.trim().isNotEmpty) {
+        payload['board_admin_password'] = boardAdminPassword.trim();
+      }
       final data = await _db
           .from('schools')
           .insert(payload)
@@ -199,6 +203,7 @@ class AdminRepository {
     bool? isLicensed,
     DateTime? licenseExpiresAt,
     String? licenseNotes,
+    String? boardAdminPassword,
   }) async {
     try {
       final caller = await getCurrentUserProfile();
@@ -212,6 +217,7 @@ class AdminRepository {
       if (isLicensed != null) payload['is_licensed'] = isLicensed;
       if (licenseExpiresAt != null) payload['license_expires_at'] = licenseExpiresAt.toIso8601String();
       if (licenseNotes != null) payload['license_notes'] = licenseNotes.trim();
+      if (boardAdminPassword != null) payload['board_admin_password'] = boardAdminPassword.trim();
 
       await _db
           .from('schools')
@@ -509,6 +515,72 @@ class AdminRepository {
       }).filter('id', 'in', boardIds);
     } catch (e) {
       debugPrint('sendBulkRepairIntegrityCommand error: $e');
+      rethrow;
+    }
+  }
+
+  /// Okulun akıllı tahtalarındaki kurulum ve kaldırma işlemlerini korumak için müdür güvenlik şifresini günceller
+  Future<void> updateSchoolBoardAdminPassword({
+    required String schoolId,
+    required String password,
+  }) async {
+    try {
+      final trimmed = password.trim();
+      await _db.from('schools').update({
+        'board_admin_password': trimmed,
+      }).eq('id', schoolId);
+
+      // Okuldaki tüm aktif tahtalara derhal SET_SECURITY_PIN komutu yayınla (anında kilit güncellemesi)
+      await _db.from('boards').update({
+        'remote_command': 'SET_SECURITY_PIN:$trimmed',
+      }).eq('school_id', schoolId).eq('is_active', true);
+    } catch (e) {
+      debugPrint('updateSchoolBoardAdminPassword error: $e');
+      rethrow;
+    }
+  }
+
+  /// Seçilen akıllı tahtalara (veya tümüne) uzaktan Windows masaüstü duvar kâğıdı değiştirme komutu gönderir
+  Future<void> sendBulkWallpaperCommand({
+    required List<String> boardIds,
+    Uint8List? imageBytes,
+    String? fileName,
+    String? wallpaperUrl,
+    String style = 'fill',
+  }) async {
+    try {
+      if (boardIds.isEmpty) return;
+
+      String finalUrl = wallpaperUrl ?? '';
+      if (finalUrl.isEmpty && imageBytes != null && imageBytes.isNotEmpty) {
+        final safeName = _sanitizeStorageFileName(
+          fileName ?? 'wallpaper.jpg',
+          'wallpaper_${DateTime.now().millisecondsSinceEpoch}',
+        );
+        await _storage.from('updates').uploadBinary(
+          safeName,
+          imageBytes,
+          fileOptions: const FileOptions(upsert: true),
+        );
+        finalUrl = _storage.from('updates').getPublicUrl(safeName);
+      }
+
+      if (finalUrl.isEmpty) {
+        throw Exception('Geçerli bir duvar kâğıdı görseli veya URL belirtilmelidir.');
+      }
+
+      final payload = jsonEncode({
+        'url': finalUrl,
+        'style': style,
+      });
+      final commandString = 'SET_WALLPAPER:$payload';
+
+      // Tek atomik sorgu ile tüm seçili tahtalara uzaktan komut ilet
+      await _db.from('boards').update({
+        'remote_command': commandString,
+      }).filter('id', 'in', boardIds);
+    } catch (e) {
+      debugPrint('sendBulkWallpaperCommand error: $e');
       rethrow;
     }
   }

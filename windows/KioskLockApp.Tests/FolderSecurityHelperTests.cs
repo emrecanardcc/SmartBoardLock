@@ -24,6 +24,7 @@ namespace KioskLockApp.Tests
         {
             try
             {
+                FolderSecurityHelper.RestoreSystemPolicies();
                 if (Directory.Exists(_testDir))
                 {
                     FolderSecurityHelper.UnlockFolder(_testDir);
@@ -129,6 +130,94 @@ namespace KioskLockApp.Tests
                 using (var secondMutex = new System.Threading.Mutex(true, mutexName, out bool createdSecond))
                 {
                     Assert.IsFalse(createdSecond, "İkinci kopya mutex'i alamamalı (çifte açılma engellenmeli)");
+                }
+            }
+        }
+
+        [TestMethod]
+        public void Test_EnforceSystemPolicies_ExecutesSafelyWithoutException()
+        {
+            // Metodun kısıtlı veya tam yetkili ortamlarda istisna fırlatmadan güvenle çalıştığını doğrula
+            Exception? caughtEx = null;
+            try
+            {
+                FolderSecurityHelper.EnforceSystemPolicies();
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+            finally
+            {
+                FolderSecurityHelper.RestoreSystemPolicies();
+            }
+
+            Assert.IsNull(caughtEx, $"EnforceSystemPolicies istisna fırlatmamalıdır: {caughtEx?.Message}");
+        }
+
+        [TestMethod]
+        public void Test_EnforceAndRestoreSystemPolicies_ManagesHKCURegistryKeys()
+        {
+            string testSubKeyPath = @"Software\SmartBoardLock_Test_" + Guid.NewGuid().ToString("N");
+            using (var testRoot = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(testSubKeyPath))
+            {
+                try
+                {
+                    // 1. Politikaları test kovanına zorla uygula
+                    FolderSecurityHelper.EnforceSystemPolicies(testRoot);
+
+                    // 2. Değerlerin ve türlerinin başarıyla yazıldığını doğrula
+                    using (var rkSys = testRoot.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\System"))
+                    {
+                        Assert.IsNotNull(rkSys, "Policies\\System anahtarı mevcut olmalı");
+                        Assert.AreEqual(1, rkSys.GetValue("DisableTaskMgr"), "DisableTaskMgr 1 olmalı");
+                        Assert.AreEqual(Microsoft.Win32.RegistryValueKind.DWord, rkSys.GetValueKind("DisableTaskMgr"));
+                        Assert.AreEqual(1, rkSys.GetValue("DisableLockWorkstation"), "DisableLockWorkstation 1 olmalı");
+                        Assert.AreEqual(Microsoft.Win32.RegistryValueKind.DWord, rkSys.GetValueKind("DisableLockWorkstation"));
+                    }
+
+                    using (var rkExp = testRoot.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"))
+                    {
+                        Assert.IsNotNull(rkExp, "Policies\\Explorer anahtarı mevcut olmalı");
+                        Assert.AreEqual(1, rkExp.GetValue("NoRun"), "NoRun 1 olmalı");
+                        Assert.AreEqual(Microsoft.Win32.RegistryValueKind.DWord, rkExp.GetValueKind("NoRun"));
+                    }
+
+                    using (var rkAd = testRoot.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop"))
+                    {
+                        Assert.IsNotNull(rkAd, "Policies\\ActiveDesktop anahtarı mevcut olmalı");
+                        Assert.AreEqual(1, rkAd.GetValue("NoChangingWallPaper"), "NoChangingWallPaper 1 olmalı");
+                        Assert.AreEqual(Microsoft.Win32.RegistryValueKind.DWord, rkAd.GetValueKind("NoChangingWallPaper"));
+                    }
+
+                    // 3. Politikaları temizle (Restore)
+                    FolderSecurityHelper.RestoreSystemPolicies(testRoot);
+
+                    // 4. Değerlerin temizlendiğini doğrula
+                    using (var rkSys = testRoot.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\System"))
+                    {
+                        Assert.IsNull(rkSys?.GetValue("DisableTaskMgr"), "DisableTaskMgr silinmiş olmalı");
+                        Assert.IsNull(rkSys?.GetValue("DisableLockWorkstation"), "DisableLockWorkstation silinmiş olmalı");
+                    }
+
+                    using (var rkExp = testRoot.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"))
+                    {
+                        Assert.IsNull(rkExp?.GetValue("NoRun"), "NoRun silinmiş olmalı");
+                    }
+
+                    using (var rkAd = testRoot.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop"))
+                    {
+                        Assert.IsNull(rkAd?.GetValue("NoChangingWallPaper"), "NoChangingWallPaper silinmiş olmalı");
+                    }
+
+                    // 5. Canlı sistem çağrısının da istisnasız güvenle tamamlandığını doğrula
+                    FolderSecurityHelper.EnforceSystemPolicies();
+                    FolderSecurityHelper.RestoreSystemPolicies();
+                }
+                finally
+                {
+                    try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(testSubKeyPath, false); } catch { }
+                    FolderSecurityHelper.RestoreSystemPolicies();
                 }
             }
         }

@@ -11,6 +11,7 @@ class SchoolModel {
   final bool isLicensed;
   final DateTime? licenseExpiresAt;
   final String? licenseNotes;
+  final String? boardAdminPassword;
 
   const SchoolModel({
     required this.id,
@@ -24,6 +25,7 @@ class SchoolModel {
     this.isLicensed = true,
     this.licenseExpiresAt,
     this.licenseNotes,
+    this.boardAdminPassword,
   });
 
   /// Lisansın anlık olarak aktif olup olmadığını hesaplar
@@ -57,6 +59,7 @@ class SchoolModel {
           ? DateTime.tryParse(map['license_expires_at'] as String)
           : null,
       licenseNotes: map['license_notes'] as String?,
+      boardAdminPassword: map['board_admin_password'] as String?,
     );
   }
 
@@ -69,6 +72,7 @@ class SchoolModel {
       'is_licensed': isLicensed,
       'license_expires_at': licenseExpiresAt?.toIso8601String(),
       'license_notes': licenseNotes,
+      'board_admin_password': boardAdminPassword,
     };
   }
 
@@ -84,6 +88,7 @@ class SchoolModel {
     bool? isLicensed,
     DateTime? licenseExpiresAt,
     String? licenseNotes,
+    String? boardAdminPassword,
   }) {
     return SchoolModel(
       id: id ?? this.id,
@@ -97,6 +102,7 @@ class SchoolModel {
       isLicensed: isLicensed ?? this.isLicensed,
       licenseExpiresAt: licenseExpiresAt ?? this.licenseExpiresAt,
       licenseNotes: licenseNotes ?? this.licenseNotes,
+      boardAdminPassword: boardAdminPassword ?? this.boardAdminPassword,
     );
   }
 

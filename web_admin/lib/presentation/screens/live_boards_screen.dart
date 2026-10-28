@@ -11,6 +11,7 @@ import '../../data/repositories/admin_repository.dart';
 import '../widgets/board_card.dart';
 import '../widgets/kpi_card.dart';
 import '../widgets/app_dialog.dart';
+import '../widgets/wallpaper_dialog.dart';
 
 class LiveBoardsScreen extends StatefulWidget {
   const LiveBoardsScreen({super.key});
@@ -390,6 +391,25 @@ class _LiveBoardsScreenState extends State<LiveBoardsScreen> {
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
+                  icon: const Icon(Icons.wallpaper_rounded, size: 16, color: AppColors.primary),
+                  label: const Text('Duvar Kâğıdı Ayarla'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                  ),
+                  onPressed: () {
+                    final targetBoards = _selectedBoardIds.isNotEmpty
+                        ? _allBoards.where((b) => _selectedBoardIds.contains(b.id)).toList()
+                        : _allBoards.where((b) => b.isActive).toList();
+                    showWallpaperDialog(context, targetBoards: targetBoards);
+                  },
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
                   icon: Icon(
                       _isSelectMode
                           ? Icons.close_rounded
@@ -605,6 +625,28 @@ class _LiveBoardsScreenState extends State<LiveBoardsScreen> {
                                 }
                               },
                       ),
+                      // Seçilenlere Duvar Kâğıdı Ayarla
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.wallpaper_rounded, size: 15),
+                        label: Text('Duvar Kâğıdı (${_selectedBoardIds.length})'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          textStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        onPressed: _selectedBoardIds.isEmpty
+                            ? null
+                            : () async {
+                                final selectedBoards = _allBoards
+                                    .where((b) => _selectedBoardIds.contains(b.id))
+                                    .toList();
+                                final sent = await showWallpaperDialog(context, targetBoards: selectedBoards);
+                                if (sent && mounted) {
+                                  setState(() => _selectedBoardIds.clear());
+                                }
+                              },
+                      ),
                     ],
                   ),
                 ],
@@ -653,7 +695,7 @@ class _LiveBoardsScreenState extends State<LiveBoardsScreen> {
                           gridDelegate:
                               const SliverGridDelegateWithMaxCrossAxisExtent(
                             maxCrossAxisExtent: 350,
-                            mainAxisExtent: 335,
+                            mainAxisExtent: 350,
                             crossAxisSpacing: 16,
                             mainAxisSpacing: 16,
                           ),

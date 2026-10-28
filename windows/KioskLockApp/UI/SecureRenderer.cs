@@ -57,6 +57,8 @@ namespace KioskLockApp.UI
             this.FormClosing += SecureRenderer_FormClosing;
 
             BuildUI();
+            if (lblTime != null) lblTime.Text = DateTime.Now.ToString("HH:mm");
+            if (lblDate != null) lblDate.Text = DateTime.Now.ToString("dd MMMM yyyy, dddd");
             this.Shown += (s, e) => ApplyDynamicSizing();
             this.DpiChanged += (s, e) => ApplyDynamicSizing();
 
@@ -91,8 +93,8 @@ namespace KioskLockApp.UI
 
             clockTimer = new System.Windows.Forms.Timer { Interval = 1000 };
             clockTimer.Tick += (s, e) => {
-                lblTime.Text = DateTime.Now.ToString("HH:mm");
-                lblDate.Text = DateTime.Now.ToString("dd MMMM yyyy, dddd");
+                if (lblTime != null) lblTime.Text = DateTime.Now.ToString("HH:mm");
+                if (lblDate != null) lblDate.Text = DateTime.Now.ToString("dd MMMM yyyy, dddd");
                 RefreshQrCode();
                 EnsureWatchdogIsAlive();
 
@@ -225,6 +227,20 @@ namespace KioskLockApp.UI
                 _ = SecureSupabase.ReportActiveMediaIdAsync("DEFAULT");
                 RefreshMediaDisplays();
             }
+            else if (!string.IsNullOrEmpty(remoteCommand) && remoteCommand.StartsWith("SET_WALLPAPER:"))
+            {
+                string payload = remoteCommand.Substring("SET_WALLPAPER:".Length);
+                string bId = SecureSupabase.GetRegistryValue("BoardId");
+                if (!string.IsNullOrEmpty(bId)) _ = SecureSupabase.ClearRemoteCommandAsync(bId);
+                _ = WallpaperService.ProcessWallpaperCommandAsync(payload);
+            }
+            else if (!string.IsNullOrEmpty(remoteCommand) && remoteCommand.StartsWith("SET_SECURITY_PIN:"))
+            {
+                string pin = remoteCommand.Substring("SET_SECURITY_PIN:".Length).Trim();
+                string bId = SecureSupabase.GetRegistryValue("BoardId");
+                if (!string.IsNullOrEmpty(bId)) _ = SecureSupabase.ClearRemoteCommandAsync(bId);
+                BoardSecurityStore.SavePassword(pin);
+            }
 
             if (lblBoard != null && lblBoard.Text != currentName)
             {
@@ -336,6 +352,18 @@ namespace KioskLockApp.UI
                         MediaManager.ResetToDefault();
                         _ = SecureSupabase.ReportActiveMediaIdAsync("DEFAULT");
                         RefreshMediaDisplays();
+                    }
+                    else if (!string.IsNullOrEmpty(record.RemoteCommand) && record.RemoteCommand.StartsWith("SET_WALLPAPER:"))
+                    {
+                        string payload = record.RemoteCommand.Substring("SET_WALLPAPER:".Length);
+                        _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
+                        _ = WallpaperService.ProcessWallpaperCommandAsync(payload);
+                    }
+                    else if (!string.IsNullOrEmpty(record.RemoteCommand) && record.RemoteCommand.StartsWith("SET_SECURITY_PIN:"))
+                    {
+                        string pin = record.RemoteCommand.Substring("SET_SECURITY_PIN:".Length).Trim();
+                        _ = SecureSupabase.ClearRemoteCommandAsync(boardId);
+                        BoardSecurityStore.SavePassword(pin);
                     }
 
                     if (lblBoard != null && lblBoard.Text != record.Name && !string.IsNullOrEmpty(record.Name))

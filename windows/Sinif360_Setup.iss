@@ -1,10 +1,10 @@
 ; =====================================================================
 ; Sınıf360 / Akıllı Tahta Kilit Sistemi - Profesyonel Kurulum Scripti
-; Sürüm: 2.1.2 | Yayıncı: Emre Can ARDIÇ
+; Sürüm: 2.1.3 | Yayıncı: Emre Can ARDIÇ
 ; =====================================================================
 
 #define MyAppName "Sınıf360 Akıllı Tahta Kilit Sistemi"
-#define MyAppVersion "2.1.2"
+#define MyAppVersion "2.1.3"
 #define MyAppPublisher "Emre Can ARDIÇ"
 #define MyAppExeName "KioskLockApp.exe"
 #define MyWatchdogExeName "WatchdogService.exe"
@@ -35,7 +35,7 @@ DisableFinishedPage=yes
 ; ProgramData'ya yazabilmek ve başlangıç kancası atabilmek için yönetici izni gereklidir
 PrivilegesRequired=admin
 OutputDir=userdocs:Inno Setup Output Files
-OutputBaseFilename=Sinif360_v2.1.2_Setup
+OutputBaseFilename=Sinif360_v2.1.3_Setup
 Compression=lzma2/ultra64
 WizardStyle=modern
 CloseApplications=force
@@ -55,7 +55,7 @@ Name: "{app}"
 Name: "{app}\Media"
 
 [Files]
-Source: "C:\Projeler\AkilliTahtaSistemi\dist\v2.1.2_publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs restartreplace
+Source: "C:\Projeler\AkilliTahtaSistemi\dist\v2.1.3_publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs restartreplace
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -271,9 +271,15 @@ begin
     RegDeleteValue(HKEY_CURRENT_USER, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'AkilliTahtaKilitSistemi');
     RegDeleteValue(HKEY_CURRENT_USER, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'AkilliTahtaWatchdog');
 
-    // 3.5 ADIM: Görev Yöneticisi kısıtlamalarını ve dosya NTFS kilitlerini kaldır
+    // 3.5 ADIM: Görev Yöneticisi, masaüstü ve sistem kısıtlamalarını kaldır
     RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Policies\System', 'DisableTaskMgr');
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Policies\System', 'DisableLockWorkstation');
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Policies\Explorer', 'NoRun');
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop', 'NoChangingWallPaper');
     RegDeleteValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System', 'DisableTaskMgr');
+    RegDeleteValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System', 'DisableLockWorkstation');
+    RegDeleteValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer', 'NoRun');
+    RegDeleteValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop', 'NoChangingWallPaper');
     Exec('schtasks.exe', '/delete /tn "Sinif360_InstantKiosk" /f', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /remove:d *S-1-5-32-544 /remove:d *S-1-5-32-545 /remove:d *S-1-1-0 /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec('cmd.exe', '/c icacls "' + ExpandConstant('{app}') + '" /grant *S-1-5-32-544:(OI)(CI)F /grant *S-1-5-32-545:(OI)(CI)M /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);

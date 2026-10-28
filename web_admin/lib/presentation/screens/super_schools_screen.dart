@@ -524,6 +524,7 @@ class _SuperSchoolsScreenState extends State<SuperSchoolsScreen> {
     final nameController = TextEditingController(text: school?.name ?? '');
     final cityController = TextEditingController(text: school?.city ?? '');
     final notesController = TextEditingController(text: school?.licenseNotes ?? '');
+    final passwordController = TextEditingController(text: school?.boardAdminPassword ?? '');
 
     bool isLicensed = school?.isLicensed ?? true;
     DateTime licenseExpiry = school?.licenseExpiresAt ?? DateTime.now().add(const Duration(days: 365));
@@ -778,6 +779,18 @@ class _SuperSchoolsScreenState extends State<SuperSchoolsScreen> {
                             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           ),
                         ),
+                        const SizedBox(height: 12),
+
+                        TextField(
+                          controller: passwordController,
+                          style: const TextStyle(fontSize: 13),
+                          decoration: const InputDecoration(
+                            labelText: 'Tahta Kurulum / Silme Güvenlik Şifresi',
+                            hintText: 'Örn. 360360 (Müdür yetki şifresi)',
+                            prefixIcon: Icon(Icons.shield_outlined, size: 20),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -815,6 +828,7 @@ class _SuperSchoolsScreenState extends State<SuperSchoolsScreen> {
                                       isLicensed: isLicensed,
                                       licenseExpiresAt: licenseExpiry,
                                       licenseNotes: notesController.text,
+                                      boardAdminPassword: passwordController.text,
                                     );
                                   } else {
                                     await repo.createSchool(
@@ -823,6 +837,7 @@ class _SuperSchoolsScreenState extends State<SuperSchoolsScreen> {
                                       isLicensed: isLicensed,
                                       licenseExpiresAt: licenseExpiry,
                                       licenseNotes: notesController.text,
+                                      boardAdminPassword: passwordController.text,
                                     );
                                   }
                                   if (context.mounted) {

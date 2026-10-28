@@ -502,10 +502,17 @@ class _BoardCardState extends State<BoardCard> {
                 _InfoRow(
                   icon: board.isOnline ? Icons.power_rounded : Icons.power_off_rounded,
                   label: 'Cihaz Durumu',
-                  value: board.isOnline
-                      ? 'Çalışıyor ($_pingTimeAgo)'
-                      : 'Kapalı ($_pingTimeAgo)',
+                  value: board.isOnline ? 'Çalışıyor' : 'Kapalı',
                   color: board.isOnline ? AppColors.success : AppColors.offline,
+                ),
+                const SizedBox(height: 4),
+                _InfoRow(
+                  icon: Icons.access_time_rounded,
+                  label: 'Son Sinyal (Tarih / Saat)',
+                  value: board.lastPingAt != null
+                      ? '${DateFormat('dd.MM.yyyy • HH:mm').format(board.lastPingAt!.toLocal())} ($_pingTimeAgo)'
+                      : 'Henüz sinyal yok',
+                  color: board.isOnline ? AppColors.primary : AppColors.textGrey,
                 ),
                 const SizedBox(height: 4),
                 _InfoRow(

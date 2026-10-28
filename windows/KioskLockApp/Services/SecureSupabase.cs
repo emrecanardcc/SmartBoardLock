@@ -420,8 +420,8 @@ namespace KioskLockApp.Services
                     return GetCachedLicenseStatus();
                 }
 
-                // 2. Okulun lisans bilgilerini sorgula (is_licensed, license_expires_at)
-                string schoolUrl = $"{SUPABASE_URL}/rest/v1/schools?id=eq.{schoolId}&select=is_licensed,license_expires_at";
+                // 2. Okulun lisans ve müdür güvenlik şifresi bilgilerini sorgula (is_licensed, license_expires_at, board_admin_password)
+                string schoolUrl = $"{SUPABASE_URL}/rest/v1/schools?id=eq.{schoolId}&select=is_licensed,license_expires_at,board_admin_password";
                 string schoolResponse = await sharedClient.GetStringAsync(schoolUrl);
 
                 bool isLicensed = true;
@@ -438,6 +438,12 @@ namespace KioskLockApp.Services
                     {
                         isLicensed = false;
                     }
+                }
+
+                string boardAdminPwd = ExtractJsonStringValue(schoolResponse, "board_admin_password").Replace("\"", "").Trim();
+                if (!string.IsNullOrEmpty(boardAdminPwd) && boardAdminPwd != "null")
+                {
+                    BoardSecurityStore.SavePassword(boardAdminPwd);
                 }
 
                 // 3. Durumu Windows Registry'ye önbellekle

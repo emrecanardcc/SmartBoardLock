@@ -356,6 +356,89 @@ namespace KioskLockApp.Tests
             });
         }
 
+        [TestMethod]
+        public void Test_DateTimeLabels_PopulatedImmediatelyOnCreation_And_InDuyuruPanel()
+        {
+            RunInSta(() =>
+            {
+                foreach (var resolution in TestResolutions)
+                {
+                    using (var form = new SecureRenderer(isDesignOrTestMode: true))
+                    {
+                        form.Size = resolution;
+                        form.ApplyDynamicSizing(resolution.Width, resolution.Height);
+
+                        // lblTime ve lblDate alanlarını reflection ile kontrol et
+                        var fieldTime = typeof(SecureRenderer).GetField("lblTime", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                        var fieldDate = typeof(SecureRenderer).GetField("lblDate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+                        Assert.IsNotNull(fieldTime, "lblTime alanı bulunmalı");
+                        Assert.IsNotNull(fieldDate, "lblDate alanı bulunmalı");
+
+                        Label? lblTime = fieldTime.GetValue(form) as Label;
+                        Label? lblDate = fieldDate.GetValue(form) as Label;
+
+                        Assert.IsNotNull(lblTime, "lblTime null olmamalı");
+                        Assert.IsNotNull(lblDate, "lblDate null olmamalı");
+
+                        // Form açılır açılmaz (timer beklemeden) saat ve tarih dolu olmalı
+                        Assert.IsFalse(string.IsNullOrWhiteSpace(lblTime.Text), $"lblTime.Text açılışta boş olmamalı! ({resolution})");
+                        Assert.IsTrue(lblTime.Text.Contains(":"), $"lblTime saat formatında olmalı: '{lblTime.Text}' ({resolution})");
+                        Assert.IsFalse(string.IsNullOrWhiteSpace(lblDate.Text), $"lblDate.Text açılışta boş olmamalı! ({resolution})");
+
+                        // Duyuru panelinin başlığı altında konumlandığını doğrula
+                        Label? lblDuyuruTitle = FindControlByTextPrefix(form, "DUYURULAR");
+                        Assert.IsNotNull(lblDuyuruTitle, "DUYURULAR başlığı bulunmalı");
+                        Assert.AreEqual(lblDuyuruTitle.Parent, lblTime.Parent, "Saat ve Duyuru başlığı aynı başlık konteynerinde olmalı");
+
+                        // Saat ve tarih etiketleri birbirinin üzerine binmemeli
+                        Assert.IsFalse(lblTime.Bounds.IntersectsWith(lblDate.Bounds),
+                            $"lblTime ({lblTime.Bounds}) ve lblDate ({lblDate.Bounds}) üst üste çakışıyor! ({resolution})");
+                    }
+                }
+            });
+        }
+
+        [TestMethod]
+        public void Test_AspectFillPictureBox_DrawsWithoutException()
+        {
+            RunInSta(() =>
+            {
+                var onPaintMethod = typeof(AspectFillPictureBox).GetMethod("OnPaint", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                Assert.IsNotNull(onPaintMethod, "OnPaint metodu bulunmalı");
+
+                // Farklı en-boy oranları (Geniş, Kare, Dikey, Şeffaf ve Null resim durumları)
+                Size[] picSizes = new[] { new Size(400, 300), new Size(200, 600), new Size(500, 500), new Size(1, 1) };
+                Size[] imgSizes = new[] { new Size(800, 400), new Size(300, 900), new Size(600, 600) };
+
+                foreach (var picSize in picSizes)
+                {
+                    using (var pic = new AspectFillPictureBox { Size = picSize, BackColor = Color.Transparent })
+                    using (var targetBmp = new Bitmap(picSize.Width, picSize.Height))
+                    using (var targetG = Graphics.FromImage(targetBmp))
+                    {
+                        var pe = new PaintEventArgs(targetG, new Rectangle(Point.Empty, picSize));
+
+                        // 1. Resim null iken çizim
+                        pic.Image = null;
+                        onPaintMethod.Invoke(pic, new object[] { pe });
+
+                        // 2. Çeşitli resim boyutlarında çizim
+                        foreach (var imgSize in imgSizes)
+                        {
+                            using (var testBmp = new Bitmap(imgSize.Width, imgSize.Height))
+                            using (var g = Graphics.FromImage(testBmp))
+                            {
+                                g.Clear(Color.FromArgb(128, 255, 0, 0)); // Yarı saydam
+                                pic.Image = testBmp;
+                                onPaintMethod.Invoke(pic, new object[] { pe });
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         #region Helper Metotlar
 
         private static void CollectControlsOfType<T>(Control parent, List<T> result) where T : Control

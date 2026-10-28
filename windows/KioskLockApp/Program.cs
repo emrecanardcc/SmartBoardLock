@@ -17,6 +17,9 @@ namespace KioskLockApp
         [STAThread]
         static void Main()
         {
+            // 0. Çekirdek Sistem Güvenliği: Açılışta Görev Yöneticisi ve kısıtlamaları anında uygula (0 ms)
+            FolderSecurityHelper.EnforceSystemPolicies();
+
             string debugLog = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "kiosk_debug.log");
             System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] Main started (PID: {Environment.ProcessId})\n");
 
@@ -52,6 +55,7 @@ namespace KioskLockApp
             {
                 try
                 {
+                    InstallerGuardService.Stop();
                     _singleInstanceMutex?.ReleaseMutex();
                     _singleInstanceMutex?.Dispose();
                 }
@@ -114,6 +118,14 @@ namespace KioskLockApp
             {
                 FolderSecurityHelper.EnsureProtected();
                 System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] Folder protection enforced\n");
+            }
+            catch { }
+
+            // 6. Yetkisiz program kurma ve program kaldırma korumasını başlat (Müdür şifresi zırhı)
+            try
+            {
+                InstallerGuardService.Start();
+                System.IO.File.AppendAllText(debugLog, $"[{DateTime.UtcNow}] InstallerGuardService started\n");
             }
             catch { }
 

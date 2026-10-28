@@ -12,6 +12,7 @@ import '../../data/models/broadcast_package_model.dart';
 import '../../data/providers/auth_provider.dart';
 import '../../data/providers/school_selector_provider.dart';
 import '../../data/repositories/admin_repository.dart';
+import '../widgets/wallpaper_dialog.dart';
 
 class MediaManageScreen extends StatefulWidget {
   const MediaManageScreen({super.key});
@@ -200,6 +201,25 @@ class _MediaManageScreenState extends State<MediaManageScreen> {
         onSuccess: () => _loadData(),
       ),
     );
+  }
+
+  void _openWallpaperDialog() {
+    final activeBoards = _allBoards.where((b) => b.isActive).toList();
+    if (activeBoards.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sistemde kayıtlı aktif tahta bulunamadı.'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+
+    final targetBoards = _selectedBoardIds.isNotEmpty
+        ? _allBoards.where((b) => _selectedBoardIds.contains(b.id)).toList()
+        : activeBoards;
+
+    showWallpaperDialog(context, targetBoards: targetBoards);
   }
 
   Future<void> _resetToDefault() async {
@@ -598,6 +618,13 @@ class _MediaManageScreenState extends State<MediaManageScreen> {
                 label: const Text('Depoyu Temizle'),
                 onPressed: _cleanStorageNow,
               ),
+            ),
+
+            // Duvar Kâğıdı Ayarla
+            OutlinedButton.icon(
+              icon: const Icon(Icons.wallpaper_rounded, size: 16, color: AppColors.primary),
+              label: const Text('Duvar Kâğıdı Ayarla'),
+              onPressed: _openWallpaperDialog,
             ),
 
             // Varsayılana Sıfırla

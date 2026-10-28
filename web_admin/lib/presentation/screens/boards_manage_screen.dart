@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/board_model.dart';
@@ -9,6 +10,7 @@ import '../../data/providers/auth_provider.dart';
 import '../../data/providers/school_selector_provider.dart';
 import '../../data/repositories/admin_repository.dart';
 import '../widgets/app_dialog.dart';
+import '../widgets/board_password_dialog.dart';
 
 class BoardsManageScreen extends StatefulWidget {
   const BoardsManageScreen({super.key});
@@ -150,7 +152,22 @@ class _BoardsManageScreenState extends State<BoardsManageScreen> {
                 onPressed: () => _initBoards(schoolId),
               ),
               const SizedBox(width: 8),
-              if (schoolId != null)
+              if (schoolId != null) ...[
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.shield_rounded, size: 18, color: AppColors.primary),
+                  label: const Text('Tahta Koruma Şifresi'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  ),
+                  onPressed: () => showBoardSecurityPasswordDialog(
+                    context,
+                    schoolId: schoolId,
+                  ),
+                ),
+                const SizedBox(width: 8),
                 ElevatedButton.icon(
                   icon: const Icon(Icons.add_link_rounded, size: 18),
                   label: const Text('Yeni Tahta Eşleştir'),
@@ -189,6 +206,7 @@ class _BoardsManageScreenState extends State<BoardsManageScreen> {
                     }) async {},
                   ),
                 ),
+              ],
             ],
           ),
 
@@ -288,6 +306,7 @@ class _BoardsManageScreenState extends State<BoardsManageScreen> {
                                     DataColumn(label: Text('SINIF / ŞUBE')),
                                     DataColumn(label: Text('KİLİT DURUMU')),
                                     DataColumn(label: Text('CİHAZ DURUMU')),
+                                    DataColumn(label: Text('SON SİNYAL (TARİH / SAAT)')),
                                     DataColumn(label: Text('SÜRÜM')),
 
                                     DataColumn(label: Text('İŞLEMLER')),
@@ -303,6 +322,15 @@ class _BoardsManageScreenState extends State<BoardsManageScreen> {
                                             : board.gradeBranchLabel)),
                                         DataCell(_StatusBadge(board.status)),
                                         DataCell(_DeviceBadge(board.isOnline)),
+                                        DataCell(Text(
+                                          board.lastPingAt != null
+                                              ? DateFormat('dd.MM.yyyy HH:mm').format(board.lastPingAt!.toLocal())
+                                              : '—',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            color: AppColors.textMedium,
+                                          ),
+                                        )),
                                         DataCell(Text(
                                           board.appVersion != null && board.appVersion!.isNotEmpty
                                               ? 'v${board.appVersion}'

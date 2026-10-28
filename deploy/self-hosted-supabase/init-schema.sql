@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.schools (
     is_licensed BOOLEAN NOT NULL DEFAULT true,
     license_expires_at TIMESTAMPTZ DEFAULT (now() + interval '1 year'),
     license_notes TEXT,
+    board_admin_password TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

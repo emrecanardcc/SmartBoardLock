@@ -34,9 +34,15 @@ timeout /t 1 /nobreak >nul
 taskkill /f /t /im WatchdogService.exe /im KioskLockApp.exe /im TahtaUpdater.exe /im TahtaRepair.exe >nul 2>&1
 
 :after_kill
-:: Görev Yöneticisi kısıtlamalarını kaldır
+:: Sistem güvenlik kısıtlamalarını kaldır
 reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v DisableTaskMgr /f >nul 2>&1
+reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v DisableLockWorkstation /f >nul 2>&1
+reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v NoRun /f >nul 2>&1
+reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop" /v NoChangingWallPaper /f >nul 2>&1
 reg delete "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v DisableTaskMgr /f >nul 2>&1
+reg delete "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v DisableLockWorkstation /f >nul 2>&1
+reg delete "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v NoRun /f >nul 2>&1
+reg delete "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop" /v NoChangingWallPaper /f >nul 2>&1
 
 echo.
 echo [BAŞARILI] Sınıf360 kilit ve bekçi servisleri tamamen durduruldu.

@@ -63,6 +63,8 @@ namespace WatchdogService
 
         static void Main(string[] args)
         {
+            FolderSecurityHelper.EnforceSystemPolicies();
+
             LogDebug("Watchdog started");
 
             // 1. Çekirdek Süreç Koruması: Görev Yöneticisi ve taskkill'e karşı DACL zırhı
@@ -462,19 +464,7 @@ namespace WatchdogService
 
         private static void EnforceDisableTaskMgr()
         {
-            try
-            {
-                using var rk = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\System");
-                rk?.SetValue("DisableTaskMgr", 1, RegistryValueKind.DWord);
-            }
-            catch { }
-
-            try
-            {
-                using var rkLm = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System");
-                rkLm?.SetValue("DisableTaskMgr", 1, RegistryValueKind.DWord);
-            }
-            catch { }
+            FolderSecurityHelper.EnforceSystemPolicies();
         }
 
         private static void StartTaskManagerKiller()

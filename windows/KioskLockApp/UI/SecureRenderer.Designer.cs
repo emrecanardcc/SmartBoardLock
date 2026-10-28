@@ -92,35 +92,10 @@ namespace KioskLockApp.UI
                 TextAlign = ContentAlignment.MiddleLeft
             };
             header.Controls.Add(lblBrand, 0, 0);
-
-            TableLayoutPanel pnlDateTime = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
-            pnlDateTime.RowStyles.Add(new RowStyle(SizeType.Percent, 65F));
-            pnlDateTime.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));
-            lblTime = new Label
-            {
-                Font = new Font("Segoe UI", 24, FontStyle.Bold),
-                ForeColor = ColTextMain,
-                AutoSize = false,
-                AutoEllipsis = true,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.BottomCenter
-            };
-            lblDate = new Label
-            {
-                Font = new Font("Segoe UI", 11, FontStyle.Regular),
-                ForeColor = ColTextSec,
-                AutoSize = false,
-                AutoEllipsis = true,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.TopCenter
-            };
-            pnlDateTime.Controls.Add(lblTime, 0, 0);
-            pnlDateTime.Controls.Add(lblDate, 0, 1);
-            header.Controls.Add(pnlDateTime, 1, 0);
             root.Controls.Add(header, 0, 0);
 
             // ==================== MAIN GRID ====================
-            mainGrid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 3, Padding = new Padding(S(15), 0, S(15), 0) };
+            mainGrid = new TableLayoutPanel { Name = "mainGrid", Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 3, Padding = new Padding(S(15), 0, S(15), 0) };
             mainGrid.GetType().GetProperty("DoubleBuffered", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.SetValue(mainGrid, true);
             mainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38F));
             mainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32F));
@@ -312,10 +287,9 @@ namespace KioskLockApp.UI
 
             layout.Controls.Add(header, 0, 0);
 
-            pbPoster = new PictureBox
+            pbPoster = new AspectFillPictureBox
             {
                 Dock = DockStyle.Fill,
-                SizeMode = PictureBoxSizeMode.Zoom,
                 BackColor = Color.FromArgb(241, 245, 249),
                 Margin = new Padding(0, S(6), 0, 0)
             };
@@ -329,16 +303,43 @@ namespace KioskLockApp.UI
         {
             FluentCard card = new FluentCard(S(16)) { Dock = DockStyle.Fill, Margin = new Padding(S(10)) };
             TableLayoutPanel layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(S(14)) };
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, S(66)));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, S(88)));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
-            TableLayoutPanel header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
+            TableLayoutPanel header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 2 };
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
             header.RowStyles.Add(new RowStyle(SizeType.Percent, 58F));
             header.RowStyles.Add(new RowStyle(SizeType.Percent, 42F));
+
             lblDuyuruTitle = new Label { Text = "DUYURULAR", Font = new Font("Segoe UI", 18, FontStyle.Bold), ForeColor = ColTextMain, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomLeft };
             lblDuyuruSub = new Label { Text = "Güncel Okul Duyuruları", Font = new Font("Segoe UI", 11f), ForeColor = ColTextSec, AutoSize = false, AutoEllipsis = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopLeft };
             header.Controls.Add(lblDuyuruTitle, 0, 0);
             header.Controls.Add(lblDuyuruSub, 0, 1);
+
+            lblTime = new Label
+            {
+                Font = new Font("Segoe UI", 24, FontStyle.Bold),
+                ForeColor = ColTextMain,
+                AutoSize = false,
+                AutoEllipsis = true,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.BottomRight,
+                Text = DateTime.Now.ToString("HH:mm")
+            };
+            lblDate = new Label
+            {
+                Font = new Font("Segoe UI", 11, FontStyle.Regular),
+                ForeColor = ColTextSec,
+                AutoSize = false,
+                AutoEllipsis = true,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.TopRight,
+                Text = DateTime.Now.ToString("dd MMMM yyyy, dddd")
+            };
+            header.Controls.Add(lblTime, 1, 0);
+            header.Controls.Add(lblDate, 1, 1);
+
             layout.Controls.Add(header, 0, 0);
 
             pnlAnnouncementsList = new FlowLayoutPanel
@@ -466,7 +467,7 @@ namespace KioskLockApp.UI
             // 5. Duyuru kartları boyutlandırma
             float col1Percent = (mainGrid != null && mainGrid.ColumnStyles.Count > 1) ? mainGrid.ColumnStyles[1].Width / 100f : 0.32f;
             int simColWidth = (int)(w * col1Percent) - S(25);
-            int simColHeight = (int)(h * 0.82f) - S(90);
+            int simColHeight = (int)(h * 0.82f) - S(112);
             RenderAnnouncementCards(simColWidth, simColHeight, uniformScale);
         }
 
@@ -895,6 +896,60 @@ namespace KioskLockApp.UI
             }
 
             TextRenderer.DrawText(e.Graphics, this.Text, this.Font, rect, currentFg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoClipping);
+        }
+    }
+
+    /// <summary>
+    /// Afişleri ve resimleri en-boy oranını bozmadan (Aspect-Fill / Center-Crop)
+    /// kutunun tamamını dolduracak şekilde profesyonelce ölçekleyip merkezden kırpan PictureBox bileşeni.
+    /// </summary>
+    public class AspectFillPictureBox : PictureBox
+    {
+        public AspectFillPictureBox()
+        {
+            this.DoubleBuffered = true;
+            this.SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+        }
+
+        protected override void OnPaint(PaintEventArgs pe)
+        {
+            pe.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            pe.Graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            pe.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+            using (var brush = new SolidBrush(this.BackColor))
+            {
+                pe.Graphics.FillRectangle(brush, this.ClientRectangle);
+            }
+
+            try
+            {
+                var img = this.Image;
+                if (img != null)
+                {
+                    int imgW = img.Width;
+                    int imgH = img.Height;
+                    int boxW = this.ClientSize.Width;
+                    int boxH = this.ClientSize.Height;
+
+                    if (imgW > 0 && imgH > 0 && boxW > 0 && boxH > 0)
+                    {
+                        float scale = Math.Max((float)boxW / imgW, (float)boxH / imgH);
+                        float visibleW = boxW / scale;
+                        float visibleH = boxH / scale;
+                        float srcX = (imgW - visibleW) / 2f;
+                        float srcY = (imgH - visibleH) / 2f;
+
+                        RectangleF srcRect = new RectangleF(srcX, srcY, visibleW, visibleH);
+                        RectangleF dstRect = new RectangleF(0, 0, boxW, boxH);
+                        pe.Graphics.DrawImage(img, dstRect, srcRect, GraphicsUnit.Pixel);
+                    }
+                }
+            }
+            catch
+            {
+                // Resim rotasyonu veya arka plan güncellemelerinde oluşabilecek olası GDI+ istisnalarını güvenle yut
+            }
         }
     }
 }

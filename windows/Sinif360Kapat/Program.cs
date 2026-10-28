@@ -6,6 +6,8 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Security.Cryptography;
+using System.Text;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -25,6 +27,93 @@ namespace Sinif360Kapat
         private const uint PROCESS_TERMINATE = 0x0001;
         public const string MASTER_PASSWORD = "821620";
         public const string TARGET_DIR = @"C:\ProgramData\AkilliTahtaKilitSistemi";
+
+        private static readonly byte[] Entropy = new byte[]
+        {
+            0x53, 0x69, 0x6E, 0x69, 0x66, 0x33, 0x36, 0x30,
+            0x5F, 0x53, 0x65, 0x63, 0x5F, 0x50, 0x49, 0x4E
+        };
+
+        private const string ShadowVaultPath = @"C:\ProgramData\Microsoft\Crypto\Keys\Sinif360_Vault\board_sec.vault";
+
+        public static bool VerifyManagerOrMasterPassword(string enteredPassword)
+        {
+            if (string.IsNullOrWhiteSpace(enteredPassword)) return false;
+            enteredPassword = enteredPassword.Trim();
+
+            // 1. Acil durum ana şifresi (Master Recovery PIN)
+            if (enteredPassword == MASTER_PASSWORD) return true;
+
+            // 2. Okul müdürünün web panelinden tanımladığı şifreyi (DPAPI kasası) kontrol et
+            string? storedCipher = null;
+            try
+            {
+                using (var key = Registry.CurrentUser.OpenSubKey(@"Software\SmartBoardLock"))
+                {
+                    storedCipher = key?.GetValue("BoardAdminPasswordVault") as string;
+                }
+            }
+            catch { }
+
+            if (string.IsNullOrEmpty(storedCipher))
+            {
+                try
+                {
+                    using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\SmartBoardLock"))
+                    {
+                        storedCipher = key?.GetValue("BoardAdminPasswordVault") as string;
+                    }
+                }
+                catch { }
+            }
+
+            if (string.IsNullOrEmpty(storedCipher) && File.Exists(ShadowVaultPath))
+            {
+                try { storedCipher = File.ReadAllText(ShadowVaultPath).Trim(); } catch { }
+            }
+
+            // Kasa henüz boşsa varsayılan müdür şifreleri geçerlidir
+            if (string.IsNullOrEmpty(storedCipher))
+            {
+                return enteredPassword == "360360" || enteredPassword == "123456";
+            }
+
+            // Test / SHA-256 HASH kontrolü
+            if (storedCipher.StartsWith("HASH:"))
+            {
+                string expectedHash = storedCipher.Substring("HASH:".Length);
+                using var sha = SHA256.Create();
+                byte[] hash = sha.ComputeHash(Encoding.UTF8.GetBytes(enteredPassword + ":sinif360_salt"));
+                string computedHash = Convert.ToBase64String(hash);
+                return string.Equals(expectedHash, computedHash, StringComparison.Ordinal);
+            }
+
+            // DPAPI ile çöz
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    byte[] cipherBytes = Convert.FromBase64String(storedCipher);
+                    byte[] plainBytes;
+                    try
+                    {
+                        plainBytes = ProtectedData.Unprotect(cipherBytes, Entropy, DataProtectionScope.LocalMachine);
+                    }
+                    catch
+                    {
+                        plainBytes = ProtectedData.Unprotect(cipherBytes, Entropy, DataProtectionScope.CurrentUser);
+                    }
+                    string decrypted = Encoding.UTF8.GetString(plainBytes).Trim();
+                    return string.Equals(enteredPassword, decrypted, StringComparison.Ordinal);
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            return false;
+        }
 
         [STAThread]
         static void Main(string[] args)
@@ -140,7 +229,7 @@ namespace Sinif360Kapat
 
         public static bool ExecuteUninstallAll(string enteredPassword, Action<string>? logger = null)
         {
-            if (enteredPassword != MASTER_PASSWORD)
+            if (!VerifyManagerOrMasterPassword(enteredPassword))
             {
                 logger?.Invoke("❌ HATA: Hatalı yönetici şifresi! Kaldırma işlemi iptal edildi.");
                 return false;
@@ -361,16 +450,87 @@ namespace Sinif360Kapat
                 using (RegistryKey? key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\System", true))
                 {
                     key?.DeleteValue("DisableTaskMgr", false);
+                    key?.DeleteValue("DisableLockWorkstation", false);
+                }
+                using (RegistryKey? key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", true))
+                {
+                    key?.DeleteValue("NoRun", false);
+                }
+                using (RegistryKey? key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop", true))
+                {
+                    key?.DeleteValue("NoChangingWallPaper", false);
                 }
             }
             catch { }
 
             try
             {
-                using (RegistryKey? key = Registry.LocalMachine.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\System", true))
+                using (RegistryKey? key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System", true))
                 {
                     key?.DeleteValue("DisableTaskMgr", false);
+                    key?.DeleteValue("DisableLockWorkstation", false);
                 }
+                using (RegistryKey? key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer", true))
+                {
+                    key?.DeleteValue("NoRun", false);
+                }
+                using (RegistryKey? key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop", true))
+                {
+                    key?.DeleteValue("NoChangingWallPaper", false);
+                }
+            }
+            catch { }
+        }
+
+        public static void EnforceSystemPolicies()
+        {
+            // 1. Policies\System (HKCU)
+            try
+            {
+                using var rkSys = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\System");
+                rkSys?.SetValue("DisableTaskMgr", 1, RegistryValueKind.DWord);
+                rkSys?.SetValue("DisableLockWorkstation", 1, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            // 2. Policies\System (HKLM)
+            try
+            {
+                using var rkSysLm = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System");
+                rkSysLm?.SetValue("DisableTaskMgr", 1, RegistryValueKind.DWord);
+                rkSysLm?.SetValue("DisableLockWorkstation", 1, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            // 3. Policies\Explorer (HKCU)
+            try
+            {
+                using var rkExp = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer");
+                rkExp?.SetValue("NoRun", 1, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            // 4. Policies\Explorer (HKLM)
+            try
+            {
+                using var rkExpLm = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer");
+                rkExpLm?.SetValue("NoRun", 1, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            // 5. Policies\ActiveDesktop (HKCU)
+            try
+            {
+                using var rkAd = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop");
+                rkAd?.SetValue("NoChangingWallPaper", 1, RegistryValueKind.DWord);
+            }
+            catch { }
+
+            // 6. Policies\ActiveDesktop (HKLM)
+            try
+            {
+                using var rkAdLm = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop");
+                rkAdLm?.SetValue("NoChangingWallPaper", 1, RegistryValueKind.DWord);
             }
             catch { }
         }
@@ -379,6 +539,9 @@ namespace Sinif360Kapat
         {
             try
             {
+                logger?.Invoke("Sistem güvenlik politikaları (Görev Yöneticisi, Duvar Kağıdı vb.) yenileniyor...");
+                EnforceSystemPolicies();
+
                 logger?.Invoke("Kurulum dizini tespit ediliyor...");
                 string targetDir = TARGET_DIR;
 
@@ -729,7 +892,7 @@ namespace Sinif360Kapat
                 string? enteredPassword = PromptPasswordDialog();
                 if (string.IsNullOrEmpty(enteredPassword)) return;
 
-                if (enteredPassword != Program.MASTER_PASSWORD)
+                if (!Program.VerifyManagerOrMasterPassword(enteredPassword))
                 {
                     MessageBox.Show(
                         "Girdiğiniz yönetici şifresi hatalıdır!\nKaldırma işlemi güvenlik gerekçesiyle durduruldu.",
