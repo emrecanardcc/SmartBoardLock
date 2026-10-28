@@ -73,7 +73,8 @@ Push-Location $webAdminDir
 try {
     flutter pub get
     flutter build web --release
-    cmd.exe /c "npx wrangler pages deploy build/web --project-name=sinif360-admin"
+    Copy-Item "web\_worker.js" "build\web\_worker.js" -Force
+    cmd.exe /c "npx wrangler pages deploy build/web --project-name=panel-sinif360 --branch=main"
     Write-Host "  [OK] Web Admin Cloudflare Pages üzerinde canlıya alındı." -ForegroundColor Green
 }
 finally {
