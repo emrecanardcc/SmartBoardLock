@@ -20,6 +20,50 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   String? _errorMessage;
 
+  // Canlı Sistem & Veritabanı Sağlık Durumu Kontrolü
+  bool _isCheckingHealth = true;
+  bool _isServerHealthy = true;
+  String _healthMessage = 'Bağlantı kontrol ediliyor...';
+
+  @override
+  void initState() {
+    super.initState();
+    _checkServerHealth();
+  }
+
+  Future<void> _checkServerHealth() async {
+    if (!mounted) return;
+    setState(() {
+      _isCheckingHealth = true;
+      _healthMessage = 'Sunucu bağlantısı denetleniyor...';
+    });
+
+    try {
+      // Supabase PostgREST & Veritabanı erişimini doğrudan test et (4 saniye zaman aşımı)
+      await Supabase.instance.client
+          .from('schools')
+          .select('id')
+          .limit(1)
+          .timeout(const Duration(seconds: 4));
+
+      if (mounted) {
+        setState(() {
+          _isCheckingHealth = false;
+          _isServerHealthy = true;
+          _healthMessage = 'Sistem Çevrimiçi (Veritabanı & API Aktif)';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isCheckingHealth = false;
+          _isServerHealthy = false;
+          _healthMessage = 'Sunucu bağlantısında aksaklık var';
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -46,7 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
       });
     } catch (e) {
       setState(() {
-        _errorMessage = 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.';
+        _errorMessage = _localizeError(e.toString());
       });
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -54,6 +98,26 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   String _localizeError(String message) {
+    // 1. Ham HTML veya Cloudflare Origin DNS/Proxy hatalarını yakala
+    if (message.contains('<html') ||
+        message.contains('<!doctype') ||
+        message.contains('Cloudflare') ||
+        message.contains('1016') ||
+        message.contains('Origin DNS error') ||
+        message.contains('530') ||
+        message.contains('502') ||
+        message.contains('504')) {
+      return 'Sunucu veya ağ geçidi bağlantısında geçici bir aksaklık tespit edildi. Lütfen internet bağlantınızı kontrol edip birkaç saniye sonra tekrar deneyin.';
+    }
+
+    if (message.contains('ClientException') ||
+        message.contains('SocketException') ||
+        message.contains('Failed host lookup') ||
+        message.contains('Connection refused') ||
+        message.contains('Network is unreachable')) {
+      return 'Sunucuya ulaşılamıyor. Lütfen internet bağlantınızı kontrol edin.';
+    }
+
     if (message.contains('Invalid login credentials') ||
         message.contains('invalid_credentials')) {
       return 'E-posta adresi veya şifre hatalı.';
@@ -372,7 +436,77 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
+
+                      // Canlı Sistem & Veritabanı Sağlık Durumu Rozeti
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _isCheckingHealth
+                                ? Colors.grey.shade100
+                                : (_isServerHealthy
+                                    ? AppColors.success.withValues(alpha: 0.08)
+                                    : AppColors.danger.withValues(alpha: 0.08)),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: _isCheckingHealth
+                                  ? Colors.grey.shade300
+                                  : (_isServerHealthy
+                                      ? AppColors.success.withValues(alpha: 0.3)
+                                      : AppColors.danger.withValues(alpha: 0.3)),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: _isCheckingHealth
+                                      ? Colors.amber
+                                      : (_isServerHealthy
+                                          ? AppColors.success
+                                          : AppColors.danger),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _healthMessage,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: _isCheckingHealth
+                                      ? AppColors.textGrey
+                                      : (_isServerHealthy
+                                          ? AppColors.success
+                                          : AppColors.danger),
+                                ),
+                              ),
+                              if (!_isCheckingHealth && !_isServerHealthy) ...[
+                                const SizedBox(width: 8),
+                                InkWell(
+                                  onTap: _checkServerHealth,
+                                  child: Text(
+                                    'Yeniden Dene',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.danger,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
 
                       // Alt not
                       Text(
