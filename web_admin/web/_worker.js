@@ -4,8 +4,6 @@ export default {
 
     // If request starts with /backend/
     if (url.pathname.startsWith('/backend/')) {
-      const targetUrl = 'http://130-61-78-192.sslip.io' + url.pathname + url.search;
-
       // Handle CORS preflight (OPTIONS)
       if (request.method === 'OPTIONS') {
         return new Response(null, {
@@ -19,43 +17,79 @@ export default {
         });
       }
 
+      // Candidate origins to route to Oracle VM (resolving to 130.61.78.192)
+      const origins = [
+        '130.61.78.192.nip.io',
+        '130-61-78-192.nip.io',
+        '130.61.78.192.traefik.me'
+      ];
+
       // Handle WebSocket upgrade for Supabase realtime
       if (request.headers.get('Upgrade') === 'websocket') {
-        return fetch(targetUrl, request);
+        const wsTarget = `http://${origins[0]}${url.pathname}${url.search}`;
+        const wsHeaders = new Headers(request.headers);
+        wsHeaders.set('Host', origins[0]);
+        return fetch(wsTarget, {
+          method: request.method,
+          headers: wsHeaders,
+        });
       }
 
-      const proxyHeaders = new Headers(request.headers);
-      proxyHeaders.set('Host', '130-61-78-192.sslip.io');
+      const bodyBuffer = ['GET', 'HEAD'].includes(request.method)
+        ? null
+        : await request.arrayBuffer();
 
-      const proxyRequest = new Request(targetUrl, {
-        method: request.method,
-        headers: proxyHeaders,
-        body: ['GET', 'HEAD'].includes(request.method) ? null : request.body,
-        redirect: 'manual',
+      let lastResponse = null;
+      let lastError = null;
+
+      for (const origin of origins) {
+        const targetUrl = `http://${origin}${url.pathname}${url.search}`;
+        const proxyHeaders = new Headers(request.headers);
+        proxyHeaders.set('Host', origin);
+
+        const proxyRequest = new Request(targetUrl, {
+          method: request.method,
+          headers: proxyHeaders,
+          body: bodyBuffer,
+          redirect: 'manual',
+        });
+
+        try {
+          const response = await fetch(proxyRequest);
+
+          // If Cloudflare returns 530 (Origin DNS Error 1016), try next origin
+          if (response.status === 530) {
+            lastResponse = response;
+            continue;
+          }
+
+          const responseHeaders = new Headers(response.headers);
+          responseHeaders.set('Access-Control-Allow-Origin', '*');
+          responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+          responseHeaders.set('Access-Control-Allow-Headers', '*');
+
+          return new Response(response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: responseHeaders,
+          });
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      // If all origins failed
+      if (lastResponse) {
+        return lastResponse;
+      }
+
+      return new Response(JSON.stringify({ error: lastError ? lastError.message : 'Origin unreachable' }), {
+        status: 502,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
       });
-
-      try {
-        const response = await fetch(proxyRequest);
-
-        const responseHeaders = new Headers(response.headers);
-        responseHeaders.set('Access-Control-Allow-Origin', '*');
-        responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-        responseHeaders.set('Access-Control-Allow-Headers', '*');
-
-        return new Response(response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: responseHeaders,
-        });
-      } catch (err) {
-        return new Response(JSON.stringify({ error: err.message }), {
-          status: 502,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
-        });
-      }
     }
 
     // Default: serve static assets from Cloudflare Pages
