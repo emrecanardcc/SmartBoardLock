@@ -51,6 +51,20 @@ class AppConstants {
     }
   }
 
+  /// Mixed content korumalı indirme URL'i üretici
+  static String resolveDownloadUrl(String url) {
+    if (url.trim().isEmpty) return url;
+    if (Uri.base.scheme == 'https') {
+      if (url.contains('130.61.78.192:8000')) {
+        return url.replaceFirst('http://130.61.78.192:8000', '${Uri.base.origin}/backend');
+      }
+      if (url.contains('130.61.78.192')) {
+        return url.replaceFirst('http://130.61.78.192', Uri.base.origin);
+      }
+    }
+    return url;
+  }
+
   // Süper admin e-posta listesi (ek kontrol için)
   static const List<String> superAdminEmails = [
     'admin@sinif360.com',

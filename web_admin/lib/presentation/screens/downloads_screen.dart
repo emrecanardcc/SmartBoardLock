@@ -2,8 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/download_helper.dart';
 
 class DownloadsScreen extends StatelessWidget {
   const DownloadsScreen({super.key});
@@ -12,17 +13,39 @@ class DownloadsScreen extends StatelessWidget {
   static const String androidApkUrl = 'http://130.61.78.192/Sinif360_TeacherMobile.apk';
   static const String currentVersion = 'v2.1.3';
 
+  static String get resolvedAndroidApkUrl => AppConstants.resolveDownloadUrl(androidApkUrl);
+  static String get resolvedWindowsSetupUrl => AppConstants.resolveDownloadUrl(windowsSetupUrl);
+
   Future<void> _downloadFile(BuildContext context, String url, String filename) async {
     try {
-      final uri = Uri.parse(url);
-      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!launched && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$filename indirilemedi. Lütfen bağlantıyı kopyalayarak tarayıcınızda açın.'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
+      final success = await downloadFileUniversal(url, filename);
+      if (context.mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.downloading_rounded, color: Colors.white, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text('$filename indirmesi başlatıldı.')),
+                ],
+              ),
+              backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$filename indirilemedi. Lütfen bağlantıyı kopyalayarak tarayıcınızda açın.'),
+              backgroundColor: AppColors.danger,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (context.mounted) {
@@ -30,6 +53,8 @@ class DownloadsScreen extends StatelessWidget {
           SnackBar(
             content: Text('İndirme başlatılamadı: $e'),
             backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
       }
@@ -375,7 +400,7 @@ class DownloadsScreen extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     elevation: 0,
                   ),
-                  onPressed: () => _downloadFile(context, windowsSetupUrl, 'Sinif360_Setup.exe'),
+                  onPressed: () => _downloadFile(context, resolvedWindowsSetupUrl, 'Sinif360_Setup.exe'),
                 ),
               ),
               const SizedBox(width: 10),
@@ -388,7 +413,7 @@ class DownloadsScreen extends StatelessWidget {
                     padding: const EdgeInsets.all(14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: () => _copyToClipboard(context, windowsSetupUrl, 'Windows Setup'),
+                  onPressed: () => _copyToClipboard(context, resolvedWindowsSetupUrl, 'Windows Setup'),
                   child: const Icon(Icons.link_rounded, size: 20),
                 ),
               ),
@@ -551,7 +576,7 @@ class DownloadsScreen extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     elevation: 0,
                   ),
-                  onPressed: () => _downloadFile(context, androidApkUrl, 'Sinif360_TeacherMobile.apk'),
+                  onPressed: () => _downloadFile(context, resolvedAndroidApkUrl, 'Sinif360_TeacherMobile.apk'),
                 ),
               ),
               const SizedBox(width: 10),
@@ -564,7 +589,7 @@ class DownloadsScreen extends StatelessWidget {
                     padding: const EdgeInsets.all(14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: () => _copyToClipboard(context, androidApkUrl, 'Android APK'),
+                  onPressed: () => _copyToClipboard(context, resolvedAndroidApkUrl, 'Android APK'),
                   child: const Icon(Icons.link_rounded, size: 20),
                 ),
               ),
